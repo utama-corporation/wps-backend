@@ -89,7 +89,7 @@ async function getAllLabels({ search, topRow }) {
       t.NamaOrgTelly AS Telly,
       h.NoSPK
     FROM ${MASTER_TABLE} h
-    LEFT JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+    INNER JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
     LEFT JOIN MstBarangJadi g ON g.IdBarangJadi = h.IdBarangJadi
     LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = h.IdOrgTelly
     ${whereClause}
