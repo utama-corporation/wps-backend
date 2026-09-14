@@ -92,7 +92,7 @@ async function getAllLabels({ search, topRow }) {
       t.NamaOrgTelly AS Telly,
       h.NoSPK
     FROM ${MASTER_TABLE} h
-    LEFT JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+    INNER JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
     LEFT JOIN MstGrade g ON g.IdGrade = h.IdGrade
     LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = h.IdOrgTelly
     ${whereClause}
@@ -146,7 +146,7 @@ async function getHeaderForEdit(noSanding) {
       g.NamaGrade          AS Grade,
       t.NamaOrgTelly       AS Telly
     FROM ${MASTER_TABLE} h
-    LEFT JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+    INNER JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
     LEFT JOIN MstGrade g     ON g.IdGrade = h.IdGrade
     LEFT JOIN MstOrgTelly t  ON t.IdOrgTelly = h.IdOrgTelly
     WHERE h.${KEY_COLUMN} = @noSanding
