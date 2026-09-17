@@ -22,7 +22,7 @@ router.get(
   ctrl.getDetailByNo,
 );
 
-// GET /api/label/st/:nost/edit -> header data with IDs for editing
+// GET /api/label/st/:nost/edit -> header data with IDs for editing ada test data
 router.get(
   "/label/st/:nost/edit",
   requirePermission("label_st:read"),
