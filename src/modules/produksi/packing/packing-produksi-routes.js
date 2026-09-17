@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const ctrl = require("./packing-produksi-controller");
-
+// Health checks
 router.get("/mesin-list", ctrl.getMesinList);
 router.get("/history", ctrl.getHistory);
 router.get("/next-no-produksi", ctrl.getNextNoProduksi);

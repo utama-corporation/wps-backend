@@ -8,7 +8,7 @@ async function getMesinList(req, res, next) {
     next(err);
   }
 }
-
+// Health check
 async function getHistory(req, res, next) {
   try {
     const data = await service.getHistory();
