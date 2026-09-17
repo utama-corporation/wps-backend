@@ -132,16 +132,4 @@ exports.removeOutput = async (req, res) => {
   }
 }
 
-module.exports = {
-  getMesinList,
-  getHistory,
-  getNextNoProduksi,
-  getNextNoLabel,
-  getMasterOptions,
-  saveHeader,
-  createLabel,
-  addInput,
-  removeInput,
-  addOutput,
-  removeOutput,
-};
+
