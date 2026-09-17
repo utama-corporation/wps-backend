@@ -1,5 +1,5 @@
 const service = require("./barangjadi-service");
-
+// Health check
 async function handle(req, res, serviceName, caption, isLabel = false) {
   try {
     const tgl = req.query.tgl ? new Date(req.query.tgl) : new Date();

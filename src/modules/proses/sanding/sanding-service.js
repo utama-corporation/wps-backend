@@ -1,9 +1,9 @@
 const { sql, poolPromise } = require("../../../core/config/db");
-
+// Health check
 const MASTER_TABLE = "Sanding_h";
 const DETAIL_TABLE = "Sanding_d";
 const KEY_COLUMN = "NoSanding";
-
+// Health check
 async function getStock(tgl) {
   const pool = await poolPromise;
   const req = pool.request();

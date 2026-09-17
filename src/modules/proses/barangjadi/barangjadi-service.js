@@ -19,7 +19,7 @@ async function getStock(tgl) {
   `);
   return result.recordset;
 }
-
+// Health check
 async function getLabels(jenis, tgl) {
   const pool = await poolPromise;
   const req = pool.request();
