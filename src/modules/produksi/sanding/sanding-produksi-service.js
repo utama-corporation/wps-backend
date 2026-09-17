@@ -353,6 +353,54 @@ async function removeOutput({ noProduksi, noSanding }) {
   return { noProduksi, noSanding };
 }
 
+async function getHeader(noProduksi) {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("np", sql.VarChar(20), noProduksi)
+    .query(`
+      SELECT H.NoProduksi, H.Shift, H.Tanggal, H.JamKerja, H.JmlhAnggota, H.HourMeter,
+             ISNULL(M.NamaMesin, '-') AS NamaMesin,
+             ISNULL(O.NamaOperator, '-') AS NamaOperator,
+             ISNULL(H.IdMesin, 0) AS IdMesin,
+             ISNULL(H.IdOperator, 0) AS IdOperator
+      FROM SandingProduksi_h H
+      LEFT JOIN MstMesin M ON M.IdMesin = H.IdMesin
+      LEFT JOIN MstOperator O ON O.IdOperator = H.IdOperator
+      WHERE H.NoProduksi = @np
+    `);
+  return result.recordset[0] || null;
+}
+
+async function updateHeader({ noProduksi, shift, jmlhAnggota, jamKerja, jamLembur, hourMeter, isRepair }) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("np", sql.VarChar(20), noProduksi);
+  req.input("sh", sql.Int, shift);
+  req.input("ja", sql.Int, jmlhAnggota || 0);
+  req.input("jk", sql.Int, jamKerja || 0);
+  req.input("jl", sql.VarChar(20), jamLembur || "");
+  req.input("hm", sql.VarChar(20), hourMeter || "");
+  req.input("ir", sql.Bit, isRepair ? 1 : 0);
+
+  await req.query(`
+    UPDATE SandingProduksi_h
+    SET [Shift] = @sh, JmlhAnggota = @ja, JamKerja = @jk,
+        JamLembur = @jl, HourMeter = @hm
+    WHERE NoProduksi = @np
+  `);
+
+  if (typeof isRepair !== "undefined" && isRepair !== null) {
+    await req.query(`
+      UPDATE S SET S.IsRepair = @ir
+      FROM Sanding_h S
+      INNER JOIN SandingProduksiOutput O ON O.NoSanding = S.NoSanding
+      WHERE O.NoProduksi = @np
+    `);
+  }
+
+  return { noProduksi };
+}
+
 module.exports = {
   getMesinList,
   getHistory,

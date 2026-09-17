@@ -130,4 +130,18 @@ exports.removeOutput = async (req, res) => {
   } catch (err) {
     return fail(res, err);
   }
+}
+
+module.exports = {
+  getMesinList,
+  getHistory,
+  getNextNoProduksi,
+  getNextNoLabel,
+  getMasterOptions,
+  saveHeader,
+  createLabel,
+  addInput,
+  removeInput,
+  addOutput,
+  removeOutput,
 };
