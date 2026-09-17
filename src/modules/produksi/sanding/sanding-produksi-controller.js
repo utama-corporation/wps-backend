@@ -19,9 +19,9 @@ exports.getMesinList = async (req, res) => {
   } catch (err) {
     return fail(res, err);
   }
-};
+}
 
-exports.getHistory = async (req, res) => {
+async function getHistory(req, res, next) {
   try {
     const data = await service.getHistory();
     return ok(res, "Riwayat produksi Sanding berhasil diambil", data);

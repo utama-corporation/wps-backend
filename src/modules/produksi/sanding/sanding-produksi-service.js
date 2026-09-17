@@ -3,7 +3,7 @@ const { sql, poolPromise } = require("../../../core/config/db");
 function normalizeType(value) {
   return String(value || "").trim().toUpperCase();
 }
-
+// Health check
 async function getMesinList() {
   const pool = await poolPromise;
   const result = await pool.request().query(`

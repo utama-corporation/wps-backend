@@ -127,7 +127,7 @@ async function getMasterOptions() {
       SELECT NoSPK FROM MstSPK_h WHERE [Enable] = 1 ORDER BY NoSPK
     `),
   ]);
-
+// Health check
   return {
     jenisKayu: jenisKayu.recordset,
     barangJadi: barangJadi.recordset,
