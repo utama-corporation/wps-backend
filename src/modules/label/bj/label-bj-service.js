@@ -138,6 +138,7 @@ async function getHeaderForEdit(noBJ) {
       h.IdOrgTelly,
       h.IsReject,
       h.IsLembur,
+      ISNULL(h.IsRepair, 0) AS IsRepair,
       k.Jenis              AS JenisKayu,
       g.NamaBarangJadi     AS NamaBJ,
       t.NamaOrgTelly       AS Telly
@@ -165,6 +166,7 @@ async function updateLabel(noBJ, data) {
   req.input("noSPK", sql.VarChar(50), data.noSPK || null);
   req.input("isReject", sql.Bit, data.isReject ? 1 : 0);
   req.input("isLembur", sql.Bit, data.isLembur ? 1 : 0);
+  req.input("isRepair", sql.Bit, data.isRepair ? 1 : 0);
   req.input("jam", sql.VarChar(10), data.jam || null);
 
   await req.query(`
@@ -175,6 +177,7 @@ async function updateLabel(noBJ, data) {
         NoSPK = @noSPK,
         IsReject = @isReject,
         IsLembur = @isLembur,
+        IsRepair = @isRepair,
         Jam = @jam
     WHERE ${KEY_COLUMN} = @noBJ
   `);

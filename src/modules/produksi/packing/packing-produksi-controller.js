@@ -99,6 +99,25 @@ async function removeOutput(req, res, next) {
   }
 }
 
+async function getHeader(req, res, next) {
+  try {
+    const data = await service.getHeader(req.params.noProduksi);
+    if (!data) return res.status(404).json({ message: "Header tidak ditemukan" });
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function updateHeader(req, res, next) {
+  try {
+    const result = await service.updateHeader(req.body);
+    res.json({ message: "Header diperbarui", ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getMesinList,
   getHistory,
@@ -106,6 +125,8 @@ module.exports = {
   getNextNoLabel,
   getMasterOptions,
   saveHeader,
+  getHeader,
+  updateHeader,
   createLabel,
   addInput,
   removeInput,
