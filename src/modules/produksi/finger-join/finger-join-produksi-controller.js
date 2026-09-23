@@ -48,7 +48,7 @@ async function getMasterOptions(req, res, next) {
 async function saveHeader(req, res, next) {
   try {
     const noProduksi = await service.saveHeader(req.body);
-    res.json({ noProduksi, message: "Header tersimpan" });
+    res.json({ success: true, noProduksi, message: "Header tersimpan" });
   } catch (err) {
     next(err);
   }
@@ -58,9 +58,9 @@ async function getHeader(req, res, next) {
   try {
     const data = await service.getHeader(req.params.noProduksi);
     if (!data) {
-      return res.status(404).json({ message: "Data header tidak ditemukan" });
+      return res.status(404).json({ success: false, message: "Data header tidak ditemukan" });
     }
-    res.json(data);
+    res.json({ success: true, data });
   } catch (err) {
     next(err);
   }
@@ -69,7 +69,7 @@ async function getHeader(req, res, next) {
 async function updateHeader(req, res, next) {
   try {
     await service.updateHeader(req.body);
-    res.json({ message: "Header berhasil diupdate" });
+    res.json({ success: true, message: "Header berhasil diupdate" });
   } catch (err) {
     next(err);
   }
@@ -78,7 +78,7 @@ async function updateHeader(req, res, next) {
 async function createLabel(req, res, next) {
   try {
     const noFJ = await service.createLabel(req.body);
-    res.json({ noFJ, message: "Label tersimpan" });
+    res.json({ success: true, noFJ, message: "Label tersimpan" });
   } catch (err) {
     next(err);
   }

@@ -46,6 +46,8 @@ const labelLmtRoutes = require('./modules/label/lmt/label-lmt-routes');
 const labelCcaRoutes = require('./modules/label/cca/label-cca-routes');
 const labelSndRoutes = require('./modules/label/snd/label-snd-routes');
 const labelBjRoutes = require('./modules/label/bj/label-bj-routes');
+const labelStRoutes = require('./modules/label/st/label-st-routes');
+const penjualanBjRoutes = require('./modules/penjualan/barangjadi/penjualan-bj-routes');
 
 const app = express();
 
@@ -108,5 +110,7 @@ app.use("/api", labelLmtRoutes);
 app.use("/api", labelCcaRoutes);
 app.use("/api", labelSndRoutes);
 app.use("/api", labelBjRoutes);
+app.use("/api", labelStRoutes);
+app.use("/api", penjualanBjRoutes);
 
 module.exports = app;

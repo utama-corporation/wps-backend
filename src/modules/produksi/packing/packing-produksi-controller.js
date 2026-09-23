@@ -19,7 +19,7 @@ exports.getMesinList = async (req, res) => {
   } catch (err) {
     return fail(res, err);
   }
-};
+}
 
 exports.getHistory = async (req, res) => {
   try {
@@ -130,4 +130,5 @@ exports.removeOutput = async (req, res) => {
   } catch (err) {
     return fail(res, err);
   }
-};
+}
+

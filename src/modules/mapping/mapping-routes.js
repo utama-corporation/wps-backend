@@ -10,28 +10,41 @@ const formatDate = (date) => {
 };
 
 // Hitung volume per baris detail label.
-//  - Kategori "ST" (Sawn Timber)  -> satuan TON
-//      * IdUOMTblLebar === 1 (milimeter): t*l*p*pcs*304.8 / 1e9 / 1.416
-//      * selain itu (inch)             : t*l*p*pcs / 7200.8
-//  - Kategori lain                -> satuan M3 : t*l*p*pcs / 1e9
-// Hasil di-truncate 4 desimal (Math.floor), sama seperti perhitungan di mobile.
-const calcRowVolume = (labelType, idUOMTblLebar, tebal, lebar, panjang, pcs) => {
+//  - S4S / FJ / Moulding / Laminating / CCA / Sanding → M3
+//      Tebal*Lebar*Panjang*JmlhBatang / 1e9
+//        * CASE WHEN IdUOMTblLebar=3 THEN 645.16 ELSE 1 END
+//        * CASE WHEN IdUOMPanjang=4  THEN 304.8  ELSE 1 END
+//  - BarangJadi / Packing → M3
+//      Tebal*Lebar*Panjang*JmlhBatang / 1e9
+//  - ST (Sawn Timber) → TON
+//      IdUOMTblLebar=1 AND IdUOMPanjang=4 → t*l*p*q * 215.2542 / 1e9
+//      IdUOMTblLebar=3 AND IdUOMPanjang=4 → t*l*p*q / 7200.8
+// Hasil di-round ke 4 desimal.
+const calcRowVolume = (labelType, idUOMTblLebar, idUOMPanjang, tebal, lebar, panjang, pcs) => {
   const t = Number(tebal) || 0;
   const l = Number(lebar) || 0;
   const p = Number(panjang) || 0;
   const q = Number(pcs) || 0;
+  const uLebar = Number(idUOMTblLebar) || 0;
+  const uPanjang = Number(idUOMPanjang) || 0;
 
   if (labelType === "ST") {
-    let ton =
-      Number(idUOMTblLebar) === 1
-        ? (t * l * p * q * 304.8) / 1000000000 / 1.416
-        : (t * l * p * q) / 7200.8;
-    ton = Math.floor(ton * 10000) / 10000;
+    let ton = 0;
+    if (uLebar === 1 && uPanjang === 4) {
+      ton = (t * l * p * q * 215.2542) / 1000000000;
+    } else if (uLebar === 3 && uPanjang === 4) {
+      ton = (t * l * p * q) / 7200.8;
+    }
+    ton = Math.round(ton * 10000) / 10000;
     return { ton, m3: 0 };
   }
 
+  // Non-ST: S4S, FJ, Moulding, Laminating, CCA, Sanding, BJ
   let m3 = (t * l * p * q) / 1000000000.0;
-  m3 = Math.floor(m3 * 10000) / 10000;
+  if (uLebar === 3) m3 *= 645.16;
+  if (uPanjang === 4) m3 *= 304.8;
+
+  m3 = Math.round(m3 * 10000) / 10000;
   return { ton: 0, m3 };
 };
 
@@ -713,8 +726,8 @@ router.post("/label-list/save-changes", verifyToken, async (req, res) => {
 });
 
 // GET /mapping/lokasi-summary
-// Menampilkan setiap blok lokasi beserta jumlah label yang masih berada di
-// lokasi tersebut (DateUsage IS NULL) dari 8 modul label.
+// Menampilkan setiap blok lokasi beserta jumlah label dan total volume
+// yang masih berada di lokasi tersebut (DateUsage IS NULL) dari 8 modul label.
 router.get("/mapping/lokasi-summary", verifyToken, async (req, res) => {
   const { username } = req;
   console.log(
@@ -722,18 +735,31 @@ router.get("/mapping/lokasi-summary", verifyToken, async (req, res) => {
   );
 
   const labelTables = [
-    { table: "ST_h", column: "NoST" },
-    { table: "S4S_h", column: "NoS4S" },
-    { table: "FJ_h", column: "NoFJ" },
-    { table: "Moulding_h", column: "NoMoulding" },
-    { table: "Laminating_h", column: "NoLaminating" },
-    { table: "CCAkhir_h", column: "NoCCAkhir" },
-    { table: "Sanding_h", column: "NoSanding" },
-    { table: "BarangJadi_h", column: "NoBJ" },
+    { table: "ST_h", column: "NoST", type: "ST" },
+    { table: "S4S_h", column: "NoS4S", type: "S4S" },
+    { table: "FJ_h", column: "NoFJ", type: "FJ" },
+    { table: "Moulding_h", column: "NoMoulding", type: "MLD" },
+    { table: "Laminating_h", column: "NoLaminating", type: "LMT" },
+    { table: "CCAkhir_h", column: "NoCCAkhir", type: "CCA" },
+    { table: "Sanding_h", column: "NoSanding", type: "SND" },
+    { table: "BarangJadi_h", column: "NoBJ", type: "BJ" },
   ];
 
-  // Satu baris = satu label yang masih "hidup" di sebuah IdLokasi.
-  const labelUnion = labelTables
+  // Union semua detail baris → berikan IdLokasi, LabelType, UOM, dimensi
+  const detailUnion = labelTables
+    .map(
+      (t) => `
+        SELECT h.IdLokasi, '${t.type}' AS LabelType,
+               ${t.table === "BarangJadi_h" ? "1 AS IdUOMTblLebar, 0 AS IdUOMPanjang" : "h.IdUOMTblLebar, h.IdUOMPanjang"},
+               d.Tebal, d.Lebar, d.Panjang, d.JmlhBatang
+        FROM ${t.table} h
+        JOIN ${t.table.replace("_h", "_d")} d ON d.${t.column} = h.${t.column}
+        WHERE h.DateUsage IS NULL AND h.IdLokasi IS NOT NULL`,
+    )
+    .join(" UNION ALL ");
+
+  // Hitung jumlah label per lokasi (header)
+  const headerUnion = labelTables
     .map(
       (t) => `
         SELECT h.IdLokasi
@@ -748,11 +774,12 @@ router.get("/mapping/lokasi-summary", verifyToken, async (req, res) => {
     .join(" UNION ALL ");
 
   const query = `
-    SELECT l.IdLokasi, l.Blok, l.Description, ISNULL(c.JumlahLabel, 0) AS JumlahLabel
+    SELECT l.IdLokasi, l.Blok, l.Description,
+           ISNULL(c.JumlahLabel, 0) AS JumlahLabel
     FROM MstLokasi l
     LEFT JOIN (
       SELECT IdLokasi, COUNT(*) AS JumlahLabel
-      FROM ( ${labelUnion} ) AS labels
+      FROM ( ${headerUnion} ) AS labels
       GROUP BY IdLokasi
     ) c ON c.IdLokasi = l.IdLokasi
     WHERE l.Enable = 1
@@ -761,13 +788,41 @@ router.get("/mapping/lokasi-summary", verifyToken, async (req, res) => {
 
   try {
     const pool = await poolPromise;
-    const result = await pool.request().query(query);
+    const [summaryResult, detailResult] = await Promise.all([
+      pool.request().query(query),
+      pool.request().query(detailUnion),
+    ]);
+
+    // Hitung volume per IdLokasi di JS
+    const volumeMap = {};
+    detailResult.recordset.forEach((d) => {
+      const key = d.IdLokasi;
+      if (!volumeMap[key]) volumeMap[key] = { totalM3: 0, totalTON: 0 };
+      const { ton, m3 } = calcRowVolume(
+        d.LabelType, d.IdUOMTblLebar, d.IdUOMPanjang,
+        d.Tebal, d.Lebar, d.Panjang, d.JmlhBatang,
+      );
+      volumeMap[key].totalM3 += m3;
+      volumeMap[key].totalTON += ton;
+    });
+
+    const data = summaryResult.recordset.map((row) => {
+      const vol = volumeMap[row.IdLokasi] || { totalM3: 0, totalTON: 0 };
+      return {
+        IdLokasi: row.IdLokasi,
+        Blok: row.Blok,
+        Description: row.Description,
+        JumlahLabel: row.JumlahLabel,
+        TotalM3: vol.totalM3.toFixed(4),
+        TotalTON: vol.totalTON.toFixed(4),
+      };
+    });
 
     return res.json({
       success: true,
       message: "Data ringkasan lokasi berhasil diambil",
-      data: result.recordset,
-      totalData: result.recordset.length,
+      data: data,
+      totalData: data.length,
     });
   } catch (error) {
     console.error("Error fetching lokasi-summary:", error);
@@ -822,7 +877,7 @@ router.get("/mapping/lokasi-labels", verifyToken, async (req, res) => {
       (t) => `
         SELECT h.${t.column} AS LabelNo, '${typeOf[t.table]}' AS LabelType,
                h.IdJenisKayu, h.DateCreate,
-               ${t.table === "BarangJadi_h" ? "1 AS IdUOMTblLebar" : "h.IdUOMTblLebar"}
+               ${t.table === "BarangJadi_h" ? "1 AS IdUOMTblLebar, 0 AS IdUOMPanjang" : "h.IdUOMTblLebar, h.IdUOMPanjang"}
         FROM ${t.table} h
         WHERE h.DateUsage IS NULL AND h.IdLokasi = @idlokasi
           AND EXISTS (SELECT 1 FROM ${t.table.replace("_h", "_d")} d WHERE d.${t.column} = h.${t.column})`,
@@ -845,7 +900,7 @@ router.get("/mapping/lokasi-labels", verifyToken, async (req, res) => {
     request.input("idlokasi", sql.VarChar, idlokasi);
 
     const headerQuery = `
-      SELECT lbl.LabelNo, lbl.LabelType, lbl.DateCreate, lbl.IdUOMTblLebar,
+      SELECT lbl.LabelNo, lbl.LabelType, lbl.DateCreate, lbl.IdUOMTblLebar, lbl.IdUOMPanjang,
              jk.Jenis, jk.Singkatan
       FROM ( ${headerUnion} ) AS lbl
       LEFT JOIN MstJenisKayu jk ON jk.IdJenisKayu = lbl.IdJenisKayu
@@ -881,10 +936,12 @@ router.get("/mapping/lokasi-labels", verifyToken, async (req, res) => {
 
       let labelTon = 0;
       let labelM3 = 0;
+      const isST = h.LabelType === "ST";
       details.forEach((x) => {
         const { ton, m3 } = calcRowVolume(
           h.LabelType,
           h.IdUOMTblLebar,
+          h.IdUOMPanjang,
           x.Tebal,
           x.Lebar,
           x.Panjang,
@@ -892,13 +949,13 @@ router.get("/mapping/lokasi-labels", verifyToken, async (req, res) => {
         );
         labelTon += ton;
         labelM3 += m3;
+        x.Volume = isST ? ton.toFixed(4) : m3.toFixed(4);
       });
 
       totalJumlah += jumlah;
       totalTonOverall += labelTon;
       totalM3Overall += labelM3;
 
-      const isST = h.LabelType === "ST";
       return {
         LabelNo: h.LabelNo,
         LabelType: h.LabelType,
