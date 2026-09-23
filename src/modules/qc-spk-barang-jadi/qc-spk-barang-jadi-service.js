@@ -514,3 +514,36 @@ exports.deleteBundles = async (noSPK, lineNo) => {
 
   return { deleted: r.rowsAffected?.[0] ?? 0 };
 };
+
+// ---------------------------------------------------------------------------
+// HAPUS 1 bundle QC (beserta foto MinIO)
+// ---------------------------------------------------------------------------
+exports.deleteOneBundle = async (noSPK, lineNo, noBundle) => {
+  const pool = await poolPromise;
+  const line = await resolveLine(pool, noSPK, lineNo);
+
+  const req = pool.request();
+  bindTuple(req, noSPK, line);
+  req.input("nb", sql.Int, noBundle);
+
+  // kumpulkan object key foto lebih dulu untuk dibersihkan dari MinIO
+  const keysRs = await req.query(`
+    SELECT FotoTebal, FotoLebar, FotoPanjang, FotoBundle
+    FROM QcSpkBarangJadi_d
+    WHERE ${TUPLE_WHERE} AND NoBundle = @nb;
+  `);
+
+  const delReq = pool.request();
+  bindTuple(delReq, noSPK, line);
+  delReq.input("nb", sql.Int, noBundle);
+  const r = await delReq.query(
+    `DELETE FROM QcSpkBarangJadi_d WHERE ${TUPLE_WHERE} AND NoBundle = @nb;`,
+  );
+
+  const keys = keysRs.recordset
+    .flatMap((x) => [x.FotoTebal, x.FotoLebar, x.FotoPanjang, x.FotoBundle])
+    .filter(Boolean);
+  await Promise.all(keys.map((k) => removeObject(k)));
+
+  return { deleted: r.rowsAffected?.[0] ?? 0 };
+};

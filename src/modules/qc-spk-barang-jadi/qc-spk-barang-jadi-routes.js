@@ -29,5 +29,6 @@ router.put(
 );
 router.delete('/:noSPK/lines/:lineNo/bundles/:noBundle/photos/:field', requirePermission('spk:delete'), ctrl.deleteOnePhoto);
 router.delete('/:noSPK/lines/:lineNo/bundles', requirePermission('spk:delete'), ctrl.deleteBundles);
+router.delete('/:noSPK/lines/:lineNo/bundles/:noBundle', requirePermission('spk:delete'), ctrl.deleteOneBundle);
 
 module.exports = router;

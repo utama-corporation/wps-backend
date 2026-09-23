@@ -270,3 +270,27 @@ exports.deleteBundles = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Terjadi kesalahan di server' });
   }
 };
+
+// DELETE /api/qc-spk-bj/:noSPK/lines/:lineNo/bundles/:noBundle
+exports.deleteOneBundle = async (req, res) => {
+  const { noSPK, lineNo, ok } = parseParams(req);
+  const noBundle = parseInt(req.params.noBundle, 10);
+  if (!ok || !Number.isInteger(noBundle) || noBundle < 1) {
+    return res.status(400).json({ success: false, message: 'Parameter tidak valid.' });
+  }
+
+  try {
+    const { deleted } = await service.deleteOneBundle(noSPK, lineNo, noBundle);
+    return res.status(200).json({
+      success: true,
+      message: `Bundle #${noBundle} SPK ${noSPK} baris ${lineNo} dihapus.`,
+      deleted,
+    });
+  } catch (err) {
+    if (err?.code === 'LINE_NOT_FOUND') {
+      return res.status(404).json({ success: false, message: err.message });
+    }
+    console.error('Error deleting one QC bundle:', err);
+    return res.status(500).json({ success: false, message: 'Terjadi kesalahan di server' });
+  }
+};
