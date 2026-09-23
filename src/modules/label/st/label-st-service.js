@@ -23,6 +23,10 @@ async function getHeader(noST) {
       A.IdLokasi,
       A.HasBeenPrinted,
       A.DateUsage,
+      A.StartKering,
+      A.NoKayuBulat,
+      A.IsBagusKulit,
+      A.IdOrgTelly,
       k.Jenis AS JenisKayu,
       A.IdUOMTblLebar AS IdUOMTebal,
       A.IdUOMPanjang,
@@ -82,9 +86,10 @@ async function getStick(noST) {
   req.input("noST", sql.VarChar(50), noST);
 
   const result = await req.query(`
-    SELECT A.IdGradeStick, B.NamaGradeStick, A.JumlahStick, A.Tingkat
+    SELECT A.IdGradeStick, B.NamaGradeStick, A.JumlahStick, A.Tingkat, A.StickBy, C.NamaStickBy
     FROM STStick A
     INNER JOIN MstGradeStick B ON B.IdGradeStick = A.IdGradeStick
+    LEFT JOIN MstStickBy C ON C.IdStickBy = A.StickBy
     WHERE A.${KEY_COLUMN} = @noST
   `);
 
@@ -124,7 +129,9 @@ async function getAllLabels({ search, topRow }) {
       E.NamaStickBy,
       A.IdLokasi,
       A.Remark,
-      A.VacuumDate
+      A.VacuumDate,
+      ISNULL(VT.TotalTon, 0) AS TotalTon,
+      ISNULL(VT.TotalM3, 0) AS TotalM3
     FROM ${MASTER_TABLE} A
     INNER JOIN MstJenisKayu k ON k.IdJenisKayu = A.IdJenisKayu
     INNER JOIN MstUOM C_UOM ON A.IdUOMTblLebar = C_UOM.IdUOM
@@ -138,6 +145,27 @@ async function getAllLabels({ search, topRow }) {
       FROM BongkarSusunOutputST A
       INNER JOIN BongkarSusun_h B ON B.NoBongkarSusun = A.NoBongkarSusun
     ) C ON C.NoST = A.NoST
+    LEFT JOIN (
+      SELECT
+        H.NoST,
+        SUM(CASE
+          WHEN H.IdUOMTblLebar = 1 AND H.IdUOMPanjang = 4 THEN
+            CAST(D.Tebal AS FLOAT) * CAST(D.Lebar AS FLOAT) * CAST(D.Panjang AS FLOAT) * 304.8 * CAST(D.JmlhBatang AS FLOAT) / 1000000000.0 / 1.416
+          WHEN H.IdUOMTblLebar = 3 AND H.IdUOMPanjang = 4 THEN
+            CAST(D.Tebal AS FLOAT) * CAST(D.Lebar AS FLOAT) * CAST(D.Panjang AS FLOAT) * CAST(D.JmlhBatang AS FLOAT) / 7200.8
+          ELSE 0
+        END) AS TotalTon,
+        SUM(CASE
+          WHEN H.IdUOMTblLebar = 1 AND H.IdUOMPanjang = 4 THEN
+            CAST(D.Tebal AS FLOAT) * CAST(D.Lebar AS FLOAT) * CAST(D.Panjang AS FLOAT) * 304.8 * CAST(D.JmlhBatang AS FLOAT) / 1000000000.0
+          WHEN H.IdUOMTblLebar = 3 AND H.IdUOMPanjang = 4 THEN
+            CAST(D.Tebal AS FLOAT) * CAST(D.Lebar AS FLOAT) * CAST(D.Panjang AS FLOAT) * CAST(D.JmlhBatang AS FLOAT) / 7200.8 * 1.416
+          ELSE 0
+        END) AS TotalM3
+      FROM ${MASTER_TABLE} H
+      INNER JOIN ${DETAIL_TABLE} D ON D.NoST = H.NoST
+      GROUP BY H.NoST
+    ) VT ON VT.NoST = A.NoST
     ${whereClause}
     ORDER BY A.NoST DESC
   `);
@@ -184,6 +212,11 @@ async function getHeaderForEdit(noST) {
       A.IdUOMTblLebar AS IdUOMTebal,
       A.IdUOMPanjang,
       A.IdStickBy,
+      A.IdOrgTelly,
+      A.StartKering,
+      A.NoKayuBulat,
+      A.VacuumDate,
+      A.IsBagusKulit,
       k.Jenis AS JenisKayu,
       E.NamaStickBy,
       CASE
@@ -225,6 +258,15 @@ async function updateLabel(noST, data) {
   req.input("noSPK", sql.VarChar(50), data.noSPK || null);
   req.input("idLokasi", sql.VarChar(50), data.idLokasi || null);
   req.input("remark", sql.VarChar(200), data.remark || null);
+  req.input("idOrgTelly", sql.Int, data.idOrgTelly || null);
+  req.input("startKering", sql.Bit, data.startKering ? 1 : 0);
+  let isBagusKulitInt = null;
+  if (data.isBagusKulit === "B") isBagusKulitInt = 1;
+  else if (data.isBagusKulit === "K") isBagusKulitInt = 2;
+  req.input("isBagusKulit", sql.Int, isBagusKulitInt);
+  req.input("noKayuBulat", sql.VarChar(50), data.noKayuBulat || null);
+  req.input("vacuumDate", sql.Date, data.vacuumDate || null);
+  req.input("dateCreate", sql.Date, data.dateCreate || null);
 
   await req.query(`
     UPDATE ${MASTER_TABLE}
@@ -234,7 +276,13 @@ async function updateLabel(noST, data) {
         IdStickBy = @idStickBy,
         NoSPK = @noSPK,
         IdLokasi = @idLokasi,
-        Remark = @remark
+        Remark = @remark,
+        IdOrgTelly = @idOrgTelly,
+        StartKering = @startKering,
+        IsBagusKulit = @isBagusKulit,
+        NoKayuBulat = @noKayuBulat,
+        VacuumDate = @vacuumDate,
+        DateCreate = @dateCreate
     WHERE ${KEY_COLUMN} = @noST
   `);
 
@@ -274,7 +322,7 @@ async function updateDetail(noST, details) {
  * UPDATE STICK (delete old + insert new)
  * ==========================================================*/
 
-async function updateStick(noST, sticks) {
+async function updateStick(noST, sticks, idStickBy) {
   const pool = await poolPromise;
 
   const delReq = pool.request();
@@ -288,9 +336,10 @@ async function updateStick(noST, sticks) {
     insReq.input("idGradeStick", sql.Int, s.idGradeStick || 0);
     insReq.input("jumlahStick", sql.Int, s.jumlahStick || 0);
     insReq.input("tingkat", sql.Int, s.tingkat || 0);
+    insReq.input("stickBy", sql.Int, idStickBy || null);
     await insReq.query(`
-      INSERT INTO STStick (${KEY_COLUMN}, IdGradeStick, JumlahStick, Tingkat)
-      VALUES (@noST, @idGradeStick, @jumlahStick, @tingkat)
+      INSERT INTO STStick (${KEY_COLUMN}, IdGradeStick, JumlahStick, Tingkat, StickBy)
+      VALUES (@noST, @idGradeStick, @jumlahStick, @tingkat, @stickBy)
     `);
   }
 
@@ -322,6 +371,189 @@ async function deleteLabel(noST) {
   return { noST };
 }
 
+/* ============================================================
+ * GENERATE NO ST (auto increment E.000001)
+ * ==========================================================*/
+
+async function generateNoST() {
+  const pool = await poolPromise;
+  const result = await pool.request().query(`
+    SELECT 'E.' + FORMAT(RIGHT(MAX(NoST), 6) + 1, '000000') AS NoST
+    FROM ${MASTER_TABLE}
+  `);
+  return result.recordset[0]?.NoST || "E.000001";
+}
+
+/* ============================================================
+ * LOOKUP NO KB (from KayuBulat_h)
+ * ==========================================================*/
+
+async function lookupNoKB(noKB) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noKB", sql.VarChar(50), noKB);
+
+  const result = await req.query(`
+    SELECT
+      A.NoKayuBulat,
+      C.Jenis AS JenisKB,
+      B.NmSupplier AS Supplier,
+      A.NoTruk,
+      A.NoPlat,
+      A.Suket AS NoSuket,
+      A.IdJenisKayu
+    FROM KayuBulat_h A
+    INNER JOIN MstSupplier B ON A.IdSupplier = B.IdSupplier
+    INNER JOIN MstJenisKayu C ON A.IdJenisKayu = C.IdJenisKayu
+    WHERE A.NoKayuBulat = @noKB
+  `);
+
+  return result.recordset[0] || null;
+}
+
+/* ============================================================
+ * CREATE LABEL ST (insert ST_h + ST_d + STStick)
+ * ==========================================================*/
+
+async function createLabel(data) {
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+
+  console.log("ST CREATE payload:", JSON.stringify(data));
+
+  try {
+    const req = new sql.Request(transaction);
+    req.input("noST", sql.VarChar(50), data.noST);
+    req.input("idJenisKayu", sql.Int, data.idJenisKayu || null);
+    req.input("dateCreate", sql.Date, data.dateCreate || null);
+    req.input("vacuumDate", sql.Date, data.vacuumDate || null);
+    req.input("noKayuBulat", sql.VarChar(50), data.noKayuBulat || null);
+    req.input("idUOMTebal", sql.Int, data.idUOMTebal || null);
+    req.input("idUOMPanjang", sql.Int, data.idUOMPanjang || null);
+    req.input("idStickBy", sql.Int, data.idStickBy || null);
+    req.input("idOrgTelly", sql.Int, data.idOrgTelly || null);
+    req.input("noSPK", sql.VarChar(50), data.noSPK || null);
+    req.input("startKering", sql.Bit, data.startKering ? 1 : 0);
+    req.input("remark", sql.VarChar(200), data.remark || null);
+    let isBagusKulitInt = null;
+    if (data.isBagusKulit === "B") isBagusKulitInt = 1;
+    else if (data.isBagusKulit === "K") isBagusKulitInt = 2;
+    req.input("isBagusKulit", sql.Int, isBagusKulitInt);
+
+    await req.query(`
+      INSERT INTO ${MASTER_TABLE}
+        (NoST, IdJenisKayu, DateCreate, VacuumDate, NoKayuBulat,
+         IdUOMTblLebar, IdUOMPanjang, IdStickBy, IdOrgTelly, NoSPK,
+         StartKering, Remark, IdLokasi, IsBagusKulit)
+      VALUES
+        (@noST, @idJenisKayu, @dateCreate, @vacuumDate, @noKayuBulat,
+         @idUOMTebal, @idUOMPanjang, @idStickBy, @idOrgTelly, @noSPK,
+         @startKering, @remark, NULL, @isBagusKulit)
+    `);
+
+    // Insert detail rows
+    if (data.details && Array.isArray(data.details)) {
+      for (let i = 0; i < data.details.length; i++) {
+        const d = data.details[i];
+        const detReq = new sql.Request(transaction);
+        detReq.input("noST", sql.VarChar(50), data.noST);
+        detReq.input("noUrut", sql.Int, i + 1);
+        detReq.input("tebal", sql.Decimal(18, 2), d.tebal || 0);
+        detReq.input("lebar", sql.Decimal(18, 2), d.lebar || 0);
+        detReq.input("panjang", sql.Decimal(18, 2), d.panjang || 0);
+        detReq.input("jmlhBatang", sql.Int, d.jmlhBatang || 0);
+        await detReq.query(`
+          INSERT INTO ${DETAIL_TABLE} (${KEY_COLUMN}, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
+          VALUES (@noST, @noUrut, @tebal, @lebar, @panjang, @jmlhBatang)
+        `);
+      }
+    }
+
+    // Insert stick rows - StickBy always from header
+    if (data.sticks && Array.isArray(data.sticks) && data.sticks.length > 0) {
+      for (const s of data.sticks) {
+        const stickReq = new sql.Request(transaction);
+        stickReq.input("noST", sql.VarChar(50), data.noST);
+        stickReq.input("idGradeStick", sql.Int, s.idGradeStick || 0);
+        stickReq.input("jumlahStick", sql.Int, s.jumlahStick || 0);
+        stickReq.input("tingkat", sql.Int, s.tingkat || 0);
+        stickReq.input("stickBy", sql.Int, data.idStickBy || null);
+        await stickReq.query(`
+          INSERT INTO STStick (${KEY_COLUMN}, IdGradeStick, JumlahStick, Tingkat, StickBy)
+          VALUES (@noST, @idGradeStick, @jumlahStick, @tingkat, @stickBy)
+        `);
+      }
+    }
+
+    await transaction.commit();
+    return { noST: data.noST };
+  } catch (err) {
+    console.error("ST Create Error:", err.message, err.originalError ? err.originalError.message : "");
+    await transaction.rollback();
+    throw err;
+  }
+}
+
+/* ============================================================
+ * GET MASTERS (all combo data for create/edit)
+ * ==========================================================*/
+
+async function getMasters() {
+  const pool = await poolPromise;
+
+  const [jenisKayu, stickBy, orgTelly, spk, gradeStick, uoms, lokasi] =
+    await Promise.all([
+      pool
+        .request()
+        .query(
+          `SELECT IdJenisKayu, Jenis FROM MstJenisKayu WHERE IsInternal=1 AND IsST=1 ORDER BY Jenis`
+        ),
+      pool
+        .request()
+        .query(
+          `SELECT IdStickBy, NamaStickBy FROM MstStickBy ORDER BY NamaStickBy`
+        ),
+      pool
+        .request()
+        .query(
+          `SELECT IdOrgTelly, NamaOrgTelly FROM MstOrgTelly ORDER BY NamaOrgTelly`
+        ),
+      pool
+        .request()
+        .query(
+          `SELECT A.NoSPK, A.NoSPK + ' - ' + B.Buyer AS NoSPKBuyer
+           FROM MstSPK_h A INNER JOIN MstBuyer B ON B.IdBuyer = A.IdBuyer
+           ORDER BY A.NoSPK`
+        ),
+      pool
+        .request()
+        .query(
+          `SELECT IdGradeStick, NamaGradeStick FROM MstGradeStick ORDER BY NamaGradeStick`
+        ),
+      pool
+        .request()
+        .query(
+          `SELECT IdUOM, UOM FROM MstUOM ORDER BY UOM`
+        ),
+      pool
+        .request()
+        .query(
+          `SELECT CAST(IdLokasi AS VARCHAR(20)) AS IdLokasi FROM MstLokasi ORDER BY IdLokasi`
+        ),
+    ]);
+
+  return {
+    jenisKayu: jenisKayu.recordset,
+    stickBy: stickBy.recordset,
+    orgTelly: orgTelly.recordset,
+    spk: spk.recordset,
+    gradeStick: gradeStick.recordset,
+    uom: uoms.recordset,
+    lokasi: lokasi.recordset,
+  };
+}
+
 module.exports = {
   getHeader,
   getDetail,
@@ -332,4 +564,8 @@ module.exports = {
   updateLabel,
   updateDetail,
   deleteLabel,
+  generateNoST,
+  lookupNoKB,
+  createLabel,
+  getMasters,
 };
