@@ -205,6 +205,7 @@ async function updateHeader({
 
 async function createLabel({
   idJenisKayu, idGrade, noSPKAsal, noSPK, tebal, lebar, panjang, jmlhBatang,
+  isRepair,
 }) {
   const pool = await poolPromise;
   const req = pool.request();
@@ -217,13 +218,14 @@ async function createLabel({
   req.input("lb", sql.VarChar(20), lebar == null ? null : String(lebar));
   req.input("pj", sql.VarChar(20), panjang == null ? null : String(panjang));
   req.input("bt", sql.VarChar(20), jmlhBatang == null ? null : String(jmlhBatang));
+  req.input("isrep", sql.Bit, isRepair ? 1 : 0);
 
   const result = await req.query(`
     DECLARE @ns VARCHAR(20);
     SELECT @ns = ISNULL('U.' + FORMAT(RIGHT(MAX(NoLaminating), 6) + 1, '000000'), 'U.000001')
     FROM Laminating_h;
-    INSERT INTO Laminating_h (NoLaminating, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, NoMouldingAsal, IdWarehouse, IdFJProfile, IdLokasi, IsLembur, IdFisik, NoSPKAsal)
-    VALUES (@ns, @jk, @gr, 1, GETDATE(), NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), 0, NULL, 7, NULL, NULL, 0, 5, NULLIF(@stasal, ''));
+    INSERT INTO Laminating_h (NoLaminating, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, NoMouldingAsal, IdWarehouse, IdFJProfile, IdLokasi, IsLembur, IdFisik, NoSPKAsal, IsRepair)
+    VALUES (@ns, @jk, @gr, 1, GETDATE(), NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), 0, NULL, 7, NULL, NULL, 0, 5, NULLIF(@stasal, ''), @isrep);
     INSERT INTO Laminating_d (NoLaminating, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
     VALUES (@ns, 1, @tb, @lb, @pj, @bt);
     SELECT @ns AS NoLaminating;

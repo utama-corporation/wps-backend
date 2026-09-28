@@ -175,6 +175,7 @@ async function saveHeader({
 async function createLabel({
   kategori = "CCA",
   idJenisKayu, idGrade, noSPKAsal, noSPK, tebal, lebar, panjang, jmlhBatang, idLokasi,
+  isRepair,
 }) {
   const cat = normalizeKategori(kategori);
   const pool = await poolPromise;
@@ -192,23 +193,25 @@ async function createLabel({
 
   let result;
   if (cat === "S4S") {
+    req.input("isrep", sql.Bit, isRepair ? 1 : 0);
     result = await req.query(`
       DECLARE @ns VARCHAR(20);
       SELECT @ns = ISNULL('R.' + FORMAT(RIGHT(MAX(NoS4S), 6) + 1, '000000'), 'R.000001')
       FROM S4S_h;
-      INSERT INTO S4S_h (NoS4S, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoSTAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted)
-      VALUES (@ns, @jk, @gr, 1, GETDATE(), NULL, NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), 0, 0, 5, 5, NULLIF(@stasal, ''), @lok, 0);
+      INSERT INTO S4S_h (NoS4S, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoSTAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair)
+      VALUES (@ns, @jk, @gr, 1, GETDATE(), NULL, NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), 0, 0, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep);
       INSERT INTO S4S_d (NoS4S, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES (@ns, 1, @tb, @lb, @pj, @bt);
       SELECT @ns AS NoLabel;
     `);
   } else {
+    req.input("isrep", sql.Bit, isRepair ? 1 : 0);
     result = await req.query(`
       DECLARE @ns VARCHAR(20);
       SELECT @ns = ISNULL('V.' + FORMAT(RIGHT(MAX(NoCCAkhir), 6) + 1, '000000'), 'V.000001')
       FROM CCAkhir_h;
-      INSERT INTO CCAkhir_h (NoCCAkhir, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, NoLaminatingAsal, NoFJAsal, IdWarehouse, IdFJProfile, IsLembur, IdFisik, NoSPKAsal)
-      VALUES (@ns, @jk, @gr, 1, GETDATE(), NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), 0, NULL, NULL, 8, NULL, 0, NULL, NULLIF(@stasal, ''));
+      INSERT INTO CCAkhir_h (NoCCAkhir, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, NoLaminatingAsal, NoFJAsal, IdWarehouse, IdFJProfile, IsLembur, IdFisik, NoSPKAsal, IsRepair)
+      VALUES (@ns, @jk, @gr, 1, GETDATE(), NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), 0, NULL, NULL, 8, NULL, 0, NULL, NULLIF(@stasal, ''), @isrep);
       INSERT INTO CCAkhir_d (NoCCAkhir, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES (@ns, 1, @tb, @lb, @pj, @bt);
       SELECT @ns AS NoLabel;

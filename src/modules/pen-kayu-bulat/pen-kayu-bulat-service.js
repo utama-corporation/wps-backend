@@ -49,6 +49,12 @@ exports.getMasters = async () => {
     ORDER BY IdGradeKB ASC
   `);
 
+  const suratTanah = await pool.request().query(`
+    SELECT IdTanah AS id, NamaTanah AS nama
+    FROM MstSuratTanah
+    ORDER BY NamaTanah ASC
+  `);
+
   return {
     jenis_kayu: jenisKayu.recordset,
     supplier: supplier.recordset,
@@ -56,6 +62,7 @@ exports.getMasters = async () => {
     kendaraan: kendaraan.recordset,
     supplier_asal: supplier.recordset,
     grade: grade.recordset,
+    surat_tanah: suratTanah.recordset,
   };
 };
 
@@ -129,6 +136,7 @@ exports.getHeader = async (no) => {
         A.IdPengukuran AS id_pengukuran,
         A.IdJenisKendaraan AS id_kendaraan,
         A.IdSupplierAsalKayu AS id_supplier_asal,
+        A.IdTanah AS id_tanah,
         A.NoTruk AS no_truk,
         A.NoPlat AS no_plat,
         A.Suket AS suket,
@@ -153,6 +161,7 @@ exports.getHeader = async (no) => {
     id_pengukuran: r.id_pengukuran,
     id_kendaraan: r.id_kendaraan,
     id_supplier_asal: r.id_supplier_asal,
+    id_tanah: r.id_tanah,
     no_truk: r.no_truk,
     no_plat: r.no_plat,
     suket: r.suket,
@@ -234,6 +243,7 @@ const headerInputs = (req, data) => {
     .input("NoTruk", sql.Int, data.no_truk ? Number(data.no_truk) : null)
     .input("DateCreate", sql.DateTime, data.tanggal || null)
     .input("Suket", sql.VarChar, data.suket || null)
+    .input("IdTanah", sql.Int, data.id_tanah || null)
     .input("IdJenisKendaraan", sql.Int, data.id_kendaraan || null)
     .input("TglSemprot", sql.DateTime, data.tgl_semprot || null)
     .input("JamMasuk", sql.VarChar, data.jam_masuk || null)
@@ -300,7 +310,7 @@ exports.create = async (data) => {
       VALUES
         (@NoKayuBulat, @NoPlat, @IdJenisKayu, @IdSupplier, @IdSupplierAsalKayu,
          @IdPengukuran, @NoTruk, NULL, @DateCreate, 0, NULL,
-         @Suket, NULL, @IdJenisKendaraan, @TglSemprot, @JamMasuk, @JamSiapBongkar)
+         @Suket, @IdTanah, @IdJenisKendaraan, @TglSemprot, @JamMasuk, @JamSiapBongkar)
     `);
 
     if (data.mode === "KG") {
@@ -358,6 +368,7 @@ exports.update = async (data) => {
           NoTruk = @NoTruk,
           DateCreate = @DateCreate,
           Suket = @Suket,
+          IdTanah = @IdTanah,
           IdJenisKendaraan = @IdJenisKendaraan,
           TglSemprot = @TglSemprot,
           JamMasuk = @JamMasuk,
