@@ -32,15 +32,32 @@ BEGIN
 END
 GO
 
-/* Foto per bundle — menyimpan object key MinIO (bucket "wps", prefix "qc-spk-bj/").
- * Jalankan sekali. */
-IF COL_LENGTH('dbo.QcSpkBarangJadi_d', 'FotoTebal') IS NULL
+/* Foto per bundle — 3 slot per bidang, menyimpan object key MinIO
+ * (bucket "wps", prefix "qc-spk-bj/"). Jalankan sekali.
+ *
+ * Slot 1 memakai kolom tanpa sufiks (FotoTebal, ...) supaya data yang sudah
+ * ada sebelum upgrade tetap terbaca. Slot 2 & 3 memakai FotoTebal2/FotoTebal3. */
+IF COL_LENGTH('dbo.QcSpkBarangjadi_d', 'FotoTebal') IS NULL
 BEGIN
-    ALTER TABLE dbo.QcSpkBarangJadi_d ADD
+    ALTER TABLE dbo.QcSpkBarangjadi_d ADD
         FotoTebal   varchar(255) NULL,
         FotoLebar   varchar(255) NULL,
         FotoPanjang varchar(255) NULL,
         FotoBundle  varchar(255) NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.QcSpkBarangjadi_d', 'FotoTebal2') IS NULL
+BEGIN
+    ALTER TABLE dbo.QcSpkBarangjadi_d ADD
+        FotoTebal2   varchar(255) NULL,
+        FotoTebal3   varchar(255) NULL,
+        FotoLebar2   varchar(255) NULL,
+        FotoLebar3   varchar(255) NULL,
+        FotoPanjang2 varchar(255) NULL,
+        FotoPanjang3 varchar(255) NULL,
+        FotoBundle2  varchar(255) NULL,
+        FotoBundle3  varchar(255) NULL;
 END
 GO
 
