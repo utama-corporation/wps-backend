@@ -209,6 +209,7 @@ async function updateHeader({
 
 async function createLabel({
   idJenisKayu, idGrade, noS4SAsal, noSPKAsal, noSPK, tebal, lebar, panjang, jmlhBatang,
+  isRepair,
 }) {
   const pool = await poolPromise;
   const req = pool.request();
@@ -222,13 +223,14 @@ async function createLabel({
   req.input("lb", sql.VarChar(20), lebar);
   req.input("pj", sql.VarChar(20), panjang);
   req.input("bt", sql.VarChar(20), jmlhBatang);
+  req.input("isrep", sql.Bit, isRepair ? 1 : 0);
 
   const result = await req.query(`
     DECLARE @ns VARCHAR(20);
     SELECT @ns = ISNULL('S.' + FORMAT(RIGHT(MAX(NoFJ), 6) + 1, '000000'), 'S.000001')
     FROM FJ_h;
-    INSERT INTO FJ_h (NoFJ, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoS4SAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsSisa, IdWarehouse, IdLokasi, IsLembur, IdFisik, NoSPKAsal)
-    VALUES (@ns, @jk, @gr, 1, GETDATE(), NULL, NULLIF(@s4sasal, ''), 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), 0, 0, 5, NULL, 0, NULL, NULLIF(@stasal, ''));
+    INSERT INTO FJ_h (NoFJ, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoS4SAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsSisa, IdWarehouse, IdLokasi, IsLembur, IdFisik, NoSPKAsal, IsRepair)
+    VALUES (@ns, @jk, @gr, 1, GETDATE(), NULL, NULLIF(@s4sasal, ''), 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), 0, 0, 5, NULL, 0, NULL, NULLIF(@stasal, ''), @isrep);
     INSERT INTO FJ_d (NoFJ, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
     VALUES (@ns, 1, @tb, @lb, @pj, @bt);
     SELECT @ns AS NoFJ;
