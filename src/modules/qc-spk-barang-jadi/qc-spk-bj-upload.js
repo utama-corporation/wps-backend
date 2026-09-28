@@ -55,11 +55,15 @@ function watermarkSvg(w, h, spk, bundle, hari, tanggal, jam, user) {
 </svg>`);
 }
 
+// Maksimal 3 file per field; frontend boleh mengirim beberapa file dengan nama
+// field yang sama (fotoTebal, fotoTebal, ...) untuk mengisi slot foto berikutnya.
+const MAX_PHOTOS = 3;
+
 const FIELDS = [
-  { name: 'fotoTebal', maxCount: 1 },
-  { name: 'fotoLebar', maxCount: 1 },
-  { name: 'fotoPanjang', maxCount: 1 },
-  { name: 'fotoBundle', maxCount: 1 },
+  { name: 'fotoTebal', maxCount: MAX_PHOTOS },
+  { name: 'fotoLebar', maxCount: MAX_PHOTOS },
+  { name: 'fotoPanjang', maxCount: MAX_PHOTOS },
+  { name: 'fotoBundle', maxCount: MAX_PHOTOS },
 ];
 
 const safe = (s) => String(s || '').replace(/[^A-Za-z0-9._-]+/g, '_');

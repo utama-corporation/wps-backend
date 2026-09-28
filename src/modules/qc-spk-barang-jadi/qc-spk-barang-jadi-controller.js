@@ -190,13 +190,14 @@ exports.saveOneBundle = async (req, res) => {
       .json({ success: false, message: 'Jumlah Pcs wajib integer > 0.' });
   }
 
-  // foto (opsional) — object key MinIO dari processBundlePhotos
+  // foto (opsional) — array object key MinIO dari processBundlePhotos.
+  // 1 field bisa berisi beberapa file; service mengisi slot kosongnya.
   const f = req.files || {};
   const photos = {
-    fotoTebal: f.fotoTebal?.[0]?.objectKey,
-    fotoLebar: f.fotoLebar?.[0]?.objectKey,
-    fotoPanjang: f.fotoPanjang?.[0]?.objectKey,
-    fotoBundle: f.fotoBundle?.[0]?.objectKey,
+    fotoTebal: (f.fotoTebal || []).map((x) => x.objectKey).filter(Boolean),
+    fotoLebar: (f.fotoLebar || []).map((x) => x.objectKey).filter(Boolean),
+    fotoPanjang: (f.fotoPanjang || []).map((x) => x.objectKey).filter(Boolean),
+    fotoBundle: (f.fotoBundle || []).map((x) => x.objectKey).filter(Boolean),
   };
 
   try {
@@ -220,32 +221,41 @@ exports.saveOneBundle = async (req, res) => {
     if (err?.code === 'BUNDLE_LIMIT') {
       return res.status(400).json({ success: false, message: err.message });
     }
+    if (err?.code === 'PHOTO_LIMIT') {
+      return res.status(400).json({ success: false, message: err.message });
+    }
     console.error('Error saving one QC bundle:', err);
     return res.status(500).json({ success: false, message: 'Terjadi kesalahan di server' });
   }
 };
 
-// DELETE /api/qc-spk-bj/:noSPK/lines/:lineNo/bundles/:noBundle/photos/:field
+// DELETE /api/qc-spk-bj/:noSPK/lines/:lineNo/bundles/:noBundle/photos/:field[/:index]
+// index opsional (0-based). Tanpa index => hapus semua foto pada field itu.
 exports.deleteOnePhoto = async (req, res) => {
   const { noSPK, lineNo, ok } = parseParams(req);
   const noBundle = parseInt(req.params.noBundle, 10);
   const field = String(req.params.field || '');
   const allowed = ['fotoTebal', 'fotoLebar', 'fotoPanjang', 'fotoBundle'];
+  const rawIndex = req.params.index;
+  const index = rawIndex === undefined ? null : parseInt(rawIndex, 10);
+  const badIndex = index !== null && (!Number.isInteger(index) || index < 0 || index > 2);
 
-  if (!ok || !Number.isInteger(noBundle) || noBundle < 1 || !allowed.includes(field)) {
+  if (!ok || !Number.isInteger(noBundle) || noBundle < 1 || !allowed.includes(field) || badIndex) {
     return res.status(400).json({ success: false, message: 'Parameter tidak valid.' });
   }
 
   try {
-    const data = await service.deleteOnePhoto(noSPK, lineNo, noBundle, field);
+    const data = await service.deleteOnePhoto(noSPK, lineNo, noBundle, field, index);
     return res.status(200).json({
       success: true,
-      message: `Foto ${field} bundle #${noBundle} dihapus.`,
+      message: index === null
+        ? `Foto ${field} bundle #${noBundle} dihapus.`
+        : `Foto ${field} #${index + 1} bundle #${noBundle} dihapus.`,
       data,
     });
   } catch (err) {
-    if (err?.code === 'LINE_NOT_FOUND') {
-      return res.status(404).json({ success: false, message: err.message });
+    if (err?.code === 'LINE_NOT_FOUND' || err?.code === 'PHOTO_NOT_FOUND') {
+      return res.status(400).json({ success: false, message: err.message });
     }
     console.error('Error deleting QC bundle photo:', err);
     return res.status(500).json({ success: false, message: 'Terjadi kesalahan di server' });

@@ -27,6 +27,7 @@ router.put(
   processBundlePhotos,
   ctrl.saveOneBundle
 );
+router.delete('/:noSPK/lines/:lineNo/bundles/:noBundle/photos/:field/:index', requirePermission('spk:delete'), ctrl.deleteOnePhoto);
 router.delete('/:noSPK/lines/:lineNo/bundles/:noBundle/photos/:field', requirePermission('spk:delete'), ctrl.deleteOnePhoto);
 router.delete('/:noSPK/lines/:lineNo/bundles', requirePermission('spk:delete'), ctrl.deleteBundles);
 router.delete('/:noSPK/lines/:lineNo/bundles/:noBundle', requirePermission('spk:delete'), ctrl.deleteOneBundle);
