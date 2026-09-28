@@ -103,7 +103,7 @@ async function cariST(cari) {
       FROM ST_h h
       INNER JOIN ST_d d ON d.NoST = h.NoST
       LEFT JOIN MstJenisKayu jk ON jk.IdJenisKayu = h.IdJenisKayu
-      WHERE h.StartKering = 1
+      WHERE h.DateUsage is null
         AND NOT EXISTS (
           SELECT 1 FROM KD_d kd
           INNER JOIN KD_h kh ON kh.NoProcKD = kd.NoProcKD
