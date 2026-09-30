@@ -137,28 +137,79 @@ async function getMasterOptions() {
 }
 
 async function saveHeader({
-  shift, tanggal, idMesin, idOperator, jamKerja, jmlhAnggota, hourMeter,
+  shift, tanggal, idMesin, idOperator, jamKerja, jmlhAnggota, hourMeter, jamLembur,
 }) {
   const pool = await poolPromise;
   const req = pool.request();
-  req.input("sh", sql.VarChar(20), shift || "");
+  req.input("sh", sql.Int, shift == null ? 1 : shift);
   req.input("tgl", sql.Date, tanggal || new Date());
   req.input("idm", sql.Int, idMesin);
   req.input("ido", sql.Int, idOperator);
-  req.input("jk", sql.VarChar(10), jamKerja || "");
-  req.input("ja", sql.Int, jmlhAnggota || 0);
-  req.input("hm", sql.VarChar(20), hourMeter || "");
+  req.input("jk", sql.Int, jamKerja == null ? 0 : jamKerja);
+  req.input("ja", sql.Int, jmlhAnggota == null ? 0 : jmlhAnggota);
+  req.input("hm", sql.Float, hourMeter == null ? null : hourMeter);
+  req.input("jl", sql.Decimal(5, 2), jamLembur == null ? null : jamLembur);
 
   const result = await req.query(`
     DECLARE @np VARCHAR(20);
     SELECT @np = 'X.' + FORMAT(RIGHT(ISNULL(MAX(NoProduksi), 'X.000000'), 6) + 1, '000000')
     FROM PackingProduksi_h;
-    INSERT INTO PackingProduksi_h (NoProduksi, [Shift], Tanggal, IdMesin, IdOperator, JamKerja, JmlhAnggota, HourMeter)
-    VALUES (@np, @sh, @tgl, @idm, @ido, @jk, @ja, @hm);
+    INSERT INTO PackingProduksi_h (NoProduksi, [Shift], Tanggal, IdMesin, IdOperator, JamKerja, JmlhAnggota, HourMeter, JamLembur)
+    VALUES (@np, @sh, @tgl, @idm, @ido, @jk, @ja, @hm, @jl);
     SELECT @np AS NoProduksi;
   `);
 
   return result.recordset[0] ? result.recordset[0].NoProduksi : null;
+}
+
+async function getHeader(noProduksi) {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("np", sql.VarChar(20), noProduksi)
+    .query(`
+      SELECT TOP 1
+        h.NoProduksi,
+        h.Shift,
+        h.Tanggal,
+        h.IdMesin,
+        h.IdOperator,
+        ISNULL(h.JamKerja, 0) AS JamKerja,
+        ISNULL(h.JmlhAnggota, 0) AS JmlhAnggota,
+        ISNULL(h.HourMeter, 0) AS HourMeter,
+        ISNULL(h.JamLembur, 0) AS JamLembur,
+        ISNULL(m.NamaMesin, '-') AS NamaMesin,
+        ISNULL(o.NamaOperator, '-') AS NamaOperator
+      FROM PackingProduksi_h h
+      LEFT JOIN MstMesin m ON m.IdMesin = h.IdMesin
+      LEFT JOIN MstOperator o ON o.IdOperator = h.IdOperator
+      WHERE h.NoProduksi = @np
+    `);
+  return result.recordset[0] || null;
+}
+
+async function updateHeader({
+  noProduksi, shift, jmlhAnggota, jamKerja, jamLembur, hourMeter,
+}) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("np", sql.VarChar(20), noProduksi);
+  req.input("sh", sql.Int, shift == null ? 1 : shift);
+  req.input("ja", sql.Int, jmlhAnggota == null ? 0 : jmlhAnggota);
+  req.input("jk", sql.Int, jamKerja == null ? 0 : jamKerja);
+  req.input("jl", sql.Decimal(5, 2), jamLembur == null ? null : jamLembur);
+  req.input("hm", sql.Float, hourMeter == null ? null : hourMeter);
+
+  await req.query(`
+    UPDATE PackingProduksi_h SET
+      Shift = @sh,
+      JmlhAnggota = @ja,
+      JamKerja = @jk,
+      JamLembur = @jl,
+      HourMeter = @hm
+    WHERE NoProduksi = @np
+  `);
+
+  return { noProduksi };
 }
 
 async function createLabel({
@@ -336,6 +387,8 @@ module.exports = {
   getNextNoLabel,
   getMasterOptions,
   saveHeader,
+  getHeader,
+  updateHeader,
   createLabel,
   addInput,
   removeInput,

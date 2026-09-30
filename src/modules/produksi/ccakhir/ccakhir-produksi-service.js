@@ -147,7 +147,7 @@ async function getMasterOptions(kategori = "CCA") {
 }
 
 async function saveHeader({
-  shift, tanggal, idMesin, idOperator, jamKerja, jmlhAnggota, hourMeter,
+  shift, tanggal, idMesin, idOperator, jamKerja, jmlhAnggota, hourMeter, jamLembur,
 }) {
   const pool = await poolPromise;
   const req = pool.request();
@@ -158,13 +158,14 @@ async function saveHeader({
   req.input("jk", sql.Int, jamKerja == null ? 0 : jamKerja);
   req.input("ja", sql.Int, jmlhAnggota == null ? 0 : jmlhAnggota);
   req.input("hm", sql.Float, hourMeter == null ? null : hourMeter);
+  req.input("jl", sql.Decimal(5, 2), jamLembur == null ? null : jamLembur);
 
   const result = await req.query(`
     DECLARE @np VARCHAR(20);
     SELECT @np = 'VA.' + FORMAT(RIGHT(ISNULL(MAX(NoProduksi), 'VA.000000'), 6) + 1, '000000')
     FROM CCAkhirProduksi_h;
-    INSERT INTO CCAkhirProduksi_h (NoProduksi, [Shift], Tanggal, IdMesin, IdOperator, JamKerja, JmlhAnggota, HourMeter)
-    VALUES (@np, @sh, @tgl, @idm, @ido, @jk, @ja, @hm);
+    INSERT INTO CCAkhirProduksi_h (NoProduksi, [Shift], Tanggal, IdMesin, IdOperator, JamKerja, JmlhAnggota, HourMeter, JamLembur)
+    VALUES (@np, @sh, @tgl, @idm, @ido, @jk, @ja, @hm, @jl);
     SELECT @np AS NoProduksi;
   `);
 
@@ -173,7 +174,7 @@ async function saveHeader({
 
 async function createLabel({
   kategori = "CCA",
-  idJenisKayu, idGrade, noSPKAsal, noSPK, tebal, lebar, panjang, jmlhBatang,
+  idJenisKayu, idGrade, noSPKAsal, noSPK, tebal, lebar, panjang, jmlhBatang, idLokasi,
 }) {
   const cat = normalizeKategori(kategori);
   const pool = await poolPromise;
@@ -187,6 +188,7 @@ async function createLabel({
   req.input("lb", sql.VarChar(20), lebar == null ? null : String(lebar));
   req.input("pj", sql.VarChar(20), panjang == null ? null : String(panjang));
   req.input("bt", sql.VarChar(20), jmlhBatang == null ? null : String(jmlhBatang));
+  req.input("lok", sql.Int, idLokasi || null);
 
   let result;
   if (cat === "S4S") {
@@ -195,7 +197,7 @@ async function createLabel({
       SELECT @ns = ISNULL('R.' + FORMAT(RIGHT(MAX(NoS4S), 6) + 1, '000000'), 'R.000001')
       FROM S4S_h;
       INSERT INTO S4S_h (NoS4S, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoSTAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted)
-      VALUES (@ns, @jk, @gr, 1, GETDATE(), NULL, NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), 0, 0, 5, 5, NULLIF(@stasal, ''), NULL, 0);
+      VALUES (@ns, @jk, @gr, 1, GETDATE(), NULL, NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), 0, 0, 5, 5, NULLIF(@stasal, ''), @lok, 0);
       INSERT INTO S4S_d (NoS4S, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES (@ns, 1, @tb, @lb, @pj, @bt);
       SELECT @ns AS NoLabel;
@@ -375,6 +377,56 @@ async function removeOutput({ noProduksi, kategori = "CCA", noLabel }) {
   return { noProduksi, noLabel, kategori: cat };
 }
 
+async function getHeader(noProduksi) {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("np", sql.VarChar(20), noProduksi)
+    .query(`
+      SELECT TOP 1
+        h.NoProduksi,
+        h.Shift,
+        h.Tanggal,
+        h.IdMesin,
+        h.IdOperator,
+        ISNULL(h.JamKerja, 0) AS JamKerja,
+        ISNULL(h.JmlhAnggota, 0) AS JmlhAnggota,
+        ISNULL(h.HourMeter, 0) AS HourMeter,
+        ISNULL(h.JamLembur, 0) AS JamLembur,
+        ISNULL(m.NamaMesin, '-') AS NamaMesin,
+        ISNULL(o.NamaOperator, '-') AS NamaOperator
+      FROM CCAkhirProduksi_h h
+      LEFT JOIN MstMesin m ON m.IdMesin = h.IdMesin
+      LEFT JOIN MstOperator o ON o.IdOperator = h.IdOperator
+      WHERE h.NoProduksi = @np
+    `);
+  return result.recordset[0] || null;
+}
+
+async function updateHeader({
+  noProduksi, shift, jmlhAnggota, jamKerja, jamLembur, hourMeter,
+}) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("np", sql.VarChar(20), noProduksi);
+  req.input("sh", sql.Int, shift == null ? 1 : shift);
+  req.input("ja", sql.Int, jmlhAnggota == null ? 0 : jmlhAnggota);
+  req.input("jk", sql.Int, jamKerja == null ? 0 : jamKerja);
+  req.input("jl", sql.Decimal(5, 2), jamLembur == null ? null : jamLembur);
+  req.input("hm", sql.Float, hourMeter == null ? null : hourMeter);
+
+  await req.query(`
+    UPDATE CCAkhirProduksi_h SET
+      Shift = @sh,
+      JmlhAnggota = @ja,
+      JamKerja = @jk,
+      JamLembur = @jl,
+      HourMeter = @hm
+    WHERE NoProduksi = @np
+  `);
+
+  return { noProduksi };
+}
+
 module.exports = {
   getMesinList,
   getHistory,
@@ -382,6 +434,8 @@ module.exports = {
   getNextNoLabel,
   getMasterOptions,
   saveHeader,
+  getHeader,
+  updateHeader,
   createLabel,
   addInput,
   removeInput,

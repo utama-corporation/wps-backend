@@ -9,6 +9,9 @@ router.get("/masters", verifyToken, lembarTallyHasilSawmillController.getMasters
 router.get("/kayu-bulat", verifyToken, lembarTallyHasilSawmillController.getKayuBulat);
 router.get("/operator-meja", verifyToken, lembarTallyHasilSawmillController.getOperatorMeja);
 router.get("/produk-spk", verifyToken, lembarTallyHasilSawmillController.getProdukSPK);
+router.get("/spk-by-tebal-lebar", verifyToken, lembarTallyHasilSawmillController.getSpkByTebalLebar);
+router.put("/header", verifyToken, lembarTallyHasilSawmillController.updateHeader);
+router.post("/selesai", verifyToken, lembarTallyHasilSawmillController.selesai);
 router.get("/header", verifyToken, lembarTallyHasilSawmillController.getByNo);
 router.get("/", verifyToken, lembarTallyHasilSawmillController.getAll);
 router.post("/", verifyToken, lembarTallyHasilSawmillController.create);

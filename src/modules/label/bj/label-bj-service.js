@@ -6,7 +6,7 @@ const DETAIL_TABLE = "BarangJadi_d";
 const KEY_COLUMN = "NoBJ";
 
 /* ============================================================
- * QUERY
+ * QUERY (for PDF)
  * ==========================================================*/
 
 async function getHeader(noBJ) {
@@ -20,20 +20,18 @@ async function getHeader(noBJ) {
       h.DateCreate,
       h.Jam,
       h.NoSPK,
-      h.Remark,
       h.IsReject,
       h.IsLembur,
-      h.HasBeenPrinted,
       h.DateUsage,
       k.Jenis              AS JenisKayu,
       g.NamaBarangJadi     AS NamaBJ,
-      t.NamaOrgTelly       AS Telly,      
+      t.NamaOrgTelly       AS Telly,
       m.NamaMesin          AS NamaMesin,
       o.NoProduksi         AS NoProduksi,
       s.NoBongkarSusun     AS NoBongkarSusun
     FROM ${MASTER_TABLE} h
     LEFT JOIN (
-      SELECT NoProduksi, NoBJ FROM PackingProduksiOutput      
+      SELECT NoProduksi, NoBJ FROM PackingProduksiOutput
     ) o ON o.NoBJ = h.${KEY_COLUMN}
     LEFT JOIN (
       SELECT NoProduksi, IdMesin FROM PackingProduksi_h
@@ -65,7 +63,178 @@ async function getDetail(noBJ) {
 }
 
 /* ============================================================
- * PERHITUNGAN (samakan dengan Packing.java: m3() & jumlahpcs())
+ * LIST ALL LABELS (header only, for V2 list form)
+ * ==========================================================*/
+
+async function getAllLabels({ search, topRow }) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  const top = parseInt(topRow, 10) || 100;
+
+  let whereClause = "WHERE h.DateUsage IS NULL";
+  if (search && search.trim() !== "") {
+    req.input("search", sql.VarChar(50), `%${search.trim()}%`);
+    whereClause += " AND h.NoBJ LIKE @search";
+  }
+
+  const result = await req.query(`
+    SELECT TOP (${top})
+      h.NoBJ,
+      h.DateCreate,
+      h.Jam,
+      h.IsReject,
+      h.IsLembur,
+      k.Jenis AS JenisKayu,
+      g.NamaBarangJadi AS NamaBJ,
+      t.NamaOrgTelly AS Telly,
+      h.NoSPK
+    FROM ${MASTER_TABLE} h
+    LEFT JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+    LEFT JOIN MstBarangJadi g ON g.IdBarangJadi = h.IdBarangJadi
+    LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = h.IdOrgTelly
+    ${whereClause}
+    ORDER BY h.NoBJ DESC
+  `);
+
+  return result.recordset;
+}
+
+/* ============================================================
+ * GET DETAIL BY NO BJ (for V2 list form)
+ * ==========================================================*/
+
+async function getDetailByNo(noBJ) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noBJ", sql.VarChar(50), noBJ);
+
+  const result = await req.query(`
+    SELECT NoUrut, Tebal, Lebar, Panjang, JmlhBatang
+    FROM ${DETAIL_TABLE}
+    WHERE ${KEY_COLUMN} = @noBJ
+    ORDER BY NoUrut
+  `);
+
+  return result.recordset;
+}
+
+/* ============================================================
+ * GET HEADER FOR EDIT (returns IDs for combo selection)
+ * ==========================================================*/
+
+async function getHeaderForEdit(noBJ) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noBJ", sql.VarChar(50), noBJ);
+
+  const result = await req.query(`
+    SELECT
+      h.${KEY_COLUMN}      AS NoBJ,
+      h.DateCreate,
+      h.Jam,
+      h.NoSPK,
+      h.IdJenisKayu,
+      h.IdBarangJadi,
+      h.IdOrgTelly,
+      h.IsReject,
+      h.IsLembur,
+      k.Jenis              AS JenisKayu,
+      g.NamaBarangJadi     AS NamaBJ,
+      t.NamaOrgTelly       AS Telly
+    FROM ${MASTER_TABLE} h
+    INNER JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+    LEFT JOIN MstBarangJadi g ON g.IdBarangJadi = h.IdBarangJadi
+    LEFT JOIN MstOrgTelly t  ON t.IdOrgTelly = h.IdOrgTelly
+    WHERE h.${KEY_COLUMN} = @noBJ
+  `);
+
+  return result.recordset[0] || null;
+}
+
+/* ============================================================
+ * UPDATE LABEL
+ * ==========================================================*/
+
+async function updateLabel(noBJ, data) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noBJ", sql.VarChar(50), noBJ);
+  req.input("idJenisKayu", sql.Int, data.idJenisKayu || null);
+  req.input("idBarangJadi", sql.Int, data.idBarangJadi || null);
+  req.input("idOrgTelly", sql.Int, data.idOrgTelly || null);
+  req.input("noSPK", sql.VarChar(50), data.noSPK || null);
+  req.input("isReject", sql.Bit, data.isReject ? 1 : 0);
+  req.input("isLembur", sql.Bit, data.isLembur ? 1 : 0);
+  req.input("jam", sql.VarChar(10), data.jam || null);
+
+  await req.query(`
+    UPDATE ${MASTER_TABLE}
+    SET IdJenisKayu = @idJenisKayu,
+        IdBarangJadi = @idBarangJadi,
+        IdOrgTelly = @idOrgTelly,
+        NoSPK = @noSPK,
+        IsReject = @isReject,
+        IsLembur = @isLembur,
+        Jam = @jam
+    WHERE ${KEY_COLUMN} = @noBJ
+  `);
+
+  return { noBJ };
+}
+
+/* ============================================================
+ * UPDATE DETAIL (delete old + insert new)
+ * ==========================================================*/
+
+async function updateDetail(noBJ, details) {
+  const pool = await poolPromise;
+
+  const delReq = pool.request();
+  delReq.input("noBJ", sql.VarChar(50), noBJ);
+  await delReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noBJ`);
+
+  for (let i = 0; i < details.length; i++) {
+    const d = details[i];
+    const insReq = pool.request();
+    insReq.input("noBJ", sql.VarChar(50), noBJ);
+    insReq.input("noUrut", sql.Int, i + 1);
+    insReq.input("tebal", sql.Decimal(18, 2), d.tebal || 0);
+    insReq.input("lebar", sql.Decimal(18, 2), d.lebar || 0);
+    insReq.input("panjang", sql.Decimal(18, 2), d.panjang || 0);
+    insReq.input("jmlhBatang", sql.Int, d.jmlhBatang || 0);
+    await insReq.query(`
+      INSERT INTO ${DETAIL_TABLE} (${KEY_COLUMN}, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
+      VALUES (@noBJ, @noUrut, @tebal, @lebar, @panjang, @jmlhBatang)
+    `);
+  }
+
+  return { noBJ, detailCount: details.length };
+}
+
+/* ============================================================
+ * DELETE LABEL (header + detail + output refs)
+ * ==========================================================*/
+
+async function deleteLabel(noBJ) {
+  const pool = await poolPromise;
+
+  const outReq = pool.request();
+  outReq.input("noBJ", sql.VarChar(50), noBJ);
+  await outReq.query(`DELETE FROM PackingProduksiOutput WHERE NoBJ = @noBJ`);
+
+  const detReq = pool.request();
+  detReq.input("noBJ", sql.VarChar(50), noBJ);
+  await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noBJ`);
+
+  const hdrReq = pool.request();
+  hdrReq.input("noBJ", sql.VarChar(50), noBJ);
+  await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noBJ`);
+
+  return { noBJ };
+}
+
+/* ============================================================
+ * PERHITUNGAN
  * ==========================================================*/
 
 function toNumber(v) {
@@ -73,7 +242,6 @@ function toNumber(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-// Mirror Packing.java m3(): per baris floor 4 desimal, lalu dijumlahkan, format "0.0000".
 function computeM3(detail) {
   let total = 0;
   for (const row of detail) {
@@ -81,7 +249,6 @@ function computeM3(detail) {
     const lebar = toNumber(row.Lebar);
     const panjang = toNumber(row.Panjang);
     const pcs = parseInt(row.JmlhBatang, 10) || 0;
-
     let rowM3 = (tebal * lebar * panjang * pcs) / 1000000000.0;
     rowM3 = Math.floor(rowM3 * 10000) / 10000;
     total += rowM3;
@@ -89,7 +256,6 @@ function computeM3(detail) {
   return total.toFixed(4);
 }
 
-// Mirror Packing.java jumlahpcs(): jumlah kolom pcs.
 function computeTotalPcs(detail) {
   return detail.reduce((sum, row) => sum + (parseInt(row.JmlhBatang, 10) || 0), 0);
 }
@@ -136,8 +302,7 @@ async function getLabelData(noBJ) {
   return {
     noBJ: header.NoBJ,
     jenisKayu: header.JenisKayu || "-",
-    //grade: header.Grade || "-",
-    namaBJ: header.NamaBJ || '-',
+    namaBJ: header.NamaBJ || "-",
     fisik: header.FisikSingkatan || header.FisikNama || "-",
     tanggal: header.DateCreate ? moment(header.DateCreate).format("DD-MMM-YYYY") : "-",
     jam: header.Jam ? moment.utc(header.Jam).format("HH:mm") : "-",
@@ -145,10 +310,10 @@ async function getLabelData(noBJ) {
     telly: firstToken(header.Telly),
     noSPK: header.NoSPK || "-",
     mesinSusun: resolveMesinSusun(header),
-    remark: (header.Remark || "").trim(),
+    remark: "",
     isReject: truthy(header.IsReject),
     isLembur: truthy(header.IsLembur),
-    hasBeenPrinted: parseInt(header.HasBeenPrinted, 10) || 0,
+    hasBeenPrinted: 0,
     dateUsage: header.DateUsage || null,
     detail: detail.map((r) => ({
       tebal: r.Tebal,
@@ -161,4 +326,12 @@ async function getLabelData(noBJ) {
   };
 }
 
-module.exports = { getLabelData };
+module.exports = {
+  getLabelData,
+  getAllLabels,
+  getDetailByNo,
+  getHeaderForEdit,
+  updateLabel,
+  updateDetail,
+  deleteLabel,
+};

@@ -385,24 +385,32 @@ exports.getOperatorMeja = async (noMeja) => {
   const req = pool.request();
   req.input("noMeja", sql.Int, toInt(noMeja));
 
-  const r1 = await req.query(`
-    SELECT A.IdOperator, A.NamaOperator
-    FROM MstOperator A
-    INNER JOIN MstMesinSawmill B ON B.IdOperator1 = A.IdOperator
-    WHERE B.NoMeja = @noMeja AND A.Enable = 1 AND A.IdBagian IN (8, 9)
-    ORDER BY A.NamaOperator ASC
-  `);
-  const r2 = await req.query(`
-    SELECT A.IdOperator, A.NamaOperator
-    FROM MstOperator A
-    INNER JOIN MstMesinSawmill B ON B.IdOperator2 = A.IdOperator
-    WHERE B.NoMeja = @noMeja AND A.Enable = 1 AND A.IdBagian IN (8, 9)
-    ORDER BY A.NamaOperator ASC
+  const rAll = await req.query(`
+    SELECT IdOperator, NamaOperator
+    FROM MstOperator
+    WHERE Enable = 1 AND IdBagian IN (8, 9)
+    ORDER BY NamaOperator ASC
   `);
 
+  const rDefault = await req.query(`
+    SELECT IdOperator1, IdOperator2
+    FROM MstMesinSawmill
+    WHERE NoMeja = @noMeja
+  `);
+
+  const allOps = rAll.recordset.map((r) => ({ id: r.IdOperator, nama: r.NamaOperator }));
+  let defaultOp1 = null;
+  let defaultOp2 = null;
+  if (rDefault.recordset.length > 0) {
+    defaultOp1 = rDefault.recordset[0].IdOperator1;
+    defaultOp2 = rDefault.recordset[0].IdOperator2;
+  }
+
   return {
-    operator1: r1.recordset.map((r) => ({ id: r.IdOperator, nama: r.NamaOperator })),
-    operator2: r2.recordset.map((r) => ({ id: r.IdOperator, nama: r.NamaOperator })),
+    operator1: allOps,
+    operator2: allOps,
+    default_operator1: defaultOp1,
+    default_operator2: defaultOp2,
   };
 };
 
@@ -449,6 +457,7 @@ exports.getAll = async ({ cari = "", top = 100, tanggal = "", noMeja = "" } = {}
     where.push("A.NoMeja = @noMeja");
   }
   where.push("A.TglSawmill = @tgl");
+  where.push("B.DateUsage IS NULL");
 
   const result = await req.query(`
     SELECT TOP (@top)
@@ -952,6 +961,210 @@ exports.update = async (data) => {
     try { await transaction.rollback(); } catch (rbErr) { console.error("Rollback failed:", rbErr.message); }
     throw err;
   }
+};
+
+// Update header only
+exports.updateHeader = async (data) => {
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+
+  try {
+    const no = data.no;
+    if (!no) throw new Error("No tidak valid");
+
+    const req = transaction.request();
+    req.input("no", sql.VarChar, no);
+    req.input("tgl", sql.Date, data.tgl || null);
+    req.input("shift", sql.Int, toInt(data.shift));
+    req.input("no_kayu_bulat", sql.VarChar, data.no_kayu_bulat || null);
+    req.input("id_sawmill_special_condition", sql.Int, toInt(data.id_sawmill_special_condition));
+    req.input("balok_terpakai", sql.Int, toInt(data.balok_terpakai));
+    req.input("jlh_batang_rajang", sql.Int, toInt(data.jlh_batang_rajang));
+    req.input("jam_kerja", sql.Decimal(10, 2), toFloat(data.jam_kerja));
+    req.input("hour_start", sql.VarChar, data.hour_start || null);
+    req.input("hour_end", sql.VarChar, data.hour_end || null);
+    req.input("id_operator1", sql.Int, toInt(data.id_operator1));
+    req.input("id_operator2", sql.Int, toInt(data.id_operator2));
+    req.input("berat_balok", sql.Decimal(18, 4), toFloat(data.berat_balok));
+    req.input("is_borongan", sql.Bit, data.is_borongan ? 1 : 0);
+    req.input("remark", sql.NVarChar(500), data.remark || null);
+
+    await req.query(`
+      UPDATE STSawmill_h SET
+        TglSawmill = @tgl,
+        Shift = @shift,
+        NoKayuBulat = @no_kayu_bulat,
+        IdSawmillSpecialCondition = @id_sawmill_special_condition,
+        BalokTerpakai = @balok_terpakai,
+        JlhBatangRajang = @jlh_batang_rajang,
+        JamKerja = @jam_kerja,
+        HourStart = @hour_start,
+        HourEnd = @hour_end,
+        IdOperator1 = @id_operator1,
+        IdOperator2 = @id_operator2,
+        BeratBalok = @berat_balok,
+        IsBorongan = @is_borongan,
+        Remark = @remark
+      WHERE NoSTSawmill = @no
+    `);
+
+    await transaction.commit();
+    return true;
+  } catch (err) {
+    try { await transaction.rollback(); } catch (rbErr) { console.error("Rollback failed:", rbErr.message); }
+    throw err;
+  }
+};
+
+// Selesai / matikan kayu bulat
+exports.selesai = async (no, username) => {
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+
+  try {
+    // Get header info
+    const headerResult = await transaction.request()
+      .input("no", sql.VarChar, no)
+      .query(`SELECT NoKayuBulat, TglSawmill FROM STSawmill_h WHERE NoSTSawmill = @no`);
+
+    if (headerResult.recordset.length === 0) {
+      throw new Error("Data tidak ditemukan");
+    }
+
+    const noKayuBulat = headerResult.recordset[0].NoKayuBulat;
+    const tgl = headerResult.recordset[0].TglSawmill;
+
+    if (!noKayuBulat) {
+      throw new Error("No Kayu Bulat kosong pada data ini");
+    }
+
+    // Check if already finished
+    const usedCheck = await transaction.request()
+      .input("noKB", sql.VarChar, noKayuBulat)
+      .query(`SELECT NoKayuBulat FROM KayuBulat_h WHERE NoKayuBulat = @noKB AND DateUsage IS NOT NULL`);
+
+    if (usedCheck.recordset.length > 0) {
+      throw new Error("No Kayu Bulat sudah dimatikan");
+    }
+
+    // Check sisa balok
+    const sisaResult = await transaction.request()
+      .input("noKB", sql.VarChar, noKayuBulat)
+      .query(`
+        SELECT ISNULL(A.TGA, 0) - ISNULL(B.TG, 0) AS Sisa FROM
+        (SELECT NoKayuBulat, SUM(JmlhBatang) AS TGA FROM KayuBulatKG_D WHERE NoKayuBulat = @noKB GROUP BY NoKayuBulat) A
+        LEFT JOIN
+        (SELECT B.NoKayuBulat, SUM(CASE WHEN Pcs IS NULL THEN 0 ELSE Pcs END) AS TG
+         FROM STSawmill_dBalokGantungKG A
+         INNER JOIN STSawmill_h B ON B.NoSTSawmill = A.NoSTSawmill
+         WHERE B.NoKayuBulat = @noKB GROUP BY B.NoKayuBulat) B ON B.NoKayuBulat = A.NoKayuBulat
+
+        UNION
+
+        SELECT ISNULL(A.TGA, 0) - ISNULL(B.TG, 0) AS Sisa FROM
+        (SELECT NoKayuBulat, COUNT(NoKayuBulat) AS TGA FROM KayuBulat_d WHERE NoKayuBulat = @noKB GROUP BY NoKayuBulat) A
+        LEFT JOIN
+        (SELECT B.NoKayuBulat, SUM(Pcs) AS TG
+         FROM STSawmill_dBalokGantung A
+         INNER JOIN STSawmill_h B ON B.NoSTSawmill = A.NoSTSawmill
+         WHERE B.NoKayuBulat = @noKB GROUP BY B.NoKayuBulat) B ON B.NoKayuBulat = A.NoKayuBulat
+      `);
+
+    let totalSisa = 0;
+    for (const row of sisaResult.recordset) {
+      totalSisa += parseInt(row.Sisa) || 0;
+    }
+
+    if (totalSisa !== 0) {
+      throw new Error("Sisa Balok masih ada tersisa " + totalSisa + ", pastikan balok sudah diinput semua");
+    }
+
+    // Generate NoPenerimaanST
+    const genResult = await transaction.request()
+      .query(`SELECT 'B.' + FORMAT(RIGHT(ISNULL(MAX(NoPenerimaanST), 'B.000000'), 6) + 1, '000000') AS No FROM PenerimaanSTSawmill_h`);
+
+    const noPenerimaan = genResult.recordset[0].No;
+
+    // Insert header PenerimaanSTSawmill_h
+    await transaction.request()
+      .input("noPenerimaan", sql.VarChar, noPenerimaan)
+      .input("tgl", sql.Date, tgl)
+      .input("noKB", sql.VarChar, noKayuBulat)
+      .query(`INSERT INTO PenerimaanSTSawmill_h (NoPenerimaanST, TglLaporan, NoKayuBulat) VALUES (@noPenerimaan, @tgl, @noKB)`);
+
+    // Insert detail PenerimaanSTSawmill_d
+    await transaction.request()
+      .input("noPenerimaan", sql.VarChar, noPenerimaan)
+      .input("noKB", sql.VarChar, noKayuBulat)
+      .query(`
+        INSERT INTO PenerimaanSTSawmill_d (NoPenerimaanST, NoSTSawmill)
+        SELECT @noPenerimaan, NoSTSawmill FROM STSawmill_h WHERE NoKayuBulat = @noKB
+      `);
+
+    // Update DateUsage
+    await transaction.request()
+      .input("noKB", sql.VarChar, noKayuBulat)
+      .input("tgl", sql.Date, tgl)
+      .query(`UPDATE KayuBulat_h SET DateUsage = @tgl WHERE NoKayuBulat = @noKB`);
+
+    // History log
+    constKalimat = "Menyimpan No." + noKayuBulat + " Pada Data Penerimaan ST (Telly Sheet)";
+    await transaction.request()
+      .input("nip", sql.VarChar, username || "")
+      .input("tgl", sql.DateTime, new Date())
+      .input("aktivitas", sql.NVarChar, constKalimat)
+      .query(`INSERT INTO Riwayat ([Nip], [Tgl], [Aktivitas]) VALUES (@nip, @tgl, @aktivitas)`);
+
+    await transaction.commit();
+    return { noPenerimaan };
+  } catch (err) {
+    try { await transaction.rollback(); } catch (rbErr) { console.error("Rollback failed:", rbErr.message); }
+    throw err;
+  }
+};
+
+// Get SPK + Produk filtered by Tebal + Lebar
+exports.getSpkByTebalLebar = async (tebal, lebar) => {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("tebal", sql.Decimal(18, 2), tebal);
+  req.input("lebar", sql.Decimal(18, 2), lebar);
+
+  const r = await req.query(`
+    SELECT DISTINCT
+      h.NoSPK,
+      p.IdProdukSPK,
+      p.NamaProduk
+    FROM MstSPK_h h
+    INNER JOIN MstSPK_dProdukSPK sp ON sp.NoSPK = h.NoSPK
+    INNER JOIN MstProdukSPK p ON p.IdProdukSPK = sp.IdProdukSPK
+    INNER JOIN MstProdukSPK_d pd ON pd.IdProdukSPK = p.IdProdukSPK
+    WHERE h.[Enable] = 1
+      AND pd.Tebal = @tebal
+      AND pd.Lebar = @lebar
+    ORDER BY h.NoSPK, p.NamaProduk
+  `);
+
+  const spkList = [];
+  const produkList = [];
+  const seenSpk = new Set();
+  const seenProduk = new Set();
+
+  for (const row of r.recordset) {
+    if (!seenSpk.has(row.NoSPK)) {
+      seenSpk.add(row.NoSPK);
+      spkList.push(row.NoSPK);
+    }
+    const key = row.IdProdukSPK;
+    if (!seenProduk.has(key)) {
+      seenProduk.add(key);
+      produkList.push({ idProdukSPK: row.IdProdukSPK, namaProduk: row.NamaProduk, noSPK: row.NoSPK });
+    }
+  }
+
+  return { spkList, produkList };
 };
 
 // DELETE : hapus semua detail lalu header

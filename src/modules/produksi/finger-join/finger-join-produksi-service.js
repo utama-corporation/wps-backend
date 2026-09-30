@@ -132,7 +132,7 @@ async function getMasterOptions() {
 }
 
 async function saveHeader({
-  shift, tanggal, idMesin, idOperator, jamKerja, jmlhAnggota, hourMeter,
+  shift, tanggal, idMesin, idOperator, jamKerja, jmlhAnggota, hourMeter, jamLembur,
 }) {
   const pool = await poolPromise;
   const req = pool.request();
@@ -143,17 +143,68 @@ async function saveHeader({
   req.input("jk", sql.VarChar(10), jamKerja || "");
   req.input("ja", sql.Int, jmlhAnggota || 0);
   req.input("hm", sql.VarChar(20), hourMeter || "");
+  req.input("jl", sql.Decimal(5, 2), jamLembur || null);
 
   const result = await req.query(`
     DECLARE @np VARCHAR(20);
     SELECT @np = 'SA.' + FORMAT(RIGHT(ISNULL(MAX(NoProduksi), 'SA.000000'), 6) + 1, '000000')
     FROM FJProduksi_h;
-    INSERT INTO FJProduksi_h (NoProduksi, [Shift], Tanggal, IdMesin, IdOperator, JamKerja, JmlhAnggota, HourMeter)
-    VALUES (@np, @sh, @tgl, @idm, @ido, @jk, @ja, @hm);
+    INSERT INTO FJProduksi_h (NoProduksi, [Shift], Tanggal, IdMesin, IdOperator, JamKerja, JmlhAnggota, HourMeter, JamLembur)
+    VALUES (@np, @sh, @tgl, @idm, @ido, @jk, @ja, NULLIF(@hm, ''), @jl);
     SELECT @np AS NoProduksi;
   `);
 
   return result.recordset[0] ? result.recordset[0].NoProduksi : null;
+}
+
+async function getHeader(noProduksi) {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("np", sql.VarChar(20), noProduksi)
+    .query(`
+      SELECT TOP 1
+        h.NoProduksi,
+        h.Shift,
+        h.Tanggal,
+        h.IdMesin,
+        h.IdOperator,
+        ISNULL(h.JamKerja, '') AS JamKerja,
+        ISNULL(h.JmlhAnggota, 0) AS JmlhAnggota,
+        ISNULL(h.HourMeter, '') AS HourMeter,
+        ISNULL(h.JamLembur, 0) AS JamLembur,
+        ISNULL(m.NamaMesin, '-') AS NamaMesin,
+        ISNULL(o.NamaOperator, '-') AS NamaOperator
+      FROM FJProduksi_h h
+      LEFT JOIN MstMesin m ON m.IdMesin = h.IdMesin
+      LEFT JOIN MstOperator o ON o.IdOperator = h.IdOperator
+      WHERE h.NoProduksi = @np
+    `);
+  return result.recordset[0] || null;
+}
+
+async function updateHeader({
+  noProduksi, shift, jmlhAnggota, jamKerja, jamLembur, hourMeter,
+}) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("np", sql.VarChar(20), noProduksi);
+  req.input("sh", sql.VarChar(20), shift || "1");
+  req.input("ja", sql.Int, jmlhAnggota || 0);
+  req.input("jk", sql.VarChar(10), jamKerja || "");
+  req.input("jl", sql.Decimal(5, 2), jamLembur || null);
+  req.input("hm", sql.VarChar(20), hourMeter || null);
+
+  await req.query(`
+    UPDATE FJProduksi_h SET
+      Shift = @sh,
+      JmlhAnggota = @ja,
+      JamKerja = @jk,
+      JamLembur = @jl,
+      HourMeter = NULLIF(@hm, '')
+    WHERE NoProduksi = @np
+  `);
+
+  return { noProduksi };
 }
 
 async function createLabel({
@@ -306,6 +357,8 @@ module.exports = {
   getNextNoLabel,
   getMasterOptions,
   saveHeader,
+  getHeader,
+  updateHeader,
   createLabel,
   addInput,
   removeInput,

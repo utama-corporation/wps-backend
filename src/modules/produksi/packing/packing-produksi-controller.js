@@ -1,114 +1,133 @@
 const service = require("./packing-produksi-service");
 
-async function getMesinList(req, res, next) {
+function ok(res, message, data, meta) {
+  return res.status(200).json({ success: true, message, data, ...(meta || {}) });
+}
+
+function fail(res, err) {
+  const status = err.status || 500;
+  if (status === 500) console.error("Error produksi/packing:", err);
+  return res
+    .status(status)
+    .json({ success: false, message: status === 500 ? "Terjadi kesalahan di server" : err.message });
+}
+
+exports.getMesinList = async (req, res) => {
   try {
     const data = await service.getMesinList();
-    res.json(data);
+    return ok(res, "List mesin Packing berhasil diambil", data);
   } catch (err) {
-    next(err);
+    return fail(res, err);
   }
-}
+};
 
-async function getHistory(req, res, next) {
+exports.getHistory = async (req, res) => {
   try {
     const data = await service.getHistory();
-    res.json(data);
+    return ok(res, "Riwayat produksi Packing berhasil diambil", data);
   } catch (err) {
-    next(err);
+    return fail(res, err);
   }
-}
+};
 
-async function getNextNoProduksi(req, res, next) {
+exports.getNextNoProduksi = async (req, res) => {
   try {
     const value = await service.getNextNoProduksi();
-    res.json({ NoProduksi: value });
+    return ok(res, "No. produksi berikutnya berhasil diambil", { NoProduksi: value });
   } catch (err) {
-    next(err);
+    return fail(res, err);
   }
-}
+};
 
-async function getNextNoLabel(req, res, next) {
+exports.getNextNoLabel = async (req, res) => {
   try {
     const value = await service.getNextNoLabel();
-    res.json({ NoBJ: value });
+    return ok(res, "No. label berikutnya berhasil diambil", { NoBJ: value });
   } catch (err) {
-    next(err);
+    return fail(res, err);
   }
-}
+};
 
-async function getMasterOptions(req, res, next) {
+exports.getMasterOptions = async (req, res) => {
   try {
     const data = await service.getMasterOptions();
-    res.json(data);
+    return ok(res, "Opsi master berhasil diambil", data);
   } catch (err) {
-    next(err);
+    return fail(res, err);
   }
-}
+};
 
-async function saveHeader(req, res, next) {
+exports.getHeader = async (req, res) => {
+  try {
+    const data = await service.getHeader(req.params.noProduksi);
+    if (!data) {
+      return res.status(404).json({ success: false, message: "Data header tidak ditemukan" });
+    }
+    return ok(res, "Header produksi Packing berhasil diambil", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
+exports.updateHeader = async (req, res) => {
+  try {
+    const data = await service.updateHeader(req.body || {});
+    return ok(res, "Header produksi Packing berhasil diupdate", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
+exports.saveHeader = async (req, res) => {
   try {
     const noProduksi = await service.saveHeader(req.body);
-    res.json({ noProduksi, message: "Header tersimpan" });
+    return ok(res, "Header berhasil disimpan", { noProduksi });
   } catch (err) {
-    next(err);
+    return fail(res, err);
   }
-}
+};
 
-async function createLabel(req, res, next) {
+exports.createLabel = async (req, res) => {
   try {
     const noBJ = await service.createLabel(req.body);
-    res.json({ noBJ, message: "Label tersimpan" });
+    return ok(res, "Label berhasil disimpan", { noBJ });
   } catch (err) {
-    next(err);
+    return fail(res, err);
   }
-}
+};
 
-async function addInput(req, res, next) {
+exports.addInput = async (req, res) => {
   try {
     const result = await service.addInput(req.body);
-    res.json({ message: "Input ditambahkan", ...result });
+    return ok(res, "Input berhasil ditambahkan", result);
   } catch (err) {
-    next(err);
+    return fail(res, err);
   }
-}
+};
 
-async function removeInput(req, res, next) {
+exports.removeInput = async (req, res) => {
   try {
     const result = await service.removeInput(req.body);
-    res.json({ message: "Input dihapus", ...result });
+    return ok(res, "Input berhasil dihapus", result);
   } catch (err) {
-    next(err);
+    return fail(res, err);
   }
-}
+};
 
-async function addOutput(req, res, next) {
+exports.addOutput = async (req, res) => {
   try {
     const result = await service.addOutput(req.body);
-    res.json({ message: "Output ditambahkan", ...result });
+    return ok(res, "Output berhasil ditambahkan", result);
   } catch (err) {
-    next(err);
+    return fail(res, err);
   }
-}
+};
 
-async function removeOutput(req, res, next) {
+exports.removeOutput = async (req, res) => {
   try {
     const result = await service.removeOutput(req.body);
-    res.json({ message: "Output dihapus", ...result });
+    return ok(res, "Output berhasil dihapus", result);
   } catch (err) {
-    next(err);
+    return fail(res, err);
   }
-}
-
-module.exports = {
-  getMesinList,
-  getHistory,
-  getNextNoProduksi,
-  getNextNoLabel,
-  getMasterOptions,
-  saveHeader,
-  createLabel,
-  addInput,
-  removeInput,
-  addOutput,
-  removeOutput,
 };

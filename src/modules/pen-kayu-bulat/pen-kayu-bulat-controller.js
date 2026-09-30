@@ -1,5 +1,15 @@
 const penKayuBulatService = require("./pen-kayu-bulat-service");
 
+exports.getNextNo = async (_req, res) => {
+  try {
+    const no = await penKayuBulatService.getNextNo();
+    res.json({ success: true, data: { no_kayu_bulat: no } });
+  } catch (err) {
+    console.error("Error get next no:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 exports.getMasters = async (_req, res) => {
   try {
     const data = await penKayuBulatService.getMasters();

@@ -130,3 +130,14 @@ exports.removeDetail = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+exports.getHistory = async (req, res) => {
+  try {
+    const noRuang = req.query.no ? parseInt(req.query.no) : 0;
+    const data = await kdService.getHistory(noRuang);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("Error getHistory:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

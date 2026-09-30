@@ -97,3 +97,41 @@ exports.remove = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+exports.getSpkByTebalLebar = async (req, res) => {
+  try {
+    const tebal = parseFloat(req.query.tebal);
+    const lebar = parseFloat(req.query.lebar);
+    if (isNaN(tebal) || isNaN(lebar)) {
+      return res.status(400).json({ success: false, message: "tebal dan lebar harus angka" });
+    }
+    const data = await lembarTallyHasilSawmillService.getSpkByTebalLebar(tebal, lebar);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("Error get spk by tebal lebar:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.updateHeader = async (req, res) => {
+  try {
+    const updated = await lembarTallyHasilSawmillService.updateHeader(req.body);
+    if (!updated) return res.status(404).json({ success: false, message: "Data tidak ditemukan" });
+    res.json({ success: true, message: "Header berhasil diubah" });
+  } catch (err) {
+    console.error("Error update header:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.selesai = async (req, res) => {
+  try {
+    const no = req.query.no || req.body.no;
+    const username = req.body.username || req.query.username || "";
+    const result = await lembarTallyHasilSawmillService.selesai(no, username);
+    res.json({ success: true, message: "Penerimaan ST Sawmill berhasil disimpan", data: result });
+  } catch (err) {
+    console.error("Error selesai:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

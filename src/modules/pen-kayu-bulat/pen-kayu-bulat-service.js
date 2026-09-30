@@ -2,6 +2,15 @@ const { sql, poolPromise } = require('../../core/config/db');
 
 const lockNonAktif = () => String(process.env.LOCK_NON_AKTIF_EDIT || "1") !== "0";
 
+exports.getNextNo = async () => {
+  const pool = await poolPromise;
+  const result = await pool.request().query(`
+    SELECT 'A.' + FORMAT(COALESCE(RIGHT(MAX(NoKayuBulat), 6), 0) + 1, '000000') AS NoKayuBulat
+    FROM KayuBulat_h
+  `);
+  return result.recordset[0]?.NoKayuBulat || "A.000001";
+};
+
 exports.getMasters = async () => {
   const pool = await poolPromise;
 

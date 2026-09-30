@@ -69,6 +69,184 @@ async function getDetail(noFJ) {
 }
 
 /* ============================================================
+ * LIST ALL LABELS (header only, for V2 list form)
+ * ==========================================================*/
+
+async function getAllLabels({ search, topRow }) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  const top = parseInt(topRow, 10) || 100;
+
+  let whereClause = "WHERE h.DateUsage IS NULL";
+  if (search && search.trim() !== "") {
+    req.input("search", sql.VarChar(50), `%${search.trim()}%`);
+    whereClause += " AND h.NoFJ LIKE @search";
+  }
+
+  const result = await req.query(`
+    SELECT TOP (${top})
+      h.NoFJ,
+      h.DateCreate,
+      h.Jam,
+      h.IsReject,
+      h.IsLembur,
+      h.HasBeenPrinted,
+      k.Jenis AS JenisKayu,
+      g.NamaGrade AS Grade,
+      t.NamaOrgTelly AS Telly,
+      h.NoSPK,
+      h.IdLokasi
+    FROM ${MASTER_TABLE} h
+    INNER JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+    LEFT JOIN MstGrade g ON g.IdGrade = h.IdGrade
+    LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = h.IdOrgTelly
+    ${whereClause}
+    ORDER BY h.NoFJ DESC
+  `);
+
+  return result.recordset;
+}
+
+/* ============================================================
+ * GET DETAIL BY NO FJ (for V2 list form)
+ * ==========================================================*/
+
+async function getDetailByNo(noFJ) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noFJ", sql.VarChar(50), noFJ);
+
+  const result = await req.query(`
+    SELECT NoUrut, Tebal, Lebar, Panjang, JmlhBatang
+    FROM ${DETAIL_TABLE}
+    WHERE ${KEY_COLUMN} = @noFJ
+    ORDER BY NoUrut
+  `);
+
+  return result.recordset;
+}
+
+/* ============================================================
+ * GET HEADER FOR EDIT (returns IDs for combo selection)
+ * ==========================================================*/
+
+async function getHeaderForEdit(noFJ) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noFJ", sql.VarChar(50), noFJ);
+
+  const result = await req.query(`
+    SELECT
+      h.${KEY_COLUMN}      AS NoFJ,
+      h.DateCreate,
+      h.Jam,
+      h.NoSPK,
+      h.NoSPKAsal,
+      h.IdLokasi,
+      h.IdJenisKayu,
+      h.IdGrade,
+      h.IdOrgTelly,
+      h.IsReject,
+      h.IsLembur,
+      h.Remark,
+      k.Jenis              AS JenisKayu,
+      g.NamaGrade          AS Grade,
+      t.NamaOrgTelly       AS Telly
+    FROM ${MASTER_TABLE} h
+    INNER JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+    LEFT JOIN MstGrade g     ON g.IdGrade = h.IdGrade
+    LEFT JOIN MstOrgTelly t  ON t.IdOrgTelly = h.IdOrgTelly
+    WHERE h.${KEY_COLUMN} = @noFJ
+  `);
+
+  return result.recordset[0] || null;
+}
+
+/* ============================================================
+ * UPDATE LABEL
+ * ==========================================================*/
+
+async function updateLabel(noFJ, data) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noFJ", sql.VarChar(50), noFJ);
+  req.input("idJenisKayu", sql.Int, data.idJenisKayu || null);
+  req.input("idGrade", sql.Int, data.idGrade || null);
+  req.input("idOrgTelly", sql.Int, data.idOrgTelly || null);
+  req.input("noSPK", sql.VarChar(50), data.noSPK || null);
+  req.input("idLokasi", sql.VarChar(50), data.idLokasi || null);
+  req.input("isReject", sql.Bit, data.isReject ? 1 : 0);
+  req.input("isLembur", sql.Bit, data.isLembur ? 1 : 0);
+  req.input("jam", sql.VarChar(10), data.jam || null);
+
+  await req.query(`
+    UPDATE ${MASTER_TABLE}
+    SET IdJenisKayu = @idJenisKayu,
+        IdGrade = @idGrade,
+        IdOrgTelly = @idOrgTelly,
+        NoSPK = @noSPK,
+        IdLokasi = @idLokasi,
+        IsReject = @isReject,
+        IsLembur = @isLembur,
+        Jam = @jam
+    WHERE ${KEY_COLUMN} = @noFJ
+  `);
+
+  return { noFJ };
+}
+
+/* ============================================================
+ * UPDATE DETAIL (delete old + insert new)
+ * ==========================================================*/
+
+async function updateDetail(noFJ, details) {
+  const pool = await poolPromise;
+
+  const delReq = pool.request();
+  delReq.input("noFJ", sql.VarChar(50), noFJ);
+  await delReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noFJ`);
+
+  for (let i = 0; i < details.length; i++) {
+    const d = details[i];
+    const insReq = pool.request();
+    insReq.input("noFJ", sql.VarChar(50), noFJ);
+    insReq.input("noUrut", sql.Int, i + 1);
+    insReq.input("tebal", sql.Decimal(18, 2), d.tebal || 0);
+    insReq.input("lebar", sql.Decimal(18, 2), d.lebar || 0);
+    insReq.input("panjang", sql.Decimal(18, 2), d.panjang || 0);
+    insReq.input("jmlhBatang", sql.Int, d.jmlhBatang || 0);
+    await insReq.query(`
+      INSERT INTO ${DETAIL_TABLE} (${KEY_COLUMN}, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
+      VALUES (@noFJ, @noUrut, @tebal, @lebar, @panjang, @jmlhBatang)
+    `);
+  }
+
+  return { noFJ, detailCount: details.length };
+}
+
+/* ============================================================
+ * DELETE LABEL (header + detail + output refs)
+ * ==========================================================*/
+
+async function deleteLabel(noFJ) {
+  const pool = await poolPromise;
+
+  const outReq1 = pool.request();
+  outReq1.input("noFJ", sql.VarChar(50), noFJ);
+  await outReq1.query(`DELETE FROM FJProduksiOutput WHERE NoFJ = @noFJ`);
+
+  const detReq = pool.request();
+  detReq.input("noFJ", sql.VarChar(50), noFJ);
+  await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noFJ`);
+
+  const hdrReq = pool.request();
+  hdrReq.input("noFJ", sql.VarChar(50), noFJ);
+  await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noFJ`);
+
+  return { noFJ };
+}
+
+/* ============================================================
  * PERHITUNGAN (samakan dengan S4S.java: m3() & jumlahpcs())
  * ==========================================================*/
 
@@ -164,4 +342,12 @@ async function getLabelData(noFJ) {
   };
 }
 
-module.exports = { getLabelData };
+module.exports = {
+  getLabelData,
+  getAllLabels,
+  getDetailByNo,
+  getHeaderForEdit,
+  updateLabel,
+  updateDetail,
+  deleteLabel,
+};

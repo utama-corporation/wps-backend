@@ -20,10 +20,8 @@ async function getHeader(noLMT) {
       h.DateCreate,
       h.Jam,
       h.NoSPK,
-      h.Remark,
       h.IsReject,
       h.IsLembur,
-      h.HasBeenPrinted,
       h.DateUsage,
       k.Jenis              AS JenisKayu,
       g.NamaGrade          AS Grade,
@@ -66,6 +64,182 @@ async function getDetail(noLMT) {
   `);
 
   return result.recordset;
+}
+
+/* ============================================================
+ * LIST ALL LABELS (header only, for V2 list form)
+ * ==========================================================*/
+
+async function getAllLabels({ search, topRow }) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  const top = parseInt(topRow, 10) || 100;
+
+  let whereClause = "WHERE h.DateUsage IS NULL";
+  if (search && search.trim() !== "") {
+    req.input("search", sql.VarChar(50), `%${search.trim()}%`);
+    whereClause += " AND h.NoLaminating LIKE @search";
+  }
+
+  const result = await req.query(`
+    SELECT TOP (${top})
+      h.NoLaminating,
+      h.DateCreate,
+      h.Jam,
+      h.IsReject,
+      h.IsLembur,
+      k.Jenis AS JenisKayu,
+      g.NamaGrade AS Grade,
+      t.NamaOrgTelly AS Telly,
+      h.NoSPK,
+      h.IdLokasi
+    FROM ${MASTER_TABLE} h
+    LEFT JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+    LEFT JOIN MstGrade g ON g.IdGrade = h.IdGrade
+    LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = h.IdOrgTelly
+    ${whereClause}
+    ORDER BY h.NoLaminating DESC
+  `);
+
+  return result.recordset;
+}
+
+/* ============================================================
+ * GET DETAIL BY NO LAMINATING (for V2 list form)
+ * ==========================================================*/
+
+async function getDetailByNo(noLaminating) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noLaminating", sql.VarChar(50), noLaminating);
+
+  const result = await req.query(`
+    SELECT NoUrut, Tebal, Lebar, Panjang, JmlhBatang
+    FROM ${DETAIL_TABLE}
+    WHERE ${KEY_COLUMN} = @noLaminating
+    ORDER BY NoUrut
+  `);
+
+  return result.recordset;
+}
+
+/* ============================================================
+ * GET HEADER FOR EDIT (returns IDs for combo selection)
+ * ==========================================================*/
+
+async function getHeaderForEdit(noLaminating) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noLaminating", sql.VarChar(50), noLaminating);
+
+  const result = await req.query(`
+    SELECT
+      h.${KEY_COLUMN}      AS NoLaminating,
+      h.DateCreate,
+      h.Jam,
+      h.NoSPK,
+      h.NoSPKAsal,
+      h.IdLokasi,
+      h.IdJenisKayu,
+      h.IdGrade,
+      h.IdOrgTelly,
+      h.IsReject,
+      h.IsLembur,
+      k.Jenis              AS JenisKayu,
+      g.NamaGrade          AS Grade,
+      t.NamaOrgTelly       AS Telly
+    FROM ${MASTER_TABLE} h
+    LEFT JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+    LEFT JOIN MstGrade g     ON g.IdGrade = h.IdGrade
+    LEFT JOIN MstOrgTelly t  ON t.IdOrgTelly = h.IdOrgTelly
+    WHERE h.${KEY_COLUMN} = @noLaminating
+  `);
+
+  return result.recordset[0] || null;
+}
+
+/* ============================================================
+ * UPDATE LABEL
+ * ==========================================================*/
+
+async function updateLabel(noLaminating, data) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noLaminating", sql.VarChar(50), noLaminating);
+  req.input("idJenisKayu", sql.Int, data.idJenisKayu || null);
+  req.input("idGrade", sql.Int, data.idGrade || null);
+  req.input("idOrgTelly", sql.Int, data.idOrgTelly || null);
+  req.input("noSPK", sql.VarChar(50), data.noSPK || null);
+  req.input("idLokasi", sql.VarChar(50), data.idLokasi || null);
+  req.input("isReject", sql.Bit, data.isReject ? 1 : 0);
+  req.input("isLembur", sql.Bit, data.isLembur ? 1 : 0);
+  req.input("jam", sql.VarChar(10), data.jam || null);
+
+  await req.query(`
+    UPDATE ${MASTER_TABLE}
+    SET IdJenisKayu = @idJenisKayu,
+        IdGrade = @idGrade,
+        IdOrgTelly = @idOrgTelly,
+        NoSPK = @noSPK,
+        IdLokasi = @idLokasi,
+        IsReject = @isReject,
+        IsLembur = @isLembur,
+        Jam = @jam
+    WHERE ${KEY_COLUMN} = @noLaminating
+  `);
+
+  return { noLaminating };
+}
+
+/* ============================================================
+ * UPDATE DETAIL (delete old + insert new)
+ * ==========================================================*/
+
+async function updateDetail(noLaminating, details) {
+  const pool = await poolPromise;
+
+  const delReq = pool.request();
+  delReq.input("noLaminating", sql.VarChar(50), noLaminating);
+  await delReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noLaminating`);
+
+  for (let i = 0; i < details.length; i++) {
+    const d = details[i];
+    const insReq = pool.request();
+    insReq.input("noLaminating", sql.VarChar(50), noLaminating);
+    insReq.input("noUrut", sql.Int, i + 1);
+    insReq.input("tebal", sql.Decimal(18, 2), d.tebal || 0);
+    insReq.input("lebar", sql.Decimal(18, 2), d.lebar || 0);
+    insReq.input("panjang", sql.Decimal(18, 2), d.panjang || 0);
+    insReq.input("jmlhBatang", sql.Int, d.jmlhBatang || 0);
+    await insReq.query(`
+      INSERT INTO ${DETAIL_TABLE} (${KEY_COLUMN}, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
+      VALUES (@noLaminating, @noUrut, @tebal, @lebar, @panjang, @jmlhBatang)
+    `);
+  }
+
+  return { noLaminating, detailCount: details.length };
+}
+
+/* ============================================================
+ * DELETE LABEL (header + detail + output refs)
+ * ==========================================================*/
+
+async function deleteLabel(noLaminating) {
+  const pool = await poolPromise;
+
+  const outReq = pool.request();
+  outReq.input("noLaminating", sql.VarChar(50), noLaminating);
+  await outReq.query(`DELETE FROM LaminatingProduksiOutput WHERE NoLaminating = @noLaminating`);
+
+  const detReq = pool.request();
+  detReq.input("noLaminating", sql.VarChar(50), noLaminating);
+  await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noLaminating`);
+
+  const hdrReq = pool.request();
+  hdrReq.input("noLaminating", sql.VarChar(50), noLaminating);
+  await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noLaminating`);
+
+  return { noLaminating };
 }
 
 /* ============================================================
@@ -164,4 +338,12 @@ async function getLabelData(noLMT) {
   };
 }
 
-module.exports = { getLabelData };
+module.exports = {
+  getLabelData,
+  getAllLabels,
+  getDetailByNo,
+  getHeaderForEdit,
+  updateLabel,
+  updateDetail,
+  deleteLabel,
+};

@@ -112,3 +112,24 @@ exports.removeOutput = async (req, res) => {
     return fail(res, err);
   }
 };
+
+exports.getHeader = async (req, res) => {
+  try {
+    const data = await service.getHeader(req.params.noProduksi);
+    if (!data) {
+      return res.status(404).json({ success: false, message: "Data header tidak ditemukan" });
+    }
+    return ok(res, "Header produksi CC Akhir berhasil diambil", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
+exports.updateHeader = async (req, res) => {
+  try {
+    const data = await service.updateHeader(req.body || {});
+    return ok(res, "Header produksi CC Akhir berhasil diupdate", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};

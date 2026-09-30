@@ -18,6 +18,13 @@ router.get(
   ctrl.getHeader
 );
 
+// ------ Masters ------
+router.get(
+  '/masters',
+  verifyToken,
+  ctrl.getMasters
+);
+
 router.post(
   '/',
   requirePermission('qc_sawmill:create'),

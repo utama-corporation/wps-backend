@@ -17,5 +17,6 @@ router.put("/header", verifyToken, kdController.updateHeader);
 router.delete("/header", verifyToken, kdController.deleteHeader);
 router.post("/detail", verifyToken, kdController.addDetail);
 router.delete("/detail", verifyToken, kdController.removeDetail);
+router.get("/history", verifyToken, kdController.getHistory);
 
 module.exports = router;

@@ -9,6 +9,32 @@ const formatDate = (date) => {
   return moment(date).format("DD MMM YYYY");
 };
 
+// Hitung volume per baris detail label.
+//  - Kategori "ST" (Sawn Timber)  -> satuan TON
+//      * IdUOMTblLebar === 1 (milimeter): t*l*p*pcs*304.8 / 1e9 / 1.416
+//      * selain itu (inch)             : t*l*p*pcs / 7200.8
+//  - Kategori lain                -> satuan M3 : t*l*p*pcs / 1e9
+// Hasil di-truncate 4 desimal (Math.floor), sama seperti perhitungan di mobile.
+const calcRowVolume = (labelType, idUOMTblLebar, tebal, lebar, panjang, pcs) => {
+  const t = Number(tebal) || 0;
+  const l = Number(lebar) || 0;
+  const p = Number(panjang) || 0;
+  const q = Number(pcs) || 0;
+
+  if (labelType === "ST") {
+    let ton =
+      Number(idUOMTblLebar) === 1
+        ? (t * l * p * q * 304.8) / 1000000000 / 1.416
+        : (t * l * p * q) / 7200.8;
+    ton = Math.floor(ton * 10000) / 10000;
+    return { ton, m3: 0 };
+  }
+
+  let m3 = (t * l * p * q) / 1000000000.0;
+  m3 = Math.floor(m3 * 10000) / 10000;
+  return { ton: 0, m3 };
+};
+
 // Route untuk mendapatkan data Label berdasarkan No Stock Opname
 router.get("/label-list/", verifyToken, async (req, res) => {
   const page = parseInt(req.query.page) || 1;
@@ -795,7 +821,8 @@ router.get("/mapping/lokasi-labels", verifyToken, async (req, res) => {
     .map(
       (t) => `
         SELECT h.${t.column} AS LabelNo, '${typeOf[t.table]}' AS LabelType,
-               h.IdJenisKayu, h.DateCreate
+               h.IdJenisKayu, h.DateCreate,
+               ${t.table === "BarangJadi_h" ? "1 AS IdUOMTblLebar" : "h.IdUOMTblLebar"}
         FROM ${t.table} h
         WHERE h.DateUsage IS NULL AND h.IdLokasi = @idlokasi
           AND EXISTS (SELECT 1 FROM ${t.table.replace("_h", "_d")} d WHERE d.${t.column} = h.${t.column})`,
@@ -818,7 +845,7 @@ router.get("/mapping/lokasi-labels", verifyToken, async (req, res) => {
     request.input("idlokasi", sql.VarChar, idlokasi);
 
     const headerQuery = `
-      SELECT lbl.LabelNo, lbl.LabelType, lbl.DateCreate,
+      SELECT lbl.LabelNo, lbl.LabelType, lbl.DateCreate, lbl.IdUOMTblLebar,
              jk.Jenis, jk.Singkatan
       FROM ( ${headerUnion} ) AS lbl
       LEFT JOIN MstJenisKayu jk ON jk.IdJenisKayu = lbl.IdJenisKayu
@@ -843,12 +870,35 @@ router.get("/mapping/lokasi-labels", verifyToken, async (req, res) => {
     });
 
     let totalJumlah = 0;
+    let totalTonOverall = 0;
+    let totalM3Overall = 0;
+
     const data = headerResult.recordset.map((h) => {
       const details = (detailMap.get(h.LabelNo) || []).sort(
         (a, b) => (a.NoUrut || 0) - (b.NoUrut || 0),
       );
       const jumlah = details.reduce((s, x) => s + (x.JmlhBatang || 0), 0);
+
+      let labelTon = 0;
+      let labelM3 = 0;
+      details.forEach((x) => {
+        const { ton, m3 } = calcRowVolume(
+          h.LabelType,
+          h.IdUOMTblLebar,
+          x.Tebal,
+          x.Lebar,
+          x.Panjang,
+          x.JmlhBatang,
+        );
+        labelTon += ton;
+        labelM3 += m3;
+      });
+
       totalJumlah += jumlah;
+      totalTonOverall += labelTon;
+      totalM3Overall += labelM3;
+
+      const isST = h.LabelType === "ST";
       return {
         LabelNo: h.LabelNo,
         LabelType: h.LabelType,
@@ -856,6 +906,10 @@ router.get("/mapping/lokasi-labels", verifyToken, async (req, res) => {
         Singkatan: h.Singkatan || null,
         DateCreate: formatDate(h.DateCreate),
         Jumlah: jumlah,
+        VolumeType: isST ? "TON" : "M3",
+        Ton: labelTon.toFixed(4),
+        M3: labelM3.toFixed(4),
+        Volume: (isST ? labelTon : labelM3).toFixed(4),
         Details: details,
       };
     });
@@ -865,7 +919,11 @@ router.get("/mapping/lokasi-labels", verifyToken, async (req, res) => {
       message: "Data label lokasi berhasil diambil",
       data,
       totalData: data.length,
-      summary: { totalJumlah },
+      summary: {
+        totalJumlah,
+        totalTon: totalTonOverall.toFixed(4),
+        totalM3: totalM3Overall.toFixed(4),
+      },
     });
   } catch (error) {
     console.error("Error fetching lokasi-labels:", error);

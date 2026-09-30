@@ -11,7 +11,9 @@ router.get("/next-no-produksi", verifyToken, ctrl.getNextNoProduksi);
 router.get("/next-no-label", verifyToken, ctrl.getNextNoLabel);
 router.get("/master-options", verifyToken, ctrl.getMasterOptions);
 
+router.get("/header/:noProduksi", verifyToken, ctrl.getHeader);
 router.post("/header", verifyToken, ctrl.saveHeader);
+router.put("/header", verifyToken, ctrl.updateHeader);
 router.post("/label", verifyToken, ctrl.createLabel);
 router.post("/input", verifyToken, ctrl.addInput);
 router.delete("/input", verifyToken, ctrl.removeInput);

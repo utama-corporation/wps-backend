@@ -6,7 +6,7 @@ const DETAIL_TABLE = "Sanding_d";
 const KEY_COLUMN = "NoSanding";
 
 /* ============================================================
- * QUERY
+ * QUERY (for PDF)
  * ==========================================================*/
 
 async function getHeader(noSND) {
@@ -20,10 +20,8 @@ async function getHeader(noSND) {
       h.DateCreate,
       h.Jam,
       h.NoSPK,
-      h.Remark,
       h.IsReject,
       h.IsLembur,
-      h.HasBeenPrinted,
       h.DateUsage,
       k.Jenis              AS JenisKayu,
       g.NamaGrade          AS Grade,
@@ -35,10 +33,10 @@ async function getHeader(noSND) {
       s.NoBongkarSusun     AS NoBongkarSusun
     FROM ${MASTER_TABLE} h
     LEFT JOIN (
-      SELECT NoProduksi, NoSanding FROM SandingProduksiOutput      
+      SELECT NoProduksi, NoSanding FROM SandingProduksiOutput
     ) o ON o.NoSanding = h.${KEY_COLUMN}
     LEFT JOIN (
-      SELECT NoProduksi, IdMesin FROM FJProduksi_h      
+      SELECT NoProduksi, IdMesin FROM FJProduksi_h
     ) p ON p.NoProduksi = o.NoProduksi
     LEFT JOIN BongkarSusunOutputSanding s ON s.NoSanding = h.${KEY_COLUMN}
     LEFT JOIN MstMesin m       ON m.IdMesin = p.IdMesin
@@ -68,7 +66,181 @@ async function getDetail(noSND) {
 }
 
 /* ============================================================
- * PERHITUNGAN (samakan dengan Sanding.java: m3() & jumlahpcs())
+ * LIST ALL LABELS (header only, for V2 list form)
+ * ==========================================================*/
+
+async function getAllLabels({ search, topRow }) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  const top = parseInt(topRow, 10) || 100;
+
+  let whereClause = "WHERE h.DateUsage IS NULL";
+  if (search && search.trim() !== "") {
+    req.input("search", sql.VarChar(50), `%${search.trim()}%`);
+    whereClause += " AND h.NoSanding LIKE @search";
+  }
+
+  const result = await req.query(`
+    SELECT TOP (${top})
+      h.NoSanding,
+      h.DateCreate,
+      h.Jam,
+      h.IsReject,
+      h.IsLembur,
+      k.Jenis AS JenisKayu,
+      g.NamaGrade AS Grade,
+      t.NamaOrgTelly AS Telly,
+      h.NoSPK
+    FROM ${MASTER_TABLE} h
+    LEFT JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+    LEFT JOIN MstGrade g ON g.IdGrade = h.IdGrade
+    LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = h.IdOrgTelly
+    ${whereClause}
+    ORDER BY h.NoSanding DESC
+  `);
+
+  return result.recordset;
+}
+
+/* ============================================================
+ * GET DETAIL BY NO SANDING (for V2 list form)
+ * ==========================================================*/
+
+async function getDetailByNo(noSanding) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noSanding", sql.VarChar(50), noSanding);
+
+  const result = await req.query(`
+    SELECT NoUrut, Tebal, Lebar, Panjang, JmlhBatang
+    FROM ${DETAIL_TABLE}
+    WHERE ${KEY_COLUMN} = @noSanding
+    ORDER BY NoUrut
+  `);
+
+  return result.recordset;
+}
+
+/* ============================================================
+ * GET HEADER FOR EDIT (returns IDs for combo selection)
+ * ==========================================================*/
+
+async function getHeaderForEdit(noSanding) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noSanding", sql.VarChar(50), noSanding);
+
+  const result = await req.query(`
+    SELECT
+      h.${KEY_COLUMN}      AS NoSanding,
+      h.DateCreate,
+      h.Jam,
+      h.NoSPK,
+      h.NoSPKAsal,
+      h.IdJenisKayu,
+      h.IdGrade,
+      h.IdOrgTelly,
+      h.IsReject,
+      h.IsLembur,
+      k.Jenis              AS JenisKayu,
+      g.NamaGrade          AS Grade,
+      t.NamaOrgTelly       AS Telly
+    FROM ${MASTER_TABLE} h
+    LEFT JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+    LEFT JOIN MstGrade g     ON g.IdGrade = h.IdGrade
+    LEFT JOIN MstOrgTelly t  ON t.IdOrgTelly = h.IdOrgTelly
+    WHERE h.${KEY_COLUMN} = @noSanding
+  `);
+
+  return result.recordset[0] || null;
+}
+
+/* ============================================================
+ * UPDATE LABEL
+ * ==========================================================*/
+
+async function updateLabel(noSanding, data) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noSanding", sql.VarChar(50), noSanding);
+  req.input("idJenisKayu", sql.Int, data.idJenisKayu || null);
+  req.input("idGrade", sql.Int, data.idGrade || null);
+  req.input("idOrgTelly", sql.Int, data.idOrgTelly || null);
+  req.input("noSPK", sql.VarChar(50), data.noSPK || null);
+  req.input("noSPKAsal", sql.VarChar(50), data.noSPKAsal || null);
+  req.input("isReject", sql.Bit, data.isReject ? 1 : 0);
+  req.input("isLembur", sql.Bit, data.isLembur ? 1 : 0);
+  req.input("jam", sql.VarChar(10), data.jam || null);
+
+  await req.query(`
+    UPDATE ${MASTER_TABLE}
+    SET IdJenisKayu = @idJenisKayu,
+        IdGrade = @idGrade,
+        IdOrgTelly = @idOrgTelly,
+        NoSPK = @noSPK,
+        NoSPKAsal = @noSPKAsal,
+        IsReject = @isReject,
+        IsLembur = @isLembur,
+        Jam = @jam
+    WHERE ${KEY_COLUMN} = @noSanding
+  `);
+
+  return { noSanding };
+}
+
+/* ============================================================
+ * UPDATE DETAIL (delete old + insert new)
+ * ==========================================================*/
+
+async function updateDetail(noSanding, details) {
+  const pool = await poolPromise;
+
+  const delReq = pool.request();
+  delReq.input("noSanding", sql.VarChar(50), noSanding);
+  await delReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noSanding`);
+
+  for (let i = 0; i < details.length; i++) {
+    const d = details[i];
+    const insReq = pool.request();
+    insReq.input("noSanding", sql.VarChar(50), noSanding);
+    insReq.input("noUrut", sql.Int, i + 1);
+    insReq.input("tebal", sql.Decimal(18, 2), d.tebal || 0);
+    insReq.input("lebar", sql.Decimal(18, 2), d.lebar || 0);
+    insReq.input("panjang", sql.Decimal(18, 2), d.panjang || 0);
+    insReq.input("jmlhBatang", sql.Int, d.jmlhBatang || 0);
+    await insReq.query(`
+      INSERT INTO ${DETAIL_TABLE} (${KEY_COLUMN}, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
+      VALUES (@noSanding, @noUrut, @tebal, @lebar, @panjang, @jmlhBatang)
+    `);
+  }
+
+  return { noSanding, detailCount: details.length };
+}
+
+/* ============================================================
+ * DELETE LABEL (header + detail + output refs)
+ * ==========================================================*/
+
+async function deleteLabel(noSanding) {
+  const pool = await poolPromise;
+
+  const outReq = pool.request();
+  outReq.input("noSanding", sql.VarChar(50), noSanding);
+  await outReq.query(`DELETE FROM SandingProduksiOutput WHERE NoSanding = @noSanding`);
+
+  const detReq = pool.request();
+  detReq.input("noSanding", sql.VarChar(50), noSanding);
+  await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noSanding`);
+
+  const hdrReq = pool.request();
+  hdrReq.input("noSanding", sql.VarChar(50), noSanding);
+  await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noSanding`);
+
+  return { noSanding };
+}
+
+/* ============================================================
+ * PERHITUNGAN
  * ==========================================================*/
 
 function toNumber(v) {
@@ -76,7 +248,6 @@ function toNumber(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-// Mirror Sanding.java m3(): per baris floor 4 desimal, lalu dijumlahkan, format "0.0000".
 function computeM3(detail) {
   let total = 0;
   for (const row of detail) {
@@ -84,7 +255,6 @@ function computeM3(detail) {
     const lebar = toNumber(row.Lebar);
     const panjang = toNumber(row.Panjang);
     const pcs = parseInt(row.JmlhBatang, 10) || 0;
-
     let rowM3 = (tebal * lebar * panjang * pcs) / 1000000000.0;
     rowM3 = Math.floor(rowM3 * 10000) / 10000;
     total += rowM3;
@@ -92,7 +262,6 @@ function computeM3(detail) {
   return total.toFixed(4);
 }
 
-// Mirror Sanding.java jumlahpcs(): jumlah kolom pcs.
 function computeTotalPcs(detail) {
   return detail.reduce((sum, row) => sum + (parseInt(row.JmlhBatang, 10) || 0), 0);
 }
@@ -147,10 +316,10 @@ async function getLabelData(noSND) {
     telly: firstToken(header.Telly),
     noSPK: header.NoSPK || "-",
     mesinSusun: resolveMesinSusun(header),
-    remark: (header.Remark || "").trim(),
+    remark: "",
     isReject: truthy(header.IsReject),
     isLembur: truthy(header.IsLembur),
-    hasBeenPrinted: parseInt(header.HasBeenPrinted, 10) || 0,
+    hasBeenPrinted: 0,
     dateUsage: header.DateUsage || null,
     detail: detail.map((r) => ({
       tebal: r.Tebal,
@@ -163,4 +332,12 @@ async function getLabelData(noSND) {
   };
 }
 
-module.exports = { getLabelData };
+module.exports = {
+  getLabelData,
+  getAllLabels,
+  getDetailByNo,
+  getHeaderForEdit,
+  updateLabel,
+  updateDetail,
+  deleteLabel,
+};

@@ -54,6 +54,27 @@ async function saveHeader(req, res, next) {
   }
 }
 
+async function getHeader(req, res, next) {
+  try {
+    const data = await service.getHeader(req.params.noProduksi);
+    if (!data) {
+      return res.status(404).json({ message: "Data header tidak ditemukan" });
+    }
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function updateHeader(req, res, next) {
+  try {
+    await service.updateHeader(req.body);
+    res.json({ message: "Header berhasil diupdate" });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function createLabel(req, res, next) {
   try {
     const noFJ = await service.createLabel(req.body);
@@ -106,6 +127,8 @@ module.exports = {
   getNextNoLabel,
   getMasterOptions,
   saveHeader,
+  getHeader,
+  updateHeader,
   createLabel,
   addInput,
   removeInput,

@@ -1,5 +1,21 @@
 const { sql, poolPromise } = require('../../core/config/db');
 
+// MASTERS: jenis kayu
+exports.getMasters = async () => {
+  const pool = await poolPromise;
+  const req = pool.request();
+  const rs = await req.query(`
+    SELECT IdJenisKayu, Jenis
+    FROM MstJenisKayu
+    WHERE Enable = 1
+    ORDER BY Jenis ASC
+  `);
+  return rs.recordset.map(r => ({
+    idJenisKayu: r.IdJenisKayu,
+    jenis: r.Jenis,
+  }));
+};
+
 // LIST: pagination + filter
 exports.getHeaderQcSawmill = async ({
   page = 1,

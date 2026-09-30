@@ -492,12 +492,58 @@ async function removeDetail(noProcKD, noST) {
   }
 }
 
+// === HISTORY ===
+
+async function getHistory(noRuang) {
+  const pool = await poolPromise;
+  let whereClause = "";
+  const req = pool.request();
+
+  if (noRuang && noRuang > 0) {
+    req.input("NoRuang", sql.Int, noRuang);
+    whereClause = "WHERE h.NoRuangKD = @NoRuang";
+  }
+
+  const result = await req.query(`
+    SELECT TOP 50
+      h.NoProcKD AS no_proc_kd,
+      h.NoRuangKD AS no_ruang,
+      CONVERT(varchar(10), h.TglMasuk, 103) AS tgl_masuk,
+      CASE WHEN h.TglKeluar IS NOT NULL THEN CONVERT(varchar(10), h.TglKeluar, 103) ELSE '-' END AS tgl_keluar,
+      ISNULL(st.jml, 0) AS jml_st,
+      ISNULL(ton.tonase, 0) AS tonase,
+      CASE WHEN h.TglKeluar IS NULL THEN 'Aktif' ELSE 'Selesai' END AS status
+    FROM KD_h h
+    OUTER APPLY (
+      SELECT COUNT(*) AS jml FROM KD_d d WHERE d.NoProcKD = h.NoProcKD
+    ) st
+    OUTER APPLY (
+      SELECT
+        SUM(CASE
+          WHEN sh.IdUOMTblLebar = '1' AND sh.IdUOMPanjang = '4' THEN
+            FLOOR(sd.Tebal * sd.Lebar * sd.Panjang * sd.JmlhBatang * 215.2542 / 100000) / 10000
+          WHEN sh.IdUOMTblLebar = '3' AND sh.IdUOMPanjang = '4' THEN
+            FLOOR(sd.Tebal * sd.Lebar * sd.Panjang * sd.JmlhBatang / 7200.8 * 10000) / 10000
+          ELSE 0
+        END) AS tonase
+      FROM KD_d dd
+      INNER JOIN ST_d sd ON sd.NoST = dd.NoST
+      INNER JOIN ST_h sh ON sh.NoST = dd.NoST
+      WHERE dd.NoProcKD = h.NoProcKD
+    ) ton
+    ${whereClause}
+    ORDER BY h.TglMasuk DESC
+  `);
+  return result.recordset;
+}
+
 module.exports = {
   getRooms,
   getMasters,
   cariST,
   getHeader,
   getDetail,
+  getHistory,
   startRoom,
   stopRoom,
   createHeader,

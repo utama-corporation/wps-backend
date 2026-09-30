@@ -1,5 +1,20 @@
 const qcSawmillService = require('./qc-sawmill-service');
 
+// GET /qc-sawmill/masters
+exports.getMasters = async (req, res) => {
+  try {
+    const masters = await qcSawmillService.getMasters();
+    return res.status(200).json({
+      success: true,
+      message: 'Master data QC Sawmill',
+      data: masters,
+    });
+  } catch (err) {
+    console.error('Error fetching QC Sawmill masters:', err);
+    return res.status(500).json({ success: false, message: 'Terjadi kesalahan di server' });
+  }
+};
+
 // GET /qc-sawmill (tetap sama)
 exports.getHeader = async (req, res) => {
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);

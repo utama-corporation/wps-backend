@@ -157,7 +157,7 @@ async function saveHeader({
 }
 
 async function createLabel({
-  idJenisKayu, idGrade, noSPKAsal, noSPK, tebal, lebar, panjang, jmlhBatang,
+  idJenisKayu, idGrade, noSPKAsal, noSPK, tebal, lebar, panjang, jmlhBatang, idLokasi,
 }) {
   const pool = await poolPromise;
   const req = pool.request();
@@ -170,13 +170,14 @@ async function createLabel({
   req.input("lb", sql.VarChar(20), lebar);
   req.input("pj", sql.VarChar(20), panjang);
   req.input("bt", sql.VarChar(20), jmlhBatang);
+  req.input("lok", sql.Int, idLokasi || null);
 
   const result = await req.query(`
     DECLARE @ns VARCHAR(20);
     SELECT @ns = ISNULL('R.' + FORMAT(RIGHT(MAX(NoS4S), 6) + 1, '000000'), 'R.000001')
     FROM S4S_h;
     INSERT INTO S4S_h (NoS4S, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoSTAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted)
-    VALUES (@ns, @jk, @gr, 1, GETDATE(), NULL, NULLIF(@stasal, ''), 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), 0, 0, 5, 5, NULL, NULL, 0);
+    VALUES (@ns, @jk, @gr, 1, GETDATE(), NULL, NULLIF(@stasal, ''), 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), 0, 0, 5, 5, NULL, @lok, 0);
     INSERT INTO S4S_d (NoS4S, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
     VALUES (@ns, 1, @tb, @lb, @pj, @bt);
     SELECT @ns AS NoS4S;
