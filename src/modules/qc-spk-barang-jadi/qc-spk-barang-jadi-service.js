@@ -5,9 +5,18 @@ const { presignedUrl, removeObject } = require("../../core/utils/minio-client");
 // Foto bundle: 3 slot per bidang, disimpan pada 3 kolom terpisah.
 // Slot 1 memakai kolom tanpa sufiks (FotoTebal) supaya data sebelum upgrade
 // tetap terbaca; slot 2 & 3 memakai FotoTebal2 / FotoTebal3, dst.
+// Bundle cukup 1 foto, jadi hanya FotoBundle + KetBundle yang dipakai.
 // ---------------------------------------------------------------------------
 const MAX_PHOTOS = 3;
 const PHOTO_FIELDS = ["fotoTebal", "fotoLebar", "fotoPanjang", "fotoBundle"];
+
+// jumlah slot foto per field (bundle dibatasi 1 foto)
+const SLOTS = {
+  fotoTebal: MAX_PHOTOS,
+  fotoLebar: MAX_PHOTOS,
+  fotoPanjang: MAX_PHOTOS,
+  fotoBundle: 1,
+};
 
 // fotoTebal + slot 0 -> "FotoTebal"; slot 1 -> "FotoTebal2"; slot 2 -> "FotoTebal3"
 function photoCol(field, slot) {
@@ -16,15 +25,38 @@ function photoCol(field, slot) {
 }
 
 const photoCols = (field) =>
-  Array.from({ length: MAX_PHOTOS }, (_, i) => photoCol(field, i));
+  Array.from({ length: SLOTS[field] }, (_, i) => photoCol(field, i));
 
-// semua kolom foto, untuk dipakai di SELECT
+// kolom keterangan per slot foto, sejajar dengan kolom Foto* (FotoTebal ->
+// KetTebal, FotoTebal2 -> KetTebal2, dst). Nilainya angka desimal hasil ukur
+// per foto. Jumlah kolomnya mengikuti SLOTS, jadi field bundle hanya punya
+// KetBundle (KetBundle2/KetBundle3 tidak ada di database).
+function captionColByPhotoCol(col) {
+  return `Ket${col.slice(4)}`;
+}
+
+function captionCol(field, slot) {
+  return captionColByPhotoCol(photoCol(field, slot));
+}
+
+const captionCols = (field) =>
+  Array.from({ length: SLOTS[field] }, (_, i) => captionCol(field, i));
+
+// semua kolom foto & keterangan, untuk dipakai di SELECT
 const PHOTO_COLS_SQL = PHOTO_FIELDS.flatMap(photoCols).join(", ");
+const CAPTION_COLS_SQL = PHOTO_FIELDS.flatMap(captionCols).join(", ");
 
-// slot foto yang terisi pada sebuah row DB -> [{ col, key }]
+// slot foto yang terisi pada sebuah row DB -> [{ col, slot, key, ket }]
+// `slot` = nomor kolom (0..2) supaya frontend tahu kolom mana yang terisi
+// dan bisa menempelkan keterangan pada kolom yang benar.
 function photoSlots(row, field) {
   return photoCols(field)
-    .map((col) => ({ col, key: row[col] || null }))
+    .map((col, i) => ({
+      col,
+      slot: i,
+      key: row[col] || null,
+      ket: row[captionCol(field, i)] ?? null,
+    }))
     .filter((s) => s.key);
 }
 
@@ -39,11 +71,12 @@ async function photoUrls(row) {
   const out = {};
   await Promise.all(
     PHOTO_FIELDS.map(async (field) => {
-      const urls = await Promise.all(
-        photoSlots(row, field).map((s) => presignedUrl(s.key))
-      );
+      const slots = photoSlots(row, field);
+      const urls = await Promise.all(slots.map((s) => presignedUrl(s.key)));
       out[`${field}Urls`] = urls;
       out[`${field}Url`] = urls[0] || null;
+      out[`${field}Captions`] = slots.map((s) => (s.ket === null ? "" : s.ket));
+      out[`${field}Slots`] = slots.map((s) => s.slot);
     })
   );
   return out;
@@ -278,7 +311,7 @@ exports.getBundles = async (noSPK, lineNo) => {
 
   const rs = await req.query(`
     SELECT NoBundle, Tebal, Lebar, Panjang, JumlahPcs,
-           ${PHOTO_COLS_SQL}
+           ${PHOTO_COLS_SQL}, ${CAPTION_COLS_SQL}
     FROM QcSpkBarangJadi_d
     WHERE ${TUPLE_WHERE}
     ORDER BY NoBundle;
@@ -365,6 +398,7 @@ exports.saveOneBundle = async (
   noBundle,
   data,
   photos = {},
+  captions = {},
   createdBy = null,
 ) => {
   const pool = await poolPromise;
@@ -388,7 +422,31 @@ exports.saveOneBundle = async (
   req.input("bj", sql.Int, data.jumlahPcs ?? null);
   req.input("createdBy", sql.VarChar, createdBy);
 
-  // hanya kolom foto yang punya file baru yang di-set
+  // baris foto saat ini (untuk slot kosong + caption foto lama)
+  const cur = await req.query(`
+    SELECT ${PHOTO_COLS_SQL}
+    FROM QcSpkBarangjadi_d
+    WHERE ${TUPLE_WHERE} AND NoBundle = @nb;
+  `);
+  const row = cur.recordset[0] || {};
+
+  // Normalisasi keterangan per slot. Tiga keadaan:
+  //   undefined = tidak dikirim  -> kolom tidak disentuh
+  //   null      = dikosongkan   -> kolom di-set NULL
+  //   number    = nilai ukur    -> kolom di-set angka
+  const cap = {};
+  for (const field of PHOTO_FIELDS) {
+    const src = captions[field] || [];
+    cap[field] = Array.from({ length: SLOTS[field] }, (_, i) => {
+      const v = src[i];
+      if (v === null || v === undefined) return undefined;
+      const s = String(v).trim().replace(",", ".");
+      if (s === "") return null;
+      const n = Number(s);
+      return Number.isFinite(n) ? n : null;
+    });
+  }
+
   const setPhoto = [];
   const insCols = [];
   const insVals = [];
@@ -400,37 +458,54 @@ exports.saveOneBundle = async (
     keys: (photos[field] || []).filter(Boolean),
   })).filter((p) => p.keys.length);
 
-  if (pending.length) {
-    const cur = await req.query(`
-      SELECT ${PHOTO_COLS_SQL}
-      FROM QcSpkBarangjadi_d
-      WHERE ${TUPLE_WHERE} AND NoBundle = @nb;
-    `);
-    const row = cur.recordset[0] || {};
-
-    for (const { field, keys } of pending) {
-      const free = photoCols(field).filter((col) => !row[col]);
-      if (keys.length > free.length) {
-        // file yang tidak kebagian slot dibuang agar tidak jadi sampah di MinIO
-        keys.slice(free.length).forEach((k) => {
-          removeObject(k).catch(() => {});
-        });
-        const err = new Error(
-          `Maksimal ${MAX_PHOTOS} foto untuk ${field}; hanya ada ${free.length} slot kosong.`
-        );
-        err.code = "PHOTO_LIMIT";
-        throw err;
-      }
-
-      keys.forEach((key, i) => {
-        const param = `${field}_${i}`;
-        const col = free[i];
-        req.input(param, sql.VarChar, key);
-        setPhoto.push(`${col} = @${param}`);
-        insCols.push(col);
-        insVals.push(`@${param}`);
+  for (const { field, keys } of pending) {
+    const free = photoCols(field)
+      .map((col, slot) => ({ col, slot }))
+      .filter(({ col }) => !row[col]);
+    if (keys.length > free.length) {
+      // file yang tidak kebagian slot dibuang agar tidak jadi sampah di MinIO
+      keys.slice(free.length).forEach((k) => {
+        removeObject(k).catch(() => {});
       });
+      const err = new Error(
+        `Maksimal ${SLOTS[field]} foto untuk ${field}; hanya ada ${free.length} slot kosong.`
+      );
+      err.code = "PHOTO_LIMIT";
+      throw err;
     }
+
+    keys.forEach((key, i) => {
+      const slot = free[i].slot;
+      const param = `${field}_${i}`;
+      req.input(param, sql.VarChar, key);
+      setPhoto.push(`${free[i].col} = @${param}`);
+      insCols.push(free[i].col);
+      insVals.push(`@${param}`);
+
+      const c = cap[field][slot];
+      if (c !== undefined) {
+        const cparam = `${field}_kc_${i}`;
+        req.input(cparam, sql.Decimal(18, 2), c);
+        setPhoto.push(`${captionCol(field, slot)} = @${cparam}`);
+        if (c !== null) {
+          insCols.push(captionCol(field, slot));
+          insVals.push(`@${cparam}`);
+        }
+      }
+    });
+  }
+
+  // keterangan untuk slot foto yang SUDAH terisi (tanpa upload foto baru pada
+  // slot itu) — kolomnya ikut ditimpa dengan nilai hasil ukur.
+  for (const field of PHOTO_FIELDS) {
+    photoCols(field).forEach((col, slot) => {
+      const c = cap[field][slot];
+      if (c === undefined) return;
+      if (!row[col]) return;
+      const cparam = `${field}_c_${slot}`;
+      req.input(cparam, sql.Decimal(18, 2), c);
+      setPhoto.push(`${captionCol(field, slot)} = @${cparam}`);
+    });
   }
 
   const chk = await req.query(
@@ -458,13 +533,13 @@ exports.saveOneBundle = async (
     `);
   }
 
-  // ambil row terkini untuk response (termasuk URL foto)
+  // ambil row terkini untuk response (termasuk URL foto & caption)
   const selReq = pool.request();
   bindTuple(selReq, noSPK, line);
   selReq.input("nb", sql.Int, noBundle);
   const rs = await selReq.query(`
     SELECT NoBundle, Tebal, Lebar, Panjang, JumlahPcs,
-           ${PHOTO_COLS_SQL}
+           ${PHOTO_COLS_SQL}, ${CAPTION_COLS_SQL}
     FROM QcSpkBarangJadi_d
     WHERE ${TUPLE_WHERE} AND NoBundle = @nb;
   `);
@@ -522,7 +597,8 @@ exports.deleteOnePhoto = async (noSPK, lineNo, noBundle, field, index = null) =>
 
   for (const t of targets) {
     await req.query(
-      `UPDATE QcSpkBarangjadi_d SET ${t.col} = NULL, UpdatedAt = GETDATE()
+      `UPDATE QcSpkBarangjadi_d
+       SET ${t.col} = NULL, ${captionColByPhotoCol(t.col)} = NULL, UpdatedAt = GETDATE()
        WHERE ${TUPLE_WHERE} AND NoBundle = @nb;`
     );
     await removeObject(t.key);
@@ -533,7 +609,7 @@ exports.deleteOnePhoto = async (noSPK, lineNo, noBundle, field, index = null) =>
   selReq.input("nb", sql.Int, noBundle);
   const rs = await selReq.query(`
     SELECT NoBundle, Tebal, Lebar, Panjang, JumlahPcs,
-           ${PHOTO_COLS_SQL}
+           ${PHOTO_COLS_SQL}, ${CAPTION_COLS_SQL}
     FROM QcSpkBarangjadi_d
     WHERE ${TUPLE_WHERE} AND NoBundle = @nb;
   `);

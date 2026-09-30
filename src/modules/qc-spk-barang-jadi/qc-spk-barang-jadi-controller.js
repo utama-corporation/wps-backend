@@ -200,6 +200,17 @@ exports.saveOneBundle = async (req, res) => {
     fotoBundle: (f.fotoBundle || []).map((x) => x.objectKey).filter(Boolean),
   };
 
+  // caption (keterangan) per foto — multipart text field `ket_<field>_<slot>`
+  // (slot 0..2). Tidak dikirim => null (tidak mengubah caption yang sudah ada).
+  const captionFields = ["fotoTebal", "fotoLebar", "fotoPanjang", "fotoBundle"];
+  const captions = {};
+  for (const field of captionFields) {
+    captions[field] = [0, 1, 2].map((i) => {
+      const v = b[`ket_${field}_${i}`];
+      return v === undefined || v === null ? null : String(v);
+    });
+  }
+
   try {
     const data = await service.saveOneBundle(
       noSPK,
@@ -207,6 +218,7 @@ exports.saveOneBundle = async (req, res) => {
       noBundle,
       { tebal, lebar, panjang, jumlahPcs },
       photos,
+      captions,
       req.username || null
     );
     return res.status(200).json({

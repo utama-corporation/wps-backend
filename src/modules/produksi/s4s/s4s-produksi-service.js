@@ -1,6 +1,8 @@
 const { sql, poolPromise } = require("../../../core/config/db");
 
 async function getMesinList() {
+  console.log('mesin list');
+
   const pool = await poolPromise;
   const result = await pool.request().query(`
     SELECT
@@ -133,6 +135,7 @@ async function saveHeader({
 }) {
   const pool = await poolPromise;
   const req = pool.request();
+
   req.input("sh", sql.VarChar(20), shift || "");
   req.input("tgl", sql.Date, tanggal || new Date());
   req.input("idm", sql.Int, idMesin);
@@ -194,11 +197,11 @@ const INPUT_TABLES = {
 };
 
 const MASTER_BY_KEY = {
-  ST: { master: "ST_h", col: "NoST" },
-  S4S: { master: "S4S_h", col: "NoS4S" },
-  CCAKHIR: { master: "CCAkhir_h", col: "NoCCAkhir" },
-  FJ: { master: "FJ_h", col: "NoFJ" },
-  MOULDING: { master: "Moulding_h", col: "NoMoulding" },
+  ST: { master: "ST_h", detail: "ST_d", col: "NoST" },
+  S4S: { master: "S4S_h", detail: "S4S_d", col: "NoS4S" },
+  CCAKHIR: { master: "CCAkhir_h", detail: "CCAkhir_d", col: "NoCCAkhir" },
+  FJ: { master: "FJ_h", detail: "FJ_d", col: "NoFJ" },
+  MOULDING: { master: "Moulding_h", detail: "Moulding_d", col: "NoMoulding" },
 };
 
 function normalizeType(value) {
@@ -254,6 +257,34 @@ async function addInput({ tipe, noProduksi, noLabel }) {
   `);
 
   return { noProduksi, noLabel, tipe: type };
+}
+
+async function getInputList({tipe, noProduksi}) {  
+  const type = normalizeType(tipe);
+  const inputTable = INPUT_TABLES[type];
+  const mapping = MASTER_BY_KEY[type];
+  if (!inputTable || !mapping) {
+    const err = new Error("Tipe input tidak valid");
+    err.status = 400;
+    throw err;
+  }
+
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input('np', sql.VarChar(20), noProduksi);
+
+  const result = await req.query(`
+    SELECT 
+      j.Jenis, 
+      d.* 
+    FROM ${inputTable} i
+    LEFT OUTER JOIN ${mapping.master} h ON i.${mapping.col}=h.${mapping.col}
+    LEFT OUTER JOIN ${mapping.detail} d ON i.${mapping.col}=d.${mapping.col} 
+    LEFT OUTER JOIN MstJenisKayu j ON h.IdJenisKayu=j.IdJenisKayu
+    WHERE i.NoProduksi=@np
+  `);
+
+  return result.recordset;
 }
 
 async function removeInput({ tipe, noProduksi, noLabel }) {
@@ -315,6 +346,7 @@ module.exports = {
   saveHeader,
   createLabel,
   addInput,
+  getInputList,
   removeInput,
   addOutput,
   removeOutput,

@@ -61,6 +61,26 @@ BEGIN
 END
 GO
 
+/* Keterangan / hasil ukur per slot foto — paralel dengan kolom Foto*, nilainya
+ * desimal (sama seperti kolom Tebal/Lebar/Panjang). FotoTebal -> KetTebal,
+ * FotoTebal2 -> KetTebal2, dst. Bundle hanya 1 foto, jadi hanya KetBundle
+ * (KetBundle2/KetBundle3 tidak pernah dibuat). Jalankan sekali. */
+IF COL_LENGTH('dbo.QcSpkBarangjadi_d', 'KetTebal') IS NULL
+BEGIN
+    ALTER TABLE dbo.QcSpkBarangjadi_d ADD
+        KetTebal   decimal(18,2) NULL,
+        KetTebal2  decimal(18,2) NULL,
+        KetTebal3  decimal(18,2) NULL,
+        KetLebar   decimal(18,2) NULL,
+        KetLebar2  decimal(18,2) NULL,
+        KetLebar3  decimal(18,2) NULL,
+        KetPanjang decimal(18,2) NULL,
+        KetPanjang2 decimal(18,2) NULL,
+        KetPanjang3 decimal(18,2) NULL,
+        KetBundle  decimal(18,2) NULL;
+END
+GO
+
 /* Permission RBAC — modul ini memakai permission SPK yang sudah ada:
  *   spk:read   -> GET daftar SPK, baris SPK, dan bundle QC
  *   spk:create -> POST simpan bundle QC

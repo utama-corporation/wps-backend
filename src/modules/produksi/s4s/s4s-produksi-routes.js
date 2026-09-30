@@ -10,6 +10,7 @@ router.get("/history", verifyToken, ctrl.getHistory);
 router.get("/next-no-produksi", verifyToken, ctrl.getNextNoProduksi);
 router.get("/next-no-label", verifyToken, ctrl.getNextNoLabel);
 router.get("/master-options", verifyToken, ctrl.getMasterOptions);
+router.get("/input/:tipe/:noProduksi", verifyToken, ctrl.getInputList);
 
 router.post("/header", verifyToken, ctrl.saveHeader);
 router.post("/label", verifyToken, ctrl.createLabel);
