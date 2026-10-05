@@ -20,6 +20,7 @@ async function getHeader(noCCA) {
       h.DateCreate,
       h.Jam,
       h.NoSPK,
+      b.Buyer             AS Buyer,
       h.IsReject,
       h.IsLembur,
       h.DateUsage,
@@ -39,6 +40,8 @@ async function getHeader(noCCA) {
       SELECT NoProduksi, IdMesin FROM FJProduksi_h      
     ) p ON p.NoProduksi = o.NoProduksi
     LEFT JOIN BongkarSusunOutputCCAkhir s ON s.NoCCAkhir = h.${KEY_COLUMN}
+    LEFT JOIN MstSPK_h sp      ON sp.NoSPK = h.NoSPK
+    LEFT JOIN MstBuyer b       ON b.IdBuyer = sp.IdBuyer
     LEFT JOIN MstMesin m       ON m.IdMesin = p.IdMesin
     LEFT JOIN MstGrade g       ON g.IdGrade = h.IdGrade
     LEFT JOIN MstOrgTelly t    ON t.IdOrgTelly = h.IdOrgTelly
@@ -281,6 +284,13 @@ function truthy(v) {
   return v === true || v === 1 || v === "1";
 }
 
+function formatNoSPK(header) {
+  const noSPK = (header.NoSPK || "").trim();
+  const buyer = (header.Buyer || "").trim();
+  if (!noSPK) return buyer || "-";
+  return buyer ? `${noSPK} - ${buyer}` : noSPK;
+}
+
 function resolveMesinSusun(header) {
   if (header.NamaMesin) {
     return header.NoProduksi
@@ -319,7 +329,7 @@ async function getLabelData(noCCA) {
     jam: header.Jam ? moment.utc(header.Jam).format("HH:mm") : "-",
     mmYY: header.DateCreate ? moment(header.DateCreate).format("MMYY") : "-",
     telly: firstToken(header.Telly),
-    noSPK: header.NoSPK || "-",
+    noSPK: formatNoSPK(header),
     mesinSusun: resolveMesinSusun(header),
     remark: "",
     isReject: truthy(header.IsReject),
