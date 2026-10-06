@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const ctrl = require("./finger-join-produksi-controller");
+const verifyToken = require("../../../core/middleware/verify-token");
 
 router.get("/mesin-list", ctrl.getMesinList);
 router.get("/history", ctrl.getHistory);
@@ -15,5 +16,8 @@ router.post("/input", ctrl.addInput);
 router.delete("/input", ctrl.removeInput);
 router.post("/output", ctrl.addOutput);
 router.delete("/output", ctrl.removeOutput);
+// Memakai verifyToken supaya field "Print by" diambil dari req.username
+// (hasil decode JWT), bukan dari query string yang bisa dimanipulasi.
+router.get("/report/:noProduksi/pdf", verifyToken, ctrl.generateProduksiReportPdf);
 
 module.exports = router;

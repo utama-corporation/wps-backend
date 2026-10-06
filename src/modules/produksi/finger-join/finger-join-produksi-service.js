@@ -352,6 +352,151 @@ async function removeOutput({ noProduksi, noFJ }) {
   return { noProduksi, noFJ };
 }
 
+// Laporan produksi FJ: header produksi + seluruh baris input/output.
+//
+// Catatan kubik mengikuti SPWps_LapProduksiFJ: faktor 645.16 (IdUOMTblLebar=3, inci)
+// dan 304.8 (IdUOMPanjang=4, kaki) menormalkan ke mm sebelum perkalian.
+//
+// WIP_h tidak punya kolom IsRepair (hanya FJ_h, S4S_h, CCAkhir_h, Moulding_h,
+// Laminating_h, Sanding_h, BarangJadi_h yang punya), jadi IsRepair untuk WIP
+// sengaja NULL — bukan 0 seperti dibuat-buat di SP lama.
+//
+// UNION ALL (bukan UNION) supaya baris identik tidak ikut ter-dedup.
+const REPORT_ROWS_SQL = `
+WITH RowsAll AS (
+  SELECT 'CCAkhir' AS Grp, 'Input' AS Tipe, A.NoCCAkhir AS NoLabel,
+         B.Tebal, B.Lebar, B.Panjang, B.JmlhBatang,
+         CAST(ROUND(B.Tebal * B.Lebar * B.Panjang * B.JmlhBatang / 1000000000.0
+              * CASE WHEN C.IdUOMTblLebar = 3 THEN 645.16 ELSE 1 END
+              * CASE WHEN C.IdUOMPanjang  = 4 THEN 304.8  ELSE 1 END, 4, 1) AS DECIMAL(18,4)) AS Kubik,
+         C.IsReject, CAST(NULL AS BIT) AS IsRepair, 1 AS Seq, 1 AS GrpOrd
+  FROM FJProduksiInputCCAkhir A
+  INNER JOIN CCAkhir_d B ON B.NoCCAkhir = A.NoCCAkhir
+  INNER JOIN CCAkhir_h C ON C.NoCCAkhir = A.NoCCAkhir
+  WHERE A.NoProduksi = @np
+
+  UNION ALL
+
+  SELECT 'S4S', 'Input', A.NoS4S,
+         B.Tebal, B.Lebar, B.Panjang, B.JmlhBatang,
+         CAST(ROUND(B.Tebal * B.Lebar * B.Panjang * B.JmlhBatang / 1000000000.0
+              * CASE WHEN C.IdUOMTblLebar = 3 THEN 645.16 ELSE 1 END
+              * CASE WHEN C.IdUOMPanjang  = 4 THEN 304.8  ELSE 1 END, 4, 1) AS DECIMAL(18,4)),
+         C.IsReject, C.IsRepair, 1, 2
+  FROM FJProduksiInputS4S A
+  INNER JOIN S4S_d B ON B.NoS4S = A.NoS4S
+  INNER JOIN S4S_h C ON C.NoS4S = A.NoS4S
+  WHERE A.NoProduksi = @np
+
+  UNION ALL
+
+  SELECT 'WIP', 'Input', A.NoWIP,
+         B.Tebal, B.Lebar, B.Panjang, B.JmlhBatang,
+         CAST(ROUND(B.Tebal * B.Lebar * B.Panjang * B.JmlhBatang / 1000000000.0
+              * CASE WHEN C.IdUOMTlbLebar = 3 THEN 645.16 ELSE 1 END
+              * CASE WHEN C.IdUOMPanjang  = 4 THEN 304.8  ELSE 1 END, 4, 1) AS DECIMAL(18,4)),
+         C.IsReject, CAST(NULL AS BIT), 1, 3
+  FROM FJProduksiInputWIP A
+  INNER JOIN WIP_d B ON B.NoWIP = A.NoWIP
+  INNER JOIN WIP_h C ON C.NoWIP = A.NoWIP
+  WHERE A.NoProduksi = @np
+
+  UNION ALL
+
+  SELECT 'FJ', 'Output', A.NoFJ,
+         B.Tebal, B.Lebar, B.Panjang, B.JmlhBatang,
+         CAST(ROUND(B.Tebal * B.Lebar * B.Panjang * B.JmlhBatang / 1000000000.0, 4, 1) AS DECIMAL(18,4)),
+         C.IsReject, C.IsRepair, 2, 1
+  FROM FJProduksiOutput A
+  INNER JOIN FJ_d B ON B.NoFJ = A.NoFJ
+  INNER JOIN FJ_h C ON C.NoFJ = A.NoFJ
+  WHERE A.NoProduksi = @np
+)
+SELECT Grp, Tipe, NoLabel, Tebal, Lebar, Panjang, JmlhBatang, Kubik, IsReject, IsRepair
+FROM RowsAll
+ORDER BY Seq, GrpOrd, Grp, NoLabel
+`;
+
+async function getProduksiReport(noProduksi) {
+  const pool = await poolPromise;
+
+  const [headerResult, rowsResult] = await Promise.all([
+    pool.request()
+      .input("np", sql.VarChar(20), noProduksi)
+      .query(`
+        SELECT TOP 1
+          h.NoProduksi,
+          h.Tanggal,
+          h.Shift,
+          ISNULL(h.JamKerja, '') AS JamKerja,
+          ISNULL(h.JmlhAnggota, 0) AS JmlhAnggota,
+          ISNULL(m.NamaMesin, '-') AS NamaMesin,
+          ISNULL(o.NamaOperator, '-') AS NamaOperator
+        FROM FJProduksi_h h
+        LEFT JOIN MstMesin m ON m.IdMesin = h.IdMesin
+        LEFT JOIN MstOperator o ON o.IdOperator = h.IdOperator
+        WHERE h.NoProduksi = @np
+      `),
+    pool.request()
+      .input("np", sql.VarChar(20), noProduksi)
+      .query(REPORT_ROWS_SQL),
+  ]);
+
+  const header = headerResult.recordset[0] || null;
+  const rows = rowsResult.recordset || [];
+
+  const inputs = rows.filter((r) => r.Tipe === "Input");
+  const outputs = rows.filter((r) => r.Tipe === "Output");
+
+  const sum = (list) =>
+    list.reduce((acc, r) => acc + (Number(r.JmlhBatang) || 0), 0);
+  const sumKubik = (list) =>
+    list.reduce((acc, r) => acc + (Number(r.Kubik) || 0), 0);
+
+  const inputBatang = sum(inputs);
+  const inputKubik = sumKubik(inputs);
+  const outputBatang = sum(outputs);
+  const outputKubik = sumKubik(outputs);
+
+  // Tabel Repair & Afkir hanya berisi output yang flag-nya true.
+  // IsReject = kolom "Afkir" di laporan.
+  const repairs = outputs.filter((r) => r.IsRepair === true);
+  const afkirs = outputs.filter((r) => r.IsReject === true);
+
+  // Baris yang sudah repair/afkir tidak ditampilkan lagi di tabel OUTPUT
+  // karena punya tabelnya sendiri. Tapi Rendemen tetap memakai SELURUH output
+  // (total.output), bukan hanya yang bersih.
+  const cleanOutputs = outputs.filter(
+    (r) => r.IsRepair !== true && r.IsReject !== true,
+  );
+
+  // Rendemen berbasis volume (kubik) = total output / total input.
+  const rendemen = inputKubik > 0 ? (outputKubik / inputKubik) * 100 : null;
+
+  return {
+    header,
+    inputs,
+    outputs,
+    cleanOutputs,
+    repairs,
+    afkirs,
+    total: {
+      input: { rows: inputs.length, batang: inputBatang, kubik: inputKubik },
+      // Seluruh output - dipakai untuk Rendemen.
+      output: { rows: outputs.length, batang: outputBatang, kubik: outputKubik },
+      // Output tanpa baris repair/afkir - dipakai untuk tabel OUTPUT.
+      outputClean: {
+        rows: cleanOutputs.length,
+        batang: sum(cleanOutputs),
+        kubik: sumKubik(cleanOutputs),
+      },
+      repair: { rows: repairs.length, batang: sum(repairs), kubik: sumKubik(repairs) },
+      afkir: { rows: afkirs.length, batang: sum(afkirs), kubik: sumKubik(afkirs) },
+      rendemen,
+    },
+  };
+}
+
 module.exports = {
   getMesinList,
   getHistory,
@@ -366,4 +511,5 @@ module.exports = {
   removeInput,
   addOutput,
   removeOutput,
+  getProduksiReport,
 };

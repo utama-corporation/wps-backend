@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 9.5pt;
+    color: #111;
+    margin: 0;
+  }
+  h1 {
+    font-size: 14pt;
+    margin: 0 0 2px;
+    text-align: center;
+    letter-spacing: 0.5px;
+  }
+  .sub {
+    text-align: center;
+    font-size: 9pt;
+    color: #555;
+    margin-bottom: 10px;
+  }
+  .meta {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 12px;
+  }
+  .meta td {
+    border: 1px solid #999;
+    padding: 4px 6px;
+    font-size: 9pt;
+  }
+  .meta td.k {
+    background: #f0f0f0;
+    font-weight: bold;
+    width: 14%;
+    white-space: nowrap;
+  }
+  h2 {
+    font-size: 9.5pt;
+    margin: 0 0 5px;
+    padding: 3px 6px;
+    background: #e8e8e8;
+    border-left: 4px solid #444;
+  }
+  /* Dua kolom rata: INPUT kiri, OUTPUT kanan. */
+  .cols {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 5mm 0;
+    margin-bottom: 6px;
+  }
+  .col {
+    display: table-cell;
+    width: 50%;
+    vertical-align: top;
+  }
+  table.grid {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+  }
+  table.grid thead { display: table-header-group; }
+  table.grid tr { page-break-inside: avoid; }
+  table.grid th,
+  table.grid td {
+    border: 1px solid #666;
+    padding: 2px 3px;
+    font-size: 7.5pt;
+    overflow-wrap: break-word;
+  }
+  table.grid th {
+    background: #dcdcdc;
+    text-align: center;
+    font-weight: bold;
+  }
+  /* Tabel di dalam .cols tetap diperkecil agar muat di setengah lebar halaman. */
+  .col table.grid th,
+  .col table.grid td { font-size: 7.6pt; padding: 2px 3px; }
+  table.grid tfoot td {
+    background: #f2f2f2;
+    font-weight: bold;
+  }
+  .num { text-align: right; }
+  .grp {
+    background: #f6f6f6;
+    font-weight: bold;
+    text-align: center;
+  }
+  /* Rendemen ditampilkan sebagai teks, bukan tabel. */
+  .rendemen {
+    margin-top: 12px;
+    padding: 6px 10px;
+    border: 1px solid #999;
+    background: #f7f7f7;
+    font-size: 9.5pt;
+  }
+  .rendemen .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+  }
+  .rendemen .lbl {
+    font-weight: bold;
+  }
+  .empty {
+    padding: 14px;
+    text-align: center;
+    color: #888;
+    font-style: italic;
+    border: 1px dashed #bbb;
+  }
+</style>
+</head>
+<body>
+  <h1>LAPORAN PRODUKSI PER NOMOR PRODUKSI</h1>  
+
+  <table class="meta">
+    <tr>
+      <td class="k">No. Produksi</td><td>{{noProduksi}}</td>
+      <td class="k">Tanggal</td><td>{{tanggal}}</td>
+      <td class="k">Shift</td><td>{{shift}}</td>
+    </tr>
+    <tr>
+      <td class="k">Mesin</td><td>{{namaMesin}}</td>
+      <td class="k">Operator</td><td>{{namaOperator}}</td>
+      <td class="k">Anggota</td><td>{{jmlhAnggota}}</td>
+    </tr>
+    <tr>
+      <td class="k">Jam Kerja</td><td colspan="5">{{jamKerja}}</td>
+    </tr>
+  </table>
+
+  <!-- Dua kolom berdampingan: INPUT kiri, OUTPUT kanan.
+       Pakai display:table (bukan flex) supaya Chromium bisa memecah
+       halaman dengan benar saat data panjang. -->
+  <div class="cols">
+    <div class="col">
+      <h2>INPUT &mdash; {{inputCount}} baris / {{inputBatang}} batang</h2>
+      {{inputTable}}
+    </div>
+    <div class="col">
+      <h2>OUTPUT &mdash; {{outputCount}} baris / {{outputBatang}} batang</h2>
+      {{outputTable}}
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="col">
+      <h2>REPAIR &mdash; {{repairCount}} baris / {{repairBatang}} batang</h2>
+      {{repairTable}}
+    </div>
+    <div class="col">
+      <h2>AFKIR &mdash; {{afkirCount}} baris / {{afkirBatang}} batang</h2>
+      {{afkirTable}}
+    </div>
+  </div>
+
+<div class="rendemen">
+    <div class="row">
+      <span class="lbl">Rendemen</span>
+      <span class="val">{{rendemenOutput}} / {{rendemenInput}} = <b>{{rendemenPersen}}</b></span>
+    </div>
+  </div>
+</body>
+</html>
