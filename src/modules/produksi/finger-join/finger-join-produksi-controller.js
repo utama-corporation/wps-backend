@@ -1,4 +1,8 @@
 const service = require("./finger-join-produksi-service");
+const { generateReportPdf } = require("../../../core/utils/pdf/report-generator");
+const {
+  buildFjProduksiReportHtml,
+} = require("../../../core/utils/pdf/templates/fj-produksi-report/fj-produksi-report");
 
 async function getMesinList(req, res, next) {
   try {
@@ -120,6 +124,51 @@ async function removeOutput(req, res, next) {
   }
 }
 
+async function generateProduksiReportPdf(req, res, next) {
+  try {
+    const noProduksi = String(req.params.noProduksi || "").trim();
+    if (!noProduksi) {
+      return res
+        .status(400)
+        .json({ message: "noProduksi wajib diisi" });
+    }
+
+    const report = await service.getProduksiReport(noProduksi);
+
+    if (!report.header) {
+      return res
+        .status(404)
+        .json({ message: `Produksi '${noProduksi}' tidak ditemukan` });
+    }
+
+    // verifyToken sudah memasang req.username dari payload JWT, jadi nilainya
+    // berasal dari user yang benar-benar login - bukan dari ?username=.
+    const username = String(req.username || "").trim();
+    const html = buildFjProduksiReportHtml(report);
+
+    // Landscape supaya tabel INPUT dan OUTPUT muat berdampingan dalam 2 kolom.
+    // printedBy dipakai untuk footer halaman "Print by : ...".
+    const pdfBuffer = await generateReportPdf(html, {
+      printedBy: username || "-",
+      orientation: "landscape",
+    });
+
+    const safeNo = noProduksi.replace(/[^\w.-]/g, "_");
+
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="ProduksiFJ_${safeNo}.pdf"`,
+      "Content-Length": pdfBuffer.length,
+    });
+
+    // Pakai res.end(), bukan res.send(): res.send() bisa men-serialize Buffer
+    // jadi JSON {"0":37,"1":80,...} sehingga PDF tidak bisa dibuka.
+    return res.end(pdfBuffer);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getMesinList,
   getHistory,
@@ -134,4 +183,5 @@ module.exports = {
   removeInput,
   addOutput,
   removeOutput,
+  generateProduksiReportPdf,
 };
