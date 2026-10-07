@@ -25,9 +25,9 @@ async function generateLabelPdf(data, templateFn, options = {}) {
   // 1. Generate QR code sebagai base64
   const qrValue = data.noLabel || data.kode || "NO-CODE";
   const qrBase64 = await QRCode.toDataURL(qrValue, {
-    width: 200,
-    margin: 1,
-    errorCorrectionLevel: "M",
+    width: 400,
+    margin: 4,
+    errorCorrectionLevel: "Q",
   });
 
   // 2. Render HTML via template function
