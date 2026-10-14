@@ -1,13 +1,20 @@
 const fs = require("fs");
 const path = require("path");
 
-const templatePath = path.join(__dirname, "fj-produksi-report.html");
+const templatePath = path.join(__dirname, "produksi-report.html");
 
 function esc(v) {
   return String(v ?? "-")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+/** Nilai kosong dari DB (NULL / '') tetap ditampilkan sebagai "-" supaya meta tidak bolong. */
+function dash(v) {
+  if (v === null || v === undefined) return "-";
+  const s = String(v).trim();
+  return s === "" ? "-" : s;
 }
 
 /** Angka gaya Indonesia: ribuan "." desimal "," (mirror DecimalFormat "#,###.##") */
@@ -132,10 +139,16 @@ function fmtPercent(v) {
 }
 
 /**
- * @param {object} report hasil service.getProduksiReport(noProduksi)
+ * Satu template untuk semua laporan produksi (S4S, Finger Join, Moulding,
+ * Laminating, Cross Cut Akhir, Sanding, Barang Jadi) - yang berbeda hanya
+ * sub-judul, karena bentuk tabelnya sama persis.
+ *
+ * @param {object} report hasil produksi-report-service.getProduksiReport()
+ * @param {object} [options]
+ * @param {string} [options.subJudul] - nama proses, mis. "Moulding"
  * @returns {string} HTML siap render ke PDF
  */
-function buildFjProduksiReportHtml(report) {
+function buildProduksiReportHtml(report, options = {}) {
   const tpl = fs.readFileSync(templatePath, "utf8");
   const h = report && report.header ? report.header : {};
   const t = report.total;
@@ -143,13 +156,16 @@ function buildFjProduksiReportHtml(report) {
   // Scalar wajib di-escape; inputTable/outputTable/flagTable sudah HTML jadi
   // dan harus disisipkan mentah.
   const scalars = {
+    subJudul: esc(options.subJudul || "-"),
     noProduksi: esc(h.NoProduksi),
     tanggal: fmtTanggal(h.Tanggal),
-    shift: esc(h.Shift),
+    shift: esc(dash(h.Shift)),
     namaMesin: esc(h.NamaMesin),
     namaOperator: esc(h.NamaOperator),
-    jamKerja: esc(h.JamKerja),
-    jmlhAnggota: esc(h.JmlhAnggota),
+    jamKerja: esc(dash(h.JamKerja)),
+    hourMeter: esc(dash(h.HourMeter)),
+    jamLembur: esc(dash(h.JamLembur)),
+    jmlhAnggota: esc(dash(h.JmlhAnggota)),
     inputCount: esc(t.input.rows),
     inputBatang: fmtNumId(t.input.batang, 0),
     // Jumlah baris pada judul tabel OUTPUT - baris repair/afkir tidak dihitung
@@ -180,4 +196,4 @@ function buildFjProduksiReportHtml(report) {
   );
 }
 
-module.exports = { buildFjProduksiReportHtml };
+module.exports = { buildProduksiReportHtml };

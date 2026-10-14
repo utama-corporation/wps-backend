@@ -45,11 +45,13 @@ function resolvePageSize(options) {
  * @param {string} [options.width]       - eksplisit, menang atas format/orientation
  * @param {string} [options.height]      - eksplisit, menang atas format/orientation
  * @param {number} [options.scale]       - 0.1 - 2, default 1
+ * @param {string} [options.title]        - judul di footer, default "WPS - Laporan Produksi"
  * @returns {Promise<Buffer>} PDF buffer
  */
 async function generateReportPdf(html, options = {}) {
   const scale = options.scale || 1;
   const printedBy = escapeHtml(options.printedBy || "-");
+  const title = escapeHtml(options.title || "WPS - Laporan Produksi");
   const size = resolvePageSize(options);
 
   const browser = await getBrowser();
@@ -73,7 +75,7 @@ async function generateReportPdf(html, options = {}) {
         <div style="width:100%;font-size:9px;font-family:Arial,sans-serif;color:#555;
                     padding:0 10mm;display:flex;justify-content:space-between;align-items:center;">
           <span>Print by : ${printedBy}</span>
-          <span>WPS - Laporan Produksi Finger Joint</span>
+          <span>${title}</span>
           <span>Halaman <span class="pageNumber"></span> dari <span class="totalPages"></span></span>
         </div>`,
     });

@@ -19,5 +19,6 @@ router.post("/input", verifyToken, ctrl.addInput);
 router.delete("/input", verifyToken, ctrl.removeInput);
 router.post("/output", verifyToken, ctrl.addOutput);
 router.delete("/output", verifyToken, ctrl.removeOutput);
+router.get("/report/:noProduksi/pdf", verifyToken, ctrl.generateProduksiReportPdf);
 
 module.exports = router;
