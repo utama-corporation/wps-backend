@@ -117,7 +117,8 @@
 </style>
 </head>
 <body>
-  <h1>LAPORAN PRODUKSI PER NOMOR PRODUKSI</h1>  
+  <h1>LAPORAN PRODUKSI PER NOMOR PRODUKSI</h1>
+  <div class="sub">{{subJudul}}</div>
 
   <table class="meta">
     <tr>
@@ -131,7 +132,9 @@
       <td class="k">Anggota</td><td>{{jmlhAnggota}}</td>
     </tr>
     <tr>
-      <td class="k">Jam Kerja</td><td colspan="5">{{jamKerja}}</td>
+      <td class="k">Jam Kerja</td><td>{{jamKerja}}</td>
+      <td class="k">Hour Meter</td><td>{{hourMeter}}</td>
+      <td class="k">Jam Lembur</td><td>{{jamLembur}}</td>
     </tr>
   </table>
 
@@ -160,7 +163,7 @@
     </div>
   </div>
 
-<div class="rendemen">
+  <div class="rendemen">
     <div class="row">
       <span class="lbl">Rendemen</span>
       <span class="val">{{rendemenOutput}} / {{rendemenInput}} = <b>{{rendemenPersen}}</b></span>

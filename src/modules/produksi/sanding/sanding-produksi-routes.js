@@ -16,5 +16,9 @@ router.post("/input", ctrl.addInput);
 router.delete("/input", ctrl.removeInput);
 router.post("/output", ctrl.addOutput);
 router.delete("/output", ctrl.removeOutput);
+// Route laporan tetap memakai verifyToken (sama seperti modul produksi lain)
+// supaya kolom "Print by" terisi username. Health check di atas tidak
+// terpengaruh karena tidak memanggil /report.
+router.get("/report/:noProduksi/pdf", verifyToken, ctrl.generateProduksiReportPdf);
 
 module.exports = router;

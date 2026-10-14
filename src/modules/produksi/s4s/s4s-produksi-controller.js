@@ -1,4 +1,8 @@
 const service = require("./s4s-produksi-service");
+const {
+  makeProduksiReportPdf,
+} = require("../produksi-report-controller");
+const { REPORT_CONFIGS } = require("../produksi-report-service");
 
 function ok(res, message, data, meta) {
   return res.status(200).json({ success: true, message, data, ...(meta || {}) });
@@ -119,3 +123,5 @@ exports.removeOutput = async (req, res) => {
     return fail(res, err);
   }
 };
+
+exports.generateProduksiReportPdf = makeProduksiReportPdf(REPORT_CONFIGS.s4s);
