@@ -26,6 +26,9 @@ async function getHeader(noST) {
       A.StartKering,
       A.NoKayuBulat,
       A.IsBagusKulit,
+      A.IsSLP,
+      A.IsSticked,
+      A.IsUpah,
       A.IdOrgTelly,
       k.Jenis AS JenisKayu,
       A.IdUOMTblLebar AS IdUOMTebal,
@@ -39,18 +42,23 @@ async function getHeader(noST) {
                WHEN B.NoPenerimaanST IS NULL THEN C.NoPenerimaanST END
         WHEN A.NoKayuBulat IS NOT NULL THEN A.NoKayuBulat
         ELSE C.NoPenerimaanST
-      END AS NoKB_ST
+      END AS NoKB_ST,
+      C.NoBongkarSusun,
+      P.NoPenerimaanST AS NoPenerimaanSTPembelian,
+      U.NoPenerimaanST AS NoPenerimaanSTUpah
     FROM ${MASTER_TABLE} A
-    INNER JOIN MstJenisKayu k ON k.IdJenisKayu = A.IdJenisKayu
-    INNER JOIN MstStickBy E ON E.IdStickBy = A.IdStickBy
+    LEFT JOIN MstJenisKayu k ON k.IdJenisKayu = A.IdJenisKayu
+    LEFT JOIN MstStickBy E ON E.IdStickBy = A.IdStickBy
     LEFT JOIN (
       SELECT NoPenerimaanST, NoST FROM PenerimaanSTPembelian_d
     ) B ON B.NoST = A.NoST
     LEFT JOIN (
-      SELECT B.NoPenerimaanST, A.NoST
+      SELECT B.NoPenerimaanST, B.NoBongkarSusun, A.NoST
       FROM BongkarSusunOutputST A
       INNER JOIN BongkarSusun_h B ON B.NoBongkarSusun = A.NoBongkarSusun
     ) C ON C.NoST = A.NoST
+    LEFT JOIN PenerimaanSTPembelian_d P ON P.NoST = A.NoST
+    LEFT JOIN PenerimaanSTUpah_d U ON U.NoST = A.NoST
     WHERE A.${KEY_COLUMN} = @noST
   `);
 
@@ -97,46 +105,20 @@ async function getStick(noST) {
 }
 
 /* ============================================================
- * LIST ALL LABELS
+ * LIST LABELS (paginated, paritas tablet: search NoST/NoSPK,
+ * DateUsage IS NULL, EXISTS detail)
  * ==========================================================*/
 
-async function getAllLabels({ search, topRow }) {
-  const pool = await poolPromise;
-  const req = pool.request();
-  const top = parseInt(topRow, 10) || 100;
-
-  let whereClause = "WHERE A.DateUsage IS NULL";
-  if (search && search.trim() !== "") {
-    req.input("search", sql.VarChar(50), `%${search.trim()}%`);
-    whereClause += " AND A.NoST LIKE @search";
-  }
-
-  const result = await req.query(`
-    SELECT TOP (${top})
-      A.NoST,
-      k.Jenis AS JenisKayu,
-      A.DateCreate,
-      CASE
-        WHEN A.NoKayuBulat IS NULL THEN
-          CASE WHEN B.NoPenerimaanST IS NOT NULL THEN B.NoPenerimaanST
-               WHEN B.NoPenerimaanST IS NULL THEN C.NoPenerimaanST END
-        WHEN A.NoKayuBulat IS NOT NULL THEN A.NoKayuBulat
-        ELSE C.NoPenerimaanST
-      END AS NoKB_ST,
-      A.NoSPK,
-      (C_UOM.UOM) AS UOMTebal,
-      (D_UOM.UOM) AS UOMPanjang,
-      E.NamaStickBy,
-      A.IdLokasi,
-      A.Remark,
-      A.VacuumDate,
-      ISNULL(VT.TotalTon, 0) AS TotalTon,
-      ISNULL(VT.TotalM3, 0) AS TotalM3
+const LIST_FROM_WHERE = `
     FROM ${MASTER_TABLE} A
-    INNER JOIN MstJenisKayu k ON k.IdJenisKayu = A.IdJenisKayu
-    INNER JOIN MstUOM C_UOM ON A.IdUOMTblLebar = C_UOM.IdUOM
-    INNER JOIN MstUOM D_UOM ON A.IdUOMPanjang = D_UOM.IdUOM
-    INNER JOIN MstStickBy E ON E.IdStickBy = A.IdStickBy
+    LEFT JOIN MstJenisKayu k ON k.IdJenisKayu = A.IdJenisKayu
+    LEFT JOIN MstStickBy s ON s.IdStickBy = A.IdStickBy
+    LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = A.IdOrgTelly
+    LEFT JOIN MstUOM C_UOM ON A.IdUOMTblLebar = C_UOM.IdUOM
+    LEFT JOIN MstUOM D_UOM ON A.IdUOMPanjang = D_UOM.IdUOM
+    LEFT JOIN PenerimaanSTPembelian_d P ON P.NoST = A.NoST
+    LEFT JOIN PenerimaanSTUpah_d U ON U.NoST = A.NoST
+    LEFT JOIN BongkarSusunOutputST BO ON BO.NoST = A.NoST
     LEFT JOIN (
       SELECT NoPenerimaanST, NoST FROM PenerimaanSTPembelian_d
     ) B ON B.NoST = A.NoST
@@ -166,11 +148,86 @@ async function getAllLabels({ search, topRow }) {
       INNER JOIN ${DETAIL_TABLE} D ON D.NoST = H.NoST
       GROUP BY H.NoST
     ) VT ON VT.NoST = A.NoST
+`;
+
+function applyListWhere(req, search) {
+  let whereClause = "WHERE A.DateUsage IS NULL AND EXISTS (SELECT 1 FROM ST_d d WHERE d.NoST = A.NoST)";
+  if (search && search.trim() !== "") {
+    req.input("search", sql.VarChar(50), `%${search.trim()}%`);
+    whereClause += " AND (A.NoST LIKE @search OR A.NoSPK LIKE @search)";
+  }
+  return whereClause;
+}
+
+async function getAllLabels({ search, topRow, page, pageSize } = {}) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  const whereClause = applyListWhere(req, search);
+
+  const selectCols = `
+    SELECT
+      A.NoST,
+      k.Jenis AS JenisKayu,
+      A.DateCreate,
+      A.NoKayuBulat,
+      CASE
+        WHEN A.NoKayuBulat IS NULL THEN
+          CASE WHEN B.NoPenerimaanST IS NOT NULL THEN B.NoPenerimaanST
+               WHEN B.NoPenerimaanST IS NULL THEN C.NoPenerimaanST END
+        WHEN A.NoKayuBulat IS NOT NULL THEN A.NoKayuBulat
+        ELSE C.NoPenerimaanST
+      END AS NoKB_ST,
+      A.NoSPK,
+      A.IdOrgTelly,
+      t.NamaOrgTelly,
+      A.Remark,
+      A.IsSLP,
+      A.VacuumDate,
+      A.IdLokasi,
+      A.IdUOMTblLebar,
+      A.IdUOMPanjang,
+      P.NoPenerimaanST AS NoPenerimaanSTPembelian,
+      U.NoPenerimaanST AS NoPenerimaanSTUpah,
+      BO.NoBongkarSusun,
+      (C_UOM.UOM) AS UOMTebal,
+      (D_UOM.UOM) AS UOMPanjang,
+      s.NamaStickBy,
+      ISNULL(VT.TotalTon, 0) AS TotalTon,
+      ISNULL(VT.TotalM3, 0) AS TotalM3
+  `;
+
+  const pageNum = parseInt(page, 10);
+  const sizeNum = parseInt(pageSize, 10) || 50;
+
+  if (pageNum && pageNum > 0) {
+    const countReq = pool.request();
+    const countWhere = applyListWhere(countReq, search);
+    const countResult = await countReq.query(
+      `SELECT COUNT(*) AS total ${LIST_FROM_WHERE} ${countWhere}`
+    );
+    const total = countResult.recordset[0]?.total || 0;
+
+    req.input("offset", sql.Int, (pageNum - 1) * sizeNum);
+    req.input("fetch", sql.Int, sizeNum);
+    const result = await req.query(`
+      ${selectCols}
+      ${LIST_FROM_WHERE}
+      ${whereClause}
+      ORDER BY A.NoST DESC
+      OFFSET @offset ROWS FETCH NEXT @fetch ROWS ONLY
+    `);
+    return { items: result.recordset, total, page: pageNum, pageSize: sizeNum };
+  }
+
+  const top = parseInt(topRow, 10) || 100;
+  const result = await req.query(`
+    SELECT TOP (${top})
+      ${selectCols.replace(/^\s*SELECT\s*/i, "")}
+    ${LIST_FROM_WHERE}
     ${whereClause}
     ORDER BY A.NoST DESC
   `);
-
-  return result.recordset;
+  return { items: result.recordset, total: result.recordset.length };
 }
 
 /* ============================================================
@@ -217,26 +274,37 @@ async function getHeaderForEdit(noST) {
       A.NoKayuBulat,
       A.VacuumDate,
       A.IsBagusKulit,
+      A.IsSLP,
+      A.IsSticked,
+      A.IsUpah,
+      A.HasBeenPrinted,
       k.Jenis AS JenisKayu,
       E.NamaStickBy,
+      t.NamaOrgTelly,
       CASE
         WHEN A.NoKayuBulat IS NULL THEN
           CASE WHEN B.NoPenerimaanST IS NOT NULL THEN B.NoPenerimaanST
                WHEN B.NoPenerimaanST IS NULL THEN C.NoPenerimaanST END
         WHEN A.NoKayuBulat IS NOT NULL THEN A.NoKayuBulat
         ELSE C.NoPenerimaanST
-      END AS NoKB_ST
+      END AS NoKB_ST,
+      C.NoBongkarSusun,
+      P.NoPenerimaanST AS NoPenerimaanSTPembelian,
+      U.NoPenerimaanST AS NoPenerimaanSTUpah
     FROM ${MASTER_TABLE} A
-    INNER JOIN MstJenisKayu k ON k.IdJenisKayu = A.IdJenisKayu
-    INNER JOIN MstStickBy E ON E.IdStickBy = A.IdStickBy
+    LEFT JOIN MstJenisKayu k ON k.IdJenisKayu = A.IdJenisKayu
+    LEFT JOIN MstStickBy E ON E.IdStickBy = A.IdStickBy
+    LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = A.IdOrgTelly
     LEFT JOIN (
       SELECT NoPenerimaanST, NoST FROM PenerimaanSTPembelian_d
     ) B ON B.NoST = A.NoST
     LEFT JOIN (
-      SELECT B.NoPenerimaanST, A.NoST
+      SELECT B.NoPenerimaanST, B.NoBongkarSusun, A.NoST
       FROM BongkarSusunOutputST A
       INNER JOIN BongkarSusun_h B ON B.NoBongkarSusun = A.NoBongkarSusun
     ) C ON C.NoST = A.NoST
+    LEFT JOIN PenerimaanSTPembelian_d P ON P.NoST = A.NoST
+    LEFT JOIN PenerimaanSTUpah_d U ON U.NoST = A.NoST
     WHERE A.${KEY_COLUMN} = @noST
   `);
 
@@ -256,17 +324,19 @@ async function updateLabel(noST, data) {
   req.input("idUOMPanjang", sql.Int, data.idUOMPanjang || null);
   req.input("idStickBy", sql.Int, data.idStickBy || null);
   req.input("noSPK", sql.VarChar(50), data.noSPK || null);
-  req.input("idLokasi", sql.VarChar(50), data.idLokasi || null);
   req.input("remark", sql.VarChar(200), data.remark || null);
   req.input("idOrgTelly", sql.Int, data.idOrgTelly || null);
   req.input("startKering", sql.Bit, data.startKering ? 1 : 0);
-  let isBagusKulitInt = null;
-  if (data.isBagusKulit === "B") isBagusKulitInt = 1;
-  else if (data.isBagusKulit === "K") isBagusKulitInt = 2;
-  req.input("isBagusKulit", sql.Int, isBagusKulitInt);
+  req.input("isBagusKulit", sql.Int, toIsBagusKulit(data.isBagusKulit));
   req.input("noKayuBulat", sql.VarChar(50), data.noKayuBulat || null);
   req.input("vacuumDate", sql.Date, data.vacuumDate || null);
   req.input("dateCreate", sql.Date, data.dateCreate || null);
+  req.input("isSLP", sql.Bit, data.isSLP ? 1 : 0);
+  req.input("isSticked", sql.Bit, data.isSticked ? 1 : 0);
+  req.input("isUpah", sql.Bit, data.isUpah ? 1 : 0);
+
+  // Paritas tablet: IdLokasi = L01 jika StartKering 0, selain itu NULL
+  req.input("idLokasi", sql.VarChar(20), data.startKering ? null : "L01");
 
   await req.query(`
     UPDATE ${MASTER_TABLE}
@@ -282,7 +352,10 @@ async function updateLabel(noST, data) {
         IsBagusKulit = @isBagusKulit,
         NoKayuBulat = @noKayuBulat,
         VacuumDate = @vacuumDate,
-        DateCreate = @dateCreate
+        DateCreate = @dateCreate,
+        IsSLP = @isSLP,
+        IsSticked = @isSticked,
+        IsUpah = @isUpah
     WHERE ${KEY_COLUMN} = @noST
   `);
 
@@ -293,26 +366,45 @@ async function updateLabel(noST, data) {
  * UPDATE DETAIL (delete old + insert new)
  * ==========================================================*/
 
+/* paritas tablet: Map keyed IdGradeStick — id sama, nilai terakhir menang */
+function dedupeSticks(sticks) {
+  const map = new Map();
+  for (const s of sticks || []) {
+    const id = s && s.idGradeStick != null ? Number(s.idGradeStick) : 0;
+    map.set(id, { idGradeStick: id, jumlahStick: s ? s.jumlahStick : 0 });
+  }
+  return Array.from(map.values());
+}
+
 async function updateDetail(noST, details) {
   const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
 
-  const delReq = pool.request();
-  delReq.input("noST", sql.VarChar(50), noST);
-  await delReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noST`);
+  try {
+    const delReq = new sql.Request(transaction);
+    delReq.input("noST", sql.VarChar(50), noST);
+    await delReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noST`);
 
-  for (let i = 0; i < details.length; i++) {
-    const d = details[i];
-    const insReq = pool.request();
-    insReq.input("noST", sql.VarChar(50), noST);
-    insReq.input("noUrut", sql.Int, i + 1);
-    insReq.input("tebal", sql.Decimal(18, 2), d.tebal || 0);
-    insReq.input("lebar", sql.Decimal(18, 2), d.lebar || 0);
-    insReq.input("panjang", sql.Decimal(18, 2), d.panjang || 0);
-    insReq.input("jmlhBatang", sql.Int, d.jmlhBatang || 0);
-    await insReq.query(`
-      INSERT INTO ${DETAIL_TABLE} (${KEY_COLUMN}, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
-      VALUES (@noST, @noUrut, @tebal, @lebar, @panjang, @jmlhBatang)
-    `);
+    for (let i = 0; i < details.length; i++) {
+      const d = details[i];
+      const insReq = new sql.Request(transaction);
+      insReq.input("noST", sql.VarChar(50), noST);
+      insReq.input("noUrut", sql.Int, i + 1);
+      insReq.input("tebal", sql.Decimal(18, 2), d.tebal || 0);
+      insReq.input("lebar", sql.Decimal(18, 2), d.lebar || 0);
+      insReq.input("panjang", sql.Decimal(18, 2), d.panjang || 0);
+      insReq.input("jmlhBatang", sql.Int, d.jmlhBatang || 0);
+      await insReq.query(`
+        INSERT INTO ${DETAIL_TABLE} (${KEY_COLUMN}, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
+        VALUES (@noST, @noUrut, @tebal, @lebar, @panjang, @jmlhBatang)
+      `);
+    }
+
+    await transaction.commit();
+  } catch (e) {
+    try { await transaction.rollback(); } catch (_) {}
+    throw e;
   }
 
   return { noST, detailCount: details.length };
@@ -322,53 +414,69 @@ async function updateDetail(noST, details) {
  * UPDATE STICK (delete old + insert new)
  * ==========================================================*/
 
-async function updateStick(noST, sticks, idStickBy) {
+async function updateStick(noST, sticks) {
   const pool = await poolPromise;
+  const deduped = dedupeSticks(sticks);
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
 
-  const delReq = pool.request();
-  delReq.input("noST", sql.VarChar(50), noST);
-  await delReq.query(`DELETE FROM STStick WHERE ${KEY_COLUMN} = @noST`);
+  try {
+    const delReq = new sql.Request(transaction);
+    delReq.input("noST", sql.VarChar(50), noST);
+    await delReq.query(`DELETE FROM STStick WHERE ${KEY_COLUMN} = @noST`);
 
-  for (let i = 0; i < sticks.length; i++) {
-    const s = sticks[i];
-    const insReq = pool.request();
-    insReq.input("noST", sql.VarChar(50), noST);
-    insReq.input("idGradeStick", sql.Int, s.idGradeStick || 0);
-    insReq.input("jumlahStick", sql.Int, s.jumlahStick || 0);
-    insReq.input("tingkat", sql.Int, s.tingkat || 0);
-    insReq.input("stickBy", sql.Int, idStickBy || null);
-    await insReq.query(`
-      INSERT INTO STStick (${KEY_COLUMN}, IdGradeStick, JumlahStick, Tingkat, StickBy)
-      VALUES (@noST, @idGradeStick, @jumlahStick, @tingkat, @stickBy)
-    `);
+    for (const s of deduped) {
+      const insReq = new sql.Request(transaction);
+      insReq.input("noST", sql.VarChar(50), noST);
+      insReq.input("idGradeStick", sql.Int, s.idGradeStick || 0);
+      insReq.input("jumlahStick", sql.VarChar(50), String(s.jumlahStick ?? 0));
+      await insReq.query(`
+        INSERT INTO STStick (${KEY_COLUMN}, IdGradeStick, JumlahStick)
+        VALUES (@noST, @idGradeStick, @jumlahStick)
+      `);
+    }
+
+    await transaction.commit();
+  } catch (e) {
+    try { await transaction.rollback(); } catch (_) {}
+    throw e;
   }
 
-  return { noST, stickCount: sticks.length };
+  return { noST, stickCount: deduped.length };
 }
 
 /* ============================================================
- * DELETE LABEL (header + detail + stick)
+ * DELETE LABEL (paritas tablet: bongkar → grade → detail →
+ * penerimaan pembelian → penerimaan upah → header, dalam trx)
  * ==========================================================*/
 
 async function deleteLabel(noST) {
   const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
 
-  // Delete stick
-  const stickReq = pool.request();
-  stickReq.input("noST", sql.VarChar(50), noST);
-  await stickReq.query(`DELETE FROM STStick WHERE ${KEY_COLUMN} = @noST`);
+  try {
+    const tables = [
+      "BongkarSusunOutputST",
+      "STStick",
+      DETAIL_TABLE,
+      "PenerimaanSTPembelian_d",
+      "PenerimaanSTUpah_d",
+      MASTER_TABLE,
+    ];
 
-  // Delete detail
-  const detReq = pool.request();
-  detReq.input("noST", sql.VarChar(50), noST);
-  await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noST`);
+    for (const table of tables) {
+      const req = new sql.Request(transaction);
+      req.input("noST", sql.VarChar(50), noST);
+      await req.query(`DELETE FROM ${table} WHERE ${KEY_COLUMN} = @noST`);
+    }
 
-  // Delete header
-  const hdrReq = pool.request();
-  hdrReq.input("noST", sql.VarChar(50), noST);
-  await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noST`);
-
-  return { noST };
+    await transaction.commit();
+    return { noST };
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 }
 
 /* ============================================================
@@ -415,6 +523,12 @@ async function lookupNoKB(noKB) {
  * CREATE LABEL ST (insert ST_h + ST_d + STStick)
  * ==========================================================*/
 
+function toIsBagusKulit(value) {
+  if (value === "B" || value === 1 || value === "1") return 1;
+  if (value === "K" || value === 2 || value === "2") return 2;
+  return 0;
+}
+
 async function createLabel(data) {
   const pool = await poolPromise;
   const transaction = new sql.Transaction(pool);
@@ -436,20 +550,22 @@ async function createLabel(data) {
     req.input("noSPK", sql.VarChar(50), data.noSPK || null);
     req.input("startKering", sql.Bit, data.startKering ? 1 : 0);
     req.input("remark", sql.VarChar(200), data.remark || null);
-    let isBagusKulitInt = null;
-    if (data.isBagusKulit === "B") isBagusKulitInt = 1;
-    else if (data.isBagusKulit === "K") isBagusKulitInt = 2;
-    req.input("isBagusKulit", sql.Int, isBagusKulitInt);
+    req.input("isBagusKulit", sql.Int, toIsBagusKulit(data.isBagusKulit));
+    req.input("isSLP", sql.Bit, data.isSLP ? 1 : 0);
+    req.input("isSticked", sql.Bit, data.isSticked ? 1 : 0);
+    req.input("isUpah", sql.Bit, data.isUpah ? 1 : 0);
+    // Paritas tablet: IdLokasi = L01 jika StartKering 0, selain itu NULL
+    req.input("idLokasi", sql.VarChar(20), data.startKering ? null : "L01");
 
     await req.query(`
       INSERT INTO ${MASTER_TABLE}
         (NoST, IdJenisKayu, DateCreate, VacuumDate, NoKayuBulat,
          IdUOMTblLebar, IdUOMPanjang, IdStickBy, IdOrgTelly, NoSPK,
-         StartKering, Remark, IdLokasi, IsBagusKulit)
+         StartKering, Remark, IdLokasi, IsBagusKulit, IsSLP, IsSticked, IsUpah)
       VALUES
         (@noST, @idJenisKayu, @dateCreate, @vacuumDate, @noKayuBulat,
          @idUOMTebal, @idUOMPanjang, @idStickBy, @idOrgTelly, @noSPK,
-         @startKering, @remark, NULL, @isBagusKulit)
+         @startKering, @remark, @idLokasi, @isBagusKulit, @isSLP, @isSticked, @isUpah)
     `);
 
     // Insert detail rows
@@ -470,20 +586,52 @@ async function createLabel(data) {
       }
     }
 
-    // Insert stick rows - StickBy always from header
+    // Insert grade rows - paritas tablet: (NoST, IdGradeStick, JumlahStick)
+    // paritas tablet Map<IdGradeStick, JumlahStick>: id sama → nilai terakhir menang
     if (data.sticks && Array.isArray(data.sticks) && data.sticks.length > 0) {
-      for (const s of data.sticks) {
+      for (const s of dedupeSticks(data.sticks)) {
         const stickReq = new sql.Request(transaction);
         stickReq.input("noST", sql.VarChar(50), data.noST);
         stickReq.input("idGradeStick", sql.Int, s.idGradeStick || 0);
-        stickReq.input("jumlahStick", sql.Int, s.jumlahStick || 0);
-        stickReq.input("tingkat", sql.Int, s.tingkat || 0);
-        stickReq.input("stickBy", sql.Int, data.idStickBy || null);
+        stickReq.input("jumlahStick", sql.VarChar(50), String(s.jumlahStick ?? 0));
         await stickReq.query(`
-          INSERT INTO STStick (${KEY_COLUMN}, IdGradeStick, JumlahStick, Tingkat, StickBy)
-          VALUES (@noST, @idGradeStick, @jumlahStick, @tingkat, @stickBy)
+          INSERT INTO STStick (${KEY_COLUMN}, IdGradeStick, JumlahStick)
+          VALUES (@noST, @idGradeStick, @jumlahStick)
         `);
       }
+    }
+
+    // Link bongkar susun (paritas tablet)
+    if (data.noBongkarSusun) {
+      const bsReq = new sql.Request(transaction);
+      bsReq.input("noST", sql.VarChar(50), data.noST);
+      bsReq.input("noBongkarSusun", sql.VarChar(50), data.noBongkarSusun);
+      await bsReq.query(`
+        INSERT INTO BongkarSusunOutputST (NoST, NoBongkarSusun)
+        VALUES (@noST, @noBongkarSusun)
+      `);
+    }
+
+    // Link penerimaan ST pembelian (paritas tablet labelVersion 1)
+    if (data.noPenerimaanSTPembelian) {
+      const penReq = new sql.Request(transaction);
+      penReq.input("noST", sql.VarChar(50), data.noST);
+      penReq.input("noPen", sql.VarChar(50), data.noPenerimaanSTPembelian);
+      await penReq.query(`
+        INSERT INTO PenerimaanSTPembelian_d (NoPenerimaanST, NoST)
+        VALUES (@noPen, @noST)
+      `);
+    }
+
+    // Link penerimaan ST upah (paritas tablet labelVersion 2)
+    if (data.noPenerimaanSTUpah) {
+      const upahReq = new sql.Request(transaction);
+      upahReq.input("noST", sql.VarChar(50), data.noST);
+      upahReq.input("noPen", sql.VarChar(50), data.noPenerimaanSTUpah);
+      await upahReq.query(`
+        INSERT INTO PenerimaanSTUpah_d (NoPenerimaanST, NoST)
+        VALUES (@noPen, @noST)
+      `);
     }
 
     await transaction.commit();
@@ -504,20 +652,30 @@ async function getMasters() {
 
   const [jenisKayu, stickBy, orgTelly, spk, gradeStick, uoms, lokasi] =
     await Promise.all([
+      // Paritas tablet getJenisKayuSTList: WHERE IsST = 1 (plus ORDER BY untuk web)
       pool
         .request()
         .query(
-          `SELECT IdJenisKayu, Jenis FROM MstJenisKayu WHERE IsInternal=1 AND IsST=1 ORDER BY Jenis`
+          `SELECT IdJenisKayu, Jenis, IsUpah FROM MstJenisKayu WHERE IsST = 1 ORDER BY Jenis`
         ),
+      // Paritas tablet getStickByList: WHERE Enable = 1
       pool
         .request()
         .query(
-          `SELECT IdStickBy, NamaStickBy FROM MstStickBy ORDER BY NamaStickBy`
+          `SELECT IdStickBy, NamaStickBy FROM MstStickBy WHERE Enable = 1 ORDER BY NamaStickBy`
         ),
+      // Paritas tablet getTellyList: join MstUsername, Enable = 1
       pool
         .request()
         .query(
-          `SELECT IdOrgTelly, NamaOrgTelly FROM MstOrgTelly ORDER BY NamaOrgTelly`
+          `SELECT A.IdOrgTelly, A.NamaOrgTelly
+           FROM MstOrgTelly A
+           INNER JOIN (
+             SELECT Username, FName + ' ' + LName AS NamaTelly
+             FROM MstUsername
+           ) B ON B.NamaTelly = A.NamaOrgTelly
+           WHERE A.Enable = 1
+           ORDER BY A.NamaOrgTelly`
         ),
       pool
         .request()
@@ -534,7 +692,7 @@ async function getMasters() {
       pool
         .request()
         .query(
-          `SELECT IdUOM, UOM FROM MstUOM ORDER BY UOM`
+          `SELECT IdUOM, UOM FROM MstUOM ORDER BY IdUOM`
         ),
       pool
         .request()
@@ -554,6 +712,188 @@ async function getMasters() {
   };
 }
 
+/* ============================================================
+ * TELLY DEFAULT (paritas tablet getTellyByIdUsername)
+ * ==========================================================*/
+
+async function getTellyDefault(idUsername) {
+  if (!idUsername) return null;
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("idUsername", sql.VarChar(50), String(idUsername));
+
+  const result = await req.query(`
+    SELECT A.IdOrgTelly, A.NamaOrgTelly
+    FROM MstOrgTelly A
+    INNER JOIN (
+      SELECT Username, FName + ' ' + LName AS NamaTelly
+      FROM MstUsername
+      WHERE IdUsername = @idUsername
+    ) B ON B.NamaTelly = A.NamaOrgTelly
+    WHERE A.Enable = 1
+  `);
+
+  return result.recordset[0] || null;
+}
+
+/* ============================================================
+ * SUSUN LIST (paritas tablet MasterApi.getSusunList)
+ * ==========================================================*/
+
+async function getSusunList(date) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("date", sql.Date, date);
+
+  const result = await req.query(`
+    SELECT NoBongkarSusun
+    FROM BongkarSusun_h
+    WHERE CONVERT(date, Tanggal) = CONVERT(date, @date)
+    ORDER BY NoBongkarSusun DESC
+  `);
+
+  return result.recordset;
+}
+
+/* ============================================================
+ * OUTPUT BY DATE (paritas tablet getNoSTByDateCreate)
+ * ==========================================================*/
+
+async function getOutputByDate(date) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("date", sql.Date, date);
+
+  const result = await req.query(`
+    SELECT NoST, HasBeenPrinted
+    FROM ${MASTER_TABLE}
+    WHERE CONVERT(date, DateCreate) = CONVERT(date, @date)
+    ORDER BY NoST DESC
+  `);
+
+  return result.recordset;
+}
+
+/* ============================================================
+ * PRINT STATUS (paritas tablet updatePrintStatus / reset)
+ * ==========================================================*/
+
+async function incrementPrintStatus(noST) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noST", sql.VarChar(50), noST);
+
+  const result = await req.query(`
+    UPDATE ${MASTER_TABLE}
+    SET HasBeenPrinted = COALESCE(HasBeenPrinted, 0) + 1,
+        LastPrintDate = GETDATE()
+    WHERE ${KEY_COLUMN} = @noST
+  `);
+
+  return result.rowsAffected[0] > 0;
+}
+
+async function resetPrintStatus(noST) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noST", sql.VarChar(50), noST);
+
+  const result = await req.query(`
+    UPDATE ${MASTER_TABLE}
+    SET HasBeenPrinted = 0, LastPrintDate = NULL
+    WHERE ${KEY_COLUMN} = @noST
+  `);
+
+  return result.rowsAffected[0] > 0;
+}
+
+/* ============================================================
+ * REPLACE LINK BONGKAR SUSUN (update: delete + insert, paritas)
+ * ==========================================================*/
+
+async function replaceBongkarSusun(noST, noBongkarSusun) {
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+
+  try {
+    const delReq = new sql.Request(transaction);
+    delReq.input("noST", sql.VarChar(50), noST);
+    await delReq.query(`DELETE FROM BongkarSusunOutputST WHERE NoST = @noST`);
+
+    if (noBongkarSusun) {
+      const insReq = new sql.Request(transaction);
+      insReq.input("noST", sql.VarChar(50), noST);
+      insReq.input("noBongkarSusun", sql.VarChar(50), noBongkarSusun);
+      await insReq.query(`
+        INSERT INTO BongkarSusunOutputST (NoST, NoBongkarSusun)
+        VALUES (@noST, @noBongkarSusun)
+      `);
+    }
+
+    await transaction.commit();
+    return { noST, noBongkarSusun: noBongkarSusun || null };
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}
+
+/* ============================================================
+ * PDF DATA (label ST versi web, paritas isi label tablet)
+ * ==========================================================*/
+
+async function getPdfData(noST) {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("noST", sql.VarChar(50), noST);
+
+  const headerResult = await req.query(`
+    SELECT
+      A.NoST,
+      A.DateCreate,
+      A.VacuumDate,
+      A.NoSPK,
+      A.Remark,
+      A.NoKayuBulat,
+      A.IsSLP,
+      A.IsSticked,
+      A.IsUpah,
+      A.HasBeenPrinted,
+      A.IdUOMTblLebar,
+      A.IdUOMPanjang,
+      k.Jenis AS JenisKayu,
+      t.NamaOrgTelly,
+      s.NamaStickBy,
+      kb.NoTruk,
+      kb.NoPlat,
+      sup.NmSupplier AS Supplier,
+      P.NoPenerimaanST AS NoPenerimaanSTPembelian
+    FROM ${MASTER_TABLE} A
+    LEFT JOIN MstJenisKayu k ON k.IdJenisKayu = A.IdJenisKayu
+    LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = A.IdOrgTelly
+    LEFT JOIN MstStickBy s ON s.IdStickBy = A.IdStickBy
+    LEFT JOIN KayuBulat_h kb ON kb.NoKayuBulat = A.NoKayuBulat
+    LEFT JOIN MstSupplier sup ON sup.IdSupplier = kb.IdSupplier
+    LEFT JOIN PenerimaanSTPembelian_d P ON P.NoST = A.NoST
+    WHERE A.${KEY_COLUMN} = @noST
+  `);
+
+  const header = headerResult.recordset[0];
+  if (!header) return null;
+
+  const detReq = pool.request();
+  detReq.input("noST", sql.VarChar(50), noST);
+  const detailResult = await detReq.query(`
+    SELECT Tebal, Lebar, Panjang, JmlhBatang
+    FROM ${DETAIL_TABLE}
+    WHERE ${KEY_COLUMN} = @noST
+    ORDER BY NoUrut
+  `);
+
+  return { header, detail: detailResult.recordset };
+}
+
 module.exports = {
   getHeader,
   getDetail,
@@ -563,9 +903,17 @@ module.exports = {
   getHeaderForEdit,
   updateLabel,
   updateDetail,
+  updateStick,
+  replaceBongkarSusun,
   deleteLabel,
   generateNoST,
   lookupNoKB,
   createLabel,
   getMasters,
+  getTellyDefault,
+  getSusunList,
+  getOutputByDate,
+  incrementPrintStatus,
+  resetPrintStatus,
+  getPdfData,
 };

@@ -56,8 +56,8 @@ exports.getDetail = async (req, res) => {
 
 exports.startRoom = async (req, res) => {
   try {
-    const { no_ruang, nip } = req.body;
-    const data = await kdService.startRoom(no_ruang, nip);
+    const { no_ruang, nip, tgl_masuk } = req.body;
+    const data = await kdService.startRoom(no_ruang, nip, tgl_masuk);
     res.json({ success: true, message: "Kamar berhasil dijalankan", data });
   } catch (err) {
     console.error("Error startRoom:", err);
@@ -67,8 +67,8 @@ exports.startRoom = async (req, res) => {
 
 exports.stopRoom = async (req, res) => {
   try {
-    const { no_ruang, nip } = req.body;
-    const data = await kdService.stopRoom(no_ruang, nip);
+    const { no_ruang, nip, tgl_keluar } = req.body;
+    const data = await kdService.stopRoom(no_ruang, nip, tgl_keluar);
     res.json({ success: true, message: "Kamar berhasil dihentikan", data });
   } catch (err) {
     console.error("Error stopRoom:", err);

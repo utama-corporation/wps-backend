@@ -247,14 +247,8 @@ function alokasikanStok(totalInput, stok) {
   return alokasi;
 }
 
-exports.getMasters = async () => {
-  const pool = await poolPromise;
-
-  const run = async (query, name) => {
-    const r = await pool.request().query(query);
-    return r.recordset.map((row) => ({ ...row }));
-  };
-
+/** Daftar meja aktif + status berjalan hari ini (dipakai getMasters dan halaman Pilih Meja). */
+const getMejaStatus = async (pool) => {
   const mejaRaw = await pool.request().query(`
     SELECT NoMeja, NamaMeja, IdGroupMesinSawmill
     FROM MstMesinSawmill
@@ -298,6 +292,60 @@ exports.getMasters = async () => {
       hourEndTerakhir: st ? st.lastHourEnd : "",
     };
   });
+  return meja;
+};
+
+exports.getMeja = async () => getMejaStatus(await poolPromise);
+
+/**
+ * Riwayat proses tally terakhir lintas tanggal (paritas FrmPilihMejaSawmill.LoadHistoryDataFast).
+ * noMeja opsional untuk filter satu meja.
+ */
+exports.getRiwayat = async ({ noMeja = "", top = 40 } = {}) => {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("top", sql.Int, Math.min(Math.max(toInt(top) || 40, 1), 200));
+  let where = "";
+  const m = toInt(noMeja);
+  if (m !== null) {
+    req.input("noMeja", sql.Int, m);
+    where = "WHERE A.NoMeja = @noMeja";
+  }
+  const r = await req.query(`
+    SELECT TOP (@top)
+      A.NoSTSawmill AS no,
+      CONVERT(varchar(10), A.TglSawmill, 120) AS tgl,
+      A.NoKayuBulat AS no_kayu_bulat,
+      A.NoMeja AS no_meja,
+      A.[Shift] AS shift,
+      ISNULL(G.NamaMeja, '-') AS nama_meja,
+      CONVERT(varchar(5), A.HourStart, 108) AS hour_start,
+      CONVERT(varchar(5), A.HourEnd, 108) AS hour_end,
+      CASE WHEN A.Operator IS NULL
+        THEN CONCAT_WS(' - ', NULLIF(E.NamaOperator,''), NULLIF(F.NamaOperator,''))
+        ELSE ISNULL(A.Operator, '-') END AS operator,
+      ISNULL(J.Jenis, '-') AS jenis
+    FROM STSawmill_h A
+    INNER JOIN KayuBulat_h B ON B.NoKayuBulat = A.NoKayuBulat
+    INNER JOIN MstJenisKayu J ON J.IdJenisKayu = B.IdJenisKayu
+    LEFT JOIN MstOperator E ON E.IdOperator = A.IdOperator1
+    LEFT JOIN MstOperator F ON F.IdOperator = A.IdOperator2
+    LEFT JOIN MstMesinSawmill G ON G.NoMeja = A.NoMeja
+    ${where}
+    ORDER BY A.TglSawmill DESC, A.NoSTSawmill DESC
+  `);
+  return r.recordset;
+};
+
+exports.getMasters = async () => {
+  const pool = await poolPromise;
+
+  const run = async (query, name) => {
+    const r = await pool.request().query(query);
+    return r.recordset.map((row) => ({ ...row }));
+  };
+
+  const meja = await getMejaStatus(pool);
 
   const [operator, specCond, gradeKB, spk, digit, kunciHarian] = await Promise.all([
     run(`
@@ -544,6 +592,7 @@ exports.getByNo = async (no) => {
       OP2.NamaOperator AS operator2,
       A.BeratBalok AS berat_balok,
       A.IsBorongan AS is_borongan,
+      A.Remark AS remark,
       B2.IdPengukuran AS id_pengukuran,
       B2.IdJenisKayu AS id_jenis_kayu,
       C2.Jenis AS jenis,
@@ -686,18 +735,22 @@ exports.create = async (data) => {
       .input("HourEnd", sql.VarChar, data.hour_end || null)
       .input("IdOperator1", sql.Int, toInt(data.id_operator1))
       .input("IdOperator2", sql.Int, toInt(data.id_operator2))
-      .input("BeratBalok", sql.Float, toFloat(data.berat_balok));
+      .input("BeratBalok", sql.Float, toFloat(data.berat_balok))
+      .input("IsBorongan", sql.Bit, !!data.is_borongan)
+      .input("Remark", sql.NVarChar(500), data.remark || null);
 
     // Kolom jam khusus meja Non-BANSAW diisi via operator
     await req.query(`
       INSERT INTO STSawmill_h (
         NoSTSawmill, [Shift], TglSawmill, NoKayuBulat, NoMeja,
         IdSawmillSpecialCondition, BalokTerpakai, JlhBatangRajang, HourMeter,
-        JamKerja, HourStart, HourEnd, IdOperator1, IdOperator2, BeratBalok
+        JamKerja, HourStart, HourEnd, IdOperator1, IdOperator2, BeratBalok,
+        IsBorongan, Remark
       ) VALUES (
         @NoSTSawmill, @Shift, @TglSawmill, @NoKayuBulat, @NoMeja,
         @IdSawmillSpecialCondition, @BalokTerpakai, @JlhBatangRajang, @HourMeter,
-        @JamKerja, @HourStart, @HourEnd, @IdOperator1, @IdOperator2, @BeratBalok
+        @JamKerja, @HourStart, @HourEnd, @IdOperator1, @IdOperator2, @BeratBalok,
+        @IsBorongan, @Remark
       )
     `);
 
@@ -875,14 +928,16 @@ exports.update = async (data) => {
         .input("IsLocal", sql.Bit, !!d.is_local)
         .input("IdUOMTblLebar", sql.Int, toInt(d.id_uom_tbl_lebar))
         .input("IdUOMPanjang", sql.Int, toInt(d.id_uom_panjang))
-        .input("IsBagusKulit", sql.Int, toInt(d.is_bagus_kulit) || 0);
+        .input("IsBagusKulit", sql.Int, toInt(d.is_bagus_kulit) || 0)
+        .input("NoSPK", sql.VarChar(50), d.no_spk || null)
+        .input("IdProdukSPK", sql.Int, d.id_produk_spk ? toInt(d.id_produk_spk) : null);
       await dReq.query(`
         INSERT INTO STSawmill_d (
           NoSTSawmill, NoUrut, Tebal, Lebar, Panjang, JmlhBatang,
-          IsLocal, IdUOMTblLebar, IdUOMPanjang, IsBagusKulit
+          IsLocal, IdUOMTblLebar, IdUOMPanjang, IsBagusKulit, NoSPK, IdProdukSPK
         ) VALUES (
           @no, @NoUrut, @Tebal, @Lebar, @Panjang, @JmlhBatang,
-          @IsLocal, @IdUOMTblLebar, @IdUOMPanjang, @IsBagusKulit
+          @IsLocal, @IdUOMTblLebar, @IdUOMPanjang, @IsBagusKulit, @NoSPK, @IdProdukSPK
         )
       `);
       if (toInt(data.id_pengukuran) === 5 && d.nama_grade) {

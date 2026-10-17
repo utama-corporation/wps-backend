@@ -46,14 +46,14 @@ router.get(
 // PUT /api/label/s4s/:nos4s -> update label
 router.put(
   "/label/s4s/:nos4s",
-  requirePermission("label_s4s:read"),
+  requirePermission("label_s4s:update"),
   ctrl.updateLabel,
 );
 
 // DELETE /api/label/s4s/:nos4s -> delete label
 router.delete(
   "/label/s4s/:nos4s",
-  requirePermission("label_s4s:read"),
+  requirePermission("label_s4s:delete"),
   ctrl.deleteLabel,
 );
 

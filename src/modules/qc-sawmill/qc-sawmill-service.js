@@ -412,3 +412,97 @@ exports.deleteByNoQc = async (noQc) => {
       throw e;
     }
   };
+
+/* ============================================================
+ * DETAIL per baris (paritas tablet: insertQcSawmillDetailAutoNoUrut,
+ * updateQcSawmillDetail, deleteQcSawmillDetail + reorder NoUrut)
+ * ==========================================================*/
+
+const DETAIL_FIELDS = ['cuttingTebal', 'cuttingLebar', 'actualTebal', 'actualLebar', 'susutTebal', 'susutLebar'];
+
+function bindDetailValues(req, d) {
+  req.input('ct', sql.Decimal(10, 3), d.cuttingTebal);
+  req.input('cl', sql.Decimal(10, 3), d.cuttingLebar);
+  req.input('at', sql.Decimal(10, 3), d.actualTebal);
+  req.input('al', sql.Decimal(10, 3), d.actualLebar);
+  req.input('st', sql.Decimal(10, 3), d.susutTebal);
+  req.input('sl', sql.Decimal(10, 3), d.susutLebar);
+}
+
+exports.DETAIL_FIELDS = DETAIL_FIELDS;
+
+// Tambah satu baris detail, NoUrut = MAX + 1
+exports.addDetailAutoNoUrut = async (noQc, d) => {
+  const pool = await poolPromise;
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const seq = await new sql.Request(tx)
+      .input('noQc', sql.VarChar, noQc)
+      .query(`SELECT ISNULL(MAX(CAST(NoUrut AS INT)), 0) + 1 AS NoUrut FROM QcSawmill_d WITH (UPDLOCK, HOLDLOCK) WHERE NoQc = @noQc`);
+    const noUrut = seq.recordset[0].NoUrut;
+
+    const req = new sql.Request(tx);
+    req.input('noQc', sql.VarChar, noQc);
+    req.input('noUrut', sql.Int, noUrut);
+    bindDetailValues(req, d);
+    await req.query(`
+      INSERT INTO QcSawmill_d (NoQc, NoUrut, NoST, CuttingTebal, CuttingLebar, ActualTebal, ActualLebar, SusutTebal, SusutLebar)
+      VALUES (@noQc, @noUrut, NULL, @ct, @cl, @at, @al, @st, @sl)
+    `);
+    await tx.commit();
+    return { noQc, noUrut };
+  } catch (e) {
+    try { await tx.rollback(); } catch {}
+    throw e;
+  }
+};
+
+// Ubah satu baris detail; return false bila baris tidak ada
+exports.updateDetail = async (noQc, noUrut, d) => {
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input('noQc', sql.VarChar, noQc);
+  req.input('noUrut', sql.Int, noUrut);
+  bindDetailValues(req, d);
+  const r = await req.query(`
+    UPDATE QcSawmill_d
+    SET CuttingTebal = @ct, CuttingLebar = @cl, ActualTebal = @at, ActualLebar = @al,
+        SusutTebal = @st, SusutLebar = @sl
+    WHERE NoQc = @noQc AND NoUrut = @noUrut
+  `);
+  return (r.rowsAffected?.[0] ?? 0) > 0;
+};
+
+// Hapus satu baris detail lalu rapikan NoUrut 1..n (paritas tablet)
+exports.deleteDetail = async (noQc, noUrut) => {
+  const pool = await poolPromise;
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const del = new sql.Request(tx);
+    del.input('noQc', sql.VarChar, noQc);
+    del.input('noUrut', sql.Int, noUrut);
+    const r = await del.query(`DELETE FROM QcSawmill_d WHERE NoQc = @noQc AND NoUrut = @noUrut`);
+    const deleted = r.rowsAffected?.[0] ?? 0;
+
+    if (deleted > 0) {
+      const re = new sql.Request(tx);
+      re.input('noQc', sql.VarChar, noQc);
+      await re.query(`
+        WITH Ordered AS (
+          SELECT NoQc, NoUrut, ROW_NUMBER() OVER (ORDER BY NoUrut ASC) AS NewNoUrut
+          FROM QcSawmill_d WHERE NoQc = @noQc
+        )
+        UPDATE QcSawmill_d
+        SET NoUrut = Ordered.NewNoUrut
+        FROM QcSawmill_d INNER JOIN Ordered ON QcSawmill_d.NoQc = Ordered.NoQc AND QcSawmill_d.NoUrut = Ordered.NoUrut
+      `);
+    }
+    await tx.commit();
+    return deleted;
+  } catch (e) {
+    try { await tx.rollback(); } catch {}
+    throw e;
+  }
+};
