@@ -35,7 +35,7 @@ async function getMesinList() {
 async function getHistory() {
   const pool = await poolPromise;
   const headers = await pool.request().query(`
-    SELECT TOP 40
+    SELECT
       A.NoProduksi, A.Tanggal, A.Shift,
       ISNULL(B.NamaMesin, '-') AS NamaMesin,
       A.JamKerja, A.JmlhAnggota,
@@ -43,40 +43,32 @@ async function getHistory() {
     FROM CCAkhirProduksi_h A
     LEFT JOIN MstMesin B ON B.IdMesin = A.IdMesin
     LEFT JOIN MstOperator C ON C.IdOperator = A.IdOperator
+    INNER JOIN (
+      SELECT MAX(PeriodHarian) AS LatestPeriod FROM MstTutupTransaksiHarian
+    ) T ON A.Tanggal > T.LatestPeriod
     ORDER BY A.Tanggal DESC, A.NoProduksi DESC
   `);
 
   const rows = headers.recordset;
   if (!rows.length) return [];
 
-  const noProduksiList = rows.map((r) => r.NoProduksi);
-  const params = [];
-  const whereParams = noProduksiList
-    .map((_, index) => {
-      const paramName = "NP" + index;
-      params.push({ paramName, value: noProduksiList[index] });
-      return "@" + paramName;
-    })
-    .join(", ");
-
-  const req = pool.request();
-  params.forEach(({ paramName, value }) => {
-    req.input(paramName, sql.VarChar(20), value);
-  });
-
-  const outputs = await req.query(`
+  // JOIN ke header periode terbuka, bukan IN (...) per NoProduksi yang
+  // mentabrak limit 2100 parameter SQL Server.
+  const outputs = await pool.request().query(`
     SELECT NoProduksi, Jenis FROM (
       SELECT O.NoProduksi, J.Jenis
       FROM CCAkhirProduksiOutput O
       INNER JOIN CCAkhir_h H ON H.NoCCAkhir = O.NoCCAkhir
       INNER JOIN MstJenisKayu J ON J.IdJenisKayu = H.IdJenisKayu
-      WHERE O.NoProduksi IN (${whereParams})
+      INNER JOIN CCAkhirProduksi_h P ON P.NoProduksi = O.NoProduksi
+      WHERE P.Tanggal > (SELECT MAX(PeriodHarian) FROM MstTutupTransaksiHarian)
       UNION ALL
       SELECT O.NoProduksi, J.Jenis
       FROM CCAkhirProduksiOutputS4S O
       INNER JOIN S4S_h H ON H.NoS4S = O.NoS4S
       INNER JOIN MstJenisKayu J ON J.IdJenisKayu = H.IdJenisKayu
-      WHERE O.NoProduksi IN (${whereParams})
+      INNER JOIN CCAkhirProduksi_h P ON P.NoProduksi = O.NoProduksi
+      WHERE P.Tanggal > (SELECT MAX(PeriodHarian) FROM MstTutupTransaksiHarian)
     ) U
     GROUP BY NoProduksi, Jenis
     ORDER BY NoProduksi, Jenis
