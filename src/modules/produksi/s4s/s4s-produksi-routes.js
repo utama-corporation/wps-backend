@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const verifyToken = require("../../../core/middleware/verify-token");
+const attachPermissions = require("../../../core/middleware/attach-permissions");
+const requirePermission = require("../../../core/middleware/require-permission");
 const ctrl = require("./s4s-produksi-controller");
 
 router.use(express.json());
@@ -18,6 +20,12 @@ router.post("/input", verifyToken, ctrl.addInput);
 router.delete("/input", verifyToken, ctrl.removeInput);
 router.post("/output", verifyToken, ctrl.addOutput);
 router.delete("/output", verifyToken, ctrl.removeOutput);
-router.get("/report/:noProduksi/pdf", verifyToken, ctrl.generateProduksiReportPdf);
+router.get(
+  "/report/:noProduksi/pdf",
+  verifyToken,
+  attachPermissions,
+  requirePermission("proses_s4s:read"),
+  ctrl.generateProduksiReportPdf,
+);
 
 module.exports = router;
