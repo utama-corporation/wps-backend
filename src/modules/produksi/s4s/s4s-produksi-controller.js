@@ -27,8 +27,64 @@ exports.getMesinList = async (req, res) => {
 
 exports.getHistory = async (req, res) => {
   try {
-    const data = await service.getHistory();
+    const data = await service.getHistory(req.query || {});
     return ok(res, "Riwayat produksi S4S berhasil diambil", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
+exports.getDetail = async (req, res) => {
+  try {
+    const data = await service.getDetail(req.params.noProduksi);
+    return ok(res, "Detail produksi S4S berhasil diambil", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
+exports.getStok = async (req, res) => {
+  try {
+    const data = await service.getStok(req.query.tipe);
+    return ok(res, "Stok label berhasil diambil", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
+exports.getStokLabels = async (req, res) => {
+  try {
+    const data = await service.getStokLabels(req.query.tipe, req.query.idJenis);
+    return ok(res, "Daftar label stok berhasil diambil", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
+exports.updateHeader = async (req, res) => {
+  try {
+    const data = await service.updateHeader(req.params.noProduksi, req.body || {});
+    return ok(res, "Header produksi S4S berhasil diperbarui", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
+exports.deleteHeader = async (req, res) => {
+  try {
+    const data = await service.deleteHeader(req.params.noProduksi);
+    return ok(res, "Produksi S4S berhasil dihapus", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
+exports.gantiHeader = async (req, res) => {
+  try {
+    const data = await service.gantiHeader(req.params.noProduksi, req.body || {});
+    return ok(res, data.createdNew
+      ? `Ganti produksi berhasil — nomor baru ${data.noProduksi}`
+      : "Ganti produksi berhasil", data);
   } catch (err) {
     return fail(res, err);
   }
@@ -61,6 +117,15 @@ exports.getMasterOptions = async (req, res) => {
   }
 };
 
+exports.getOperators = async (req, res) => {
+  try {
+    const data = await service.getOperators();
+    return ok(res, "List operator berhasil diambil", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
 exports.saveHeader = async (req, res) => {
   try {
     const noProduksi = await service.saveHeader(req.body || {});
@@ -72,8 +137,39 @@ exports.saveHeader = async (req, res) => {
 
 exports.createLabel = async (req, res) => {
   try {
-    const noS4S = await service.createLabel(req.body || {});
+    // IdOrgTelly diambil dari user login (req.idUsername dari verify-token).
+    const noS4S = await service.createLabel({
+      ...(req.body || {}),
+      idUsername: req.idUsername,
+    });
     return ok(res, "Label S4S berhasil dibuat", noS4S);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
+exports.getOrgTelly = async (req, res) => {
+  try {
+    const data = await service.getOrgTelly(req.idUsername);
+    return ok(res, "Telly user berhasil diambil", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
+exports.simpanInput = async (req, res) => {
+  try {
+    const data = await service.simpanInput(req.body || {});
+    return ok(res, `${data.saved} input label disimpan`, data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
+exports.batalInput = async (req, res) => {
+  try {
+    const data = await service.batalInput(req.body || {});
+    return ok(res, `${data.batal} input label dibatalkan`, data);
   } catch (err) {
     return fail(res, err);
   }
@@ -125,3 +221,21 @@ exports.removeOutput = async (req, res) => {
 };
 
 exports.generateProduksiReportPdf = makeProduksiReportPdf(REPORT_CONFIGS.s4s);
+
+exports.addReject = async (req, res) => {
+  try {
+    const data = await service.addReject(req.body || {});
+    return ok(res, "Reject produksi berhasil disimpan", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};
+
+exports.removeReject = async (req, res) => {
+  try {
+    const data = await service.removeReject(req.body || {});
+    return ok(res, "Reject produksi berhasil dihapus", data);
+  } catch (err) {
+    return fail(res, err);
+  }
+};

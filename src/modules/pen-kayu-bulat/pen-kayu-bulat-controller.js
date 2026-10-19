@@ -1,4 +1,5 @@
 const penKayuBulatService = require("./pen-kayu-bulat-service");
+const penKayuBulatReport = require("./pen-kayu-bulat-report");
 
 exports.getNextNo = async (_req, res) => {
   try {
@@ -83,5 +84,24 @@ exports.remove = async (req, res) => {
   } catch (err) {
     console.error("Error delete:", err);
     res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// GET /laporan?jenis=int-ton|ext-ton|int-kg|ext-kg&no=A.000000 → PDF inline.
+exports.getLaporan = async (req, res) => {
+  try {
+    const { jenis, no } = req.query;
+    const pdf = await penKayuBulatReport.generatePdf(jenis, no, req.username);
+    const file = `penerimaan-kayu-bulat-${jenis}-${no}.pdf`.replace(/[^\w.-]/g, "_");
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="${file}"`,
+      "Content-Length": pdf.length,
+    });
+    res.end(pdf);
+  } catch (err) {
+    const status = err.status || 500;
+    if (status === 500) console.error('Error laporan:', err);
+    res.status(status).json({ success: false, message: status === 500 ? 'Gagal membuat laporan' : err.message });
   }
 };

@@ -46,14 +46,14 @@ router.get(
 // PUT /api/label/fj/:nofj -> update label
 router.put(
   "/label/fj/:nofj",
-  requirePermission("label_fj:read"),
+  requirePermission("label_fj:update"),
   ctrl.updateLabel,
 );
 
 // DELETE /api/label/fj/:nofj -> delete label
 router.delete(
   "/label/fj/:nofj",
-  requirePermission("label_fj:read"),
+  requirePermission("label_fj:delete"),
   ctrl.deleteLabel,
 );
 

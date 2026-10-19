@@ -254,3 +254,69 @@ exports.deleteByNoQc = async (req, res) => {
       return res.status(500).json({ success: false, message: 'Terjadi kesalahan di server' });
     }
   };
+
+/* ---------- Detail per baris ---------- */
+
+// Validasi body detail: 6 angka wajib (paritas dialog tablet "Wajib diisi")
+function parseDetailBody(body) {
+  const out = {};
+  for (const k of qcSawmillService.DETAIL_FIELDS) {
+    const raw = body?.[k];
+    if (raw === undefined || raw === null || raw === '') return { error: `${k} wajib diisi.` };
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return { error: `${k} harus berupa angka.` };
+    out[k] = n;
+  }
+  return { value: out };
+}
+
+// POST /qc-sawmill/:noqc/detail
+exports.addDetail = async (req, res) => {
+  const noqc = String(req.params.noqc || '').trim();
+  if (!noqc) return res.status(400).json({ success: false, message: 'Parameter noqc wajib diisi.' });
+  const parsed = parseDetailBody(req.body);
+  if (parsed.error) return res.status(400).json({ success: false, message: parsed.error });
+  try {
+    const data = await qcSawmillService.addDetailAutoNoUrut(noqc, parsed.value);
+    return res.status(201).json({ success: true, message: 'Berhasil disimpan', data });
+  } catch (err) {
+    console.error('Error add QC Sawmill detail:', err);
+    return res.status(500).json({ success: false, message: 'Terjadi kesalahan di server' });
+  }
+};
+
+// PUT /qc-sawmill/:noqc/details/:nourut
+exports.updateDetail = async (req, res) => {
+  const noqc = String(req.params.noqc || '').trim();
+  const noUrut = parseInt(req.params.nourut, 10);
+  if (!noqc || !Number.isInteger(noUrut)) {
+    return res.status(400).json({ success: false, message: 'noqc dan nourut wajib diisi.' });
+  }
+  const parsed = parseDetailBody(req.body);
+  if (parsed.error) return res.status(400).json({ success: false, message: parsed.error });
+  try {
+    const ok = await qcSawmillService.updateDetail(noqc, noUrut, parsed.value);
+    if (!ok) return res.status(404).json({ success: false, message: 'Detail tidak ditemukan.' });
+    return res.status(200).json({ success: true, message: 'Data berhasil diperbarui' });
+  } catch (err) {
+    console.error('Error update QC Sawmill detail:', err);
+    return res.status(500).json({ success: false, message: 'Terjadi kesalahan di server' });
+  }
+};
+
+// DELETE /qc-sawmill/:noqc/details/:nourut
+exports.deleteDetail = async (req, res) => {
+  const noqc = String(req.params.noqc || '').trim();
+  const noUrut = parseInt(req.params.nourut, 10);
+  if (!noqc || !Number.isInteger(noUrut)) {
+    return res.status(400).json({ success: false, message: 'noqc dan nourut wajib diisi.' });
+  }
+  try {
+    const deleted = await qcSawmillService.deleteDetail(noqc, noUrut);
+    if (!deleted) return res.status(404).json({ success: false, message: 'Detail tidak ditemukan.' });
+    return res.status(200).json({ success: true, message: 'Detail berhasil dihapus' });
+  } catch (err) {
+    console.error('Error delete QC Sawmill detail:', err);
+    return res.status(500).json({ success: false, message: 'Terjadi kesalahan di server' });
+  }
+};

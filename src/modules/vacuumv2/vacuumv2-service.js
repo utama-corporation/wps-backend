@@ -79,8 +79,22 @@ exports.getMasters = async (username) => {
     ORDER BY Jenis ASC
   `);
 
+  // Jenis kayu per tangki (form legacy menampilkannya saat tangki dipilih)
+  const tankJenis = await pool.request().query(`
+    SELECT A.IdChemicalTank AS id_chemical_tank, B.IdJenisKayu AS id_jenis_kayu, B.Jenis AS jenis
+    FROM MstChemicalTank_d A
+    INNER JOIN MstJenisKayu B ON B.IdJenisKayu = A.IdJenis
+    ORDER BY B.Jenis ASC
+  `);
+  const chemicalWithJenis = chemical.recordset.map(c => ({
+    ...c,
+    jenis_kayu: tankJenis.recordset
+      .filter(j => j.id_chemical_tank === c.id_chemical_tank)
+      .map(j => ({ id_jenis_kayu: j.id_jenis_kayu, jenis: j.jenis })),
+  }));
+
   return {
-    chemical: chemical.recordset,
+    chemical: chemicalWithJenis,
     vacuum_tube: vacuumTube.recordset,
     jenis_kayu: jenisKayu.recordset,
     boleh_ubah_hapus: await bisaUbahHapus(username),
@@ -370,6 +384,21 @@ const insertOperation = async (transaction, no, list) => {
          @TinggiAwalAir, @TinggiAkhirAir,
          COALESCE(@IdJenisKayu, (SELECT IdJenisKayu FROM MstJenisKayu WHERE Jenis = @Jenis AND [Enable] = 1)))
     `);
+
+    // Web mengirim id_jenis_list (banyak jenis per charge); legacy VB hanya mengirim nama jenis tunggal.
+    if (Array.isArray(d.id_jenis_list) && d.id_jenis_list.length > 0) {
+      for (const idJenis of [...new Set(d.id_jenis_list.map(Number))]) {
+        await transaction.request()
+          .input("NoVacuumV2", sql.VarChar, no)
+          .input("NoCharge", sql.VarChar, String(d.no_charge))
+          .input("IdJenis", sql.Int, idJenis)
+          .query(`
+            INSERT INTO VacuumV2_dOperation_dJenis (NoVacuumV2, NoCharge, IdJenis)
+            VALUES (@NoVacuumV2, @NoCharge, @IdJenis)
+          `);
+      }
+      continue;
+    }
 
     const jenisReq = transaction.request();
     jenisReq.input("NoVacuumV2", sql.VarChar, no)

@@ -1,0 +1,277 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        width: 105mm;
+        font-family: Arial, sans-serif;
+        font-size: 9pt;
+        background: white;
+      }
+
+      .label {
+        position: relative;
+        width: 105mm;
+        padding: 3mm 4mm;
+        border: 1.2px solid #000;
+      }
+
+      /* Header: LABEL ST | NO : xxx */
+      .label-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        border-bottom: 1.5px solid #000;
+        padding-bottom: 1.2mm;
+        margin-bottom: 1.6mm;
+      }
+
+      .label-header .title,
+      .label-header .no-label {
+        font-size: 12pt;
+        font-weight: bold;
+        text-decoration: underline;
+      }
+
+      /* Info 2 kolom */
+      .info-grid {
+        display: flex;
+        gap: 3mm;
+        margin-bottom: 1mm;
+      }
+
+      .info-col {
+        flex: 1;
+      }
+
+      .info-row {
+        display: flex;
+        font-size: 8pt;
+        line-height: 1.5;
+        color: #111;
+      }
+
+      .info-row .k {
+        width: 12mm;
+        flex: none;
+      }
+
+      .info-row .sep {
+        width: 2mm;
+        flex: none;
+      }
+
+      .info-row .v {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .kb-row {
+        font-size: 9pt;
+        margin-bottom: 1.4mm;
+      }
+
+      /* Tabel detail */
+      table.detail {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1.4mm;
+      }
+
+      table.detail th,
+      table.detail td {
+        border: 0.8px solid #000;
+        text-align: center;
+        font-size: 9pt;
+        padding: 1mm 0.5mm;
+      }
+
+      table.detail th {
+        font-weight: bold;
+      }
+
+      /* Ringkasan kanan */
+      .summary {
+        text-align: right;
+        font-size: 10pt;
+        line-height: 1.5;
+        margin-bottom: 1.6mm;
+      }
+
+      /* Blok bawah: QR kiri | MMYY + NO ST kanan */
+      .bottom {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 3mm;
+      }
+
+      .qr-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: none;
+      }
+
+      .qr-box img {
+        width: 24mm;
+        height: 24mm;
+        background: #fff;
+      }
+
+      .qr-box .qr-caption {
+        font-size: 9pt;
+        font-weight: bold;
+        text-align: center;
+        margin-top: 0.6mm;
+      }
+
+      .right-block {
+        flex: 1;
+        text-align: right;
+      }
+
+      .right-block .mmyy {
+        font-size: 34pt;
+        font-weight: bold;
+        line-height: 1.1;
+      }
+
+      .right-block .big-no {
+        font-size: 16pt;
+        font-weight: bold;
+        line-height: 1.2;
+        margin-top: 1.4mm;
+      }
+
+      .slp {
+        text-align: right;
+        font-size: 20pt;
+        font-weight: bold;
+        line-height: 1.1;
+        margin-top: 1mm;
+      }
+
+      .remark {
+        text-align: center;
+        font-size: 9pt;
+        margin-top: 1.6mm;
+      }
+
+      .dashed {
+        border-top: 1px dashed #000;
+        margin-top: 1.6mm;
+      }
+
+      .bottom-right {
+        display: flex;
+        justify-content: flex-end;
+        align-items: flex-end;
+        margin-top: 1.6mm;
+      }
+
+      .bottom-right img {
+        width: 22mm;
+        height: 22mm;
+        background: #fff;
+      }
+
+      /* Watermark COPY (jika sudah pernah dicetak) */
+      .watermark {
+        position: absolute;
+        top: 16mm;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 44pt;
+        font-weight: 900;
+        color: rgba(0, 0, 0, 0.16);
+        letter-spacing: 6px;
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      .bottom,
+      .bottom-right,
+      .slp,
+      .remark,
+      .dashed {
+        position: relative;
+        z-index: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="label">
+      <div class="watermark">{{watermarkText}}</div>
+
+      <div class="label-header">
+        <span class="title">LABEL ST</span>
+        <span class="no-label">NO : {{noST}}</span>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-col">
+          <div class="info-row"><span class="k">Jenis</span><span class="sep">:</span><span class="v">{{jenisKayu}}</span></div>
+          <div class="info-row"><span class="k">Plat</span><span class="sep">:</span><span class="v">{{platTruk}}</span></div>
+          <div class="info-row"><span class="k">SPK</span><span class="sep">:</span><span class="v">{{noSPK}}</span></div>
+        </div>
+        <div class="info-col">
+          <div class="info-row"><span class="k">Tgl</span><span class="sep">:</span><span class="v">{{tanggal}}</span></div>
+          <div class="info-row"><span class="k">Telly</span><span class="sep">:</span><span class="v">{{telly}}</span></div>
+          <div class="info-row"><span class="k">Stick</span><span class="sep">:</span><span class="v">{{stickBy}}</span></div>
+        </div>
+      </div>
+
+      <div class="kb-row">{{kbRow}}</div>
+
+      <table class="detail">
+        <thead>
+          <tr>
+            <th>Tebal</th>
+            <th>Lebar</th>
+            <th>Panjang</th>
+            <th>Pcs</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{detailRows}}
+        </tbody>
+      </table>
+
+      <div class="summary">
+        <div>Jumlah : {{totalPcs}}</div>
+        <div>Ton : {{totalTon}}</div>
+        <div>m&sup3; : {{totalM3}}</div>
+      </div>
+
+      <div class="bottom">
+        <div class="qr-box">
+          <img src="{{qrBase64}}" alt="QR" />
+          <div class="qr-caption">{{noST}}</div>
+        </div>
+        <div class="right-block">
+          <div class="mmyy">{{mmYY}}</div>
+        </div>
+      </div>
+
+      {{slpRow}}
+      {{remarkRow}}
+      <div class="dashed"></div>
+
+      <div class="bottom-right">
+        <img src="{{qrBase64}}" alt="QR" />
+      </div>
+    </div>
+  </body>
+</html>

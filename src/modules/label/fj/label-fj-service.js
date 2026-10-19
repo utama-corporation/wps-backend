@@ -1,9 +1,20 @@
 const moment = require("moment");
 const { sql, poolPromise } = require("../../../core/config/db");
+const { assertPeriodeTerbuka } = require("../../../core/utils/periode-lock");
 
 const MASTER_TABLE = "FJ_h";
 const DETAIL_TABLE = "FJ_d";
 const KEY_COLUMN = "NoFJ";
+
+/** Tanggal label (FJ_h.DateCreate) — dasar cek kunci periode sebelum CUD. */
+async function getTanggalLabel(noFJ) {
+  const pool = await poolPromise;
+  const r = await pool
+    .request()
+    .input("noFJ", sql.VarChar(50), noFJ)
+    .query(`SELECT DateCreate FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noFJ`);
+  return r.recordset[0]?.DateCreate ?? null;
+}
 
 /* ============================================================
  * QUERY
@@ -171,6 +182,7 @@ async function getHeaderForEdit(noFJ) {
  * ==========================================================*/
 
 async function updateLabel(noFJ, data) {
+  await assertPeriodeTerbuka(await getTanggalLabel(noFJ));
   const pool = await poolPromise;
   const req = pool.request();
   req.input("noFJ", sql.VarChar(50), noFJ);
@@ -235,6 +247,7 @@ async function updateDetail(noFJ, details) {
  * ==========================================================*/
 
 async function deleteLabel(noFJ) {
+  await assertPeriodeTerbuka(await getTanggalLabel(noFJ));
   const pool = await poolPromise;
 
   const outReq1 = pool.request();

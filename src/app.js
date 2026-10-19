@@ -47,7 +47,11 @@ const labelCcaRoutes = require('./modules/label/cca/label-cca-routes');
 const labelSndRoutes = require('./modules/label/snd/label-snd-routes');
 const labelBjRoutes = require('./modules/label/bj/label-bj-routes');
 const labelStRoutes = require('./modules/label/st/label-st-routes');
+const penerimaanStPembelianRoutes = require('./modules/penerimaan-st-pembelian/penerimaan-st-pembelian-routes');
+const penerimaanStUpahRoutes = require('./modules/penerimaan-st-upah/penerimaan-st-upah-routes');
+const penerimaanStSawmillRoutes = require('./modules/penerimaan-st-sawmill/penerimaan-st-sawmill-routes');
 const penjualanBjRoutes = require('./modules/penjualan/barangjadi/penjualan-bj-routes');
+const penjualanStRoutes = require('./modules/penjualan/st/penjualan-st-routes');
 
 const app = express();
 
@@ -111,6 +115,10 @@ app.use("/api", labelCcaRoutes);
 app.use("/api", labelSndRoutes);
 app.use("/api", labelBjRoutes);
 app.use("/api", labelStRoutes);
+app.use("/api", penerimaanStPembelianRoutes);
+app.use("/api", penerimaanStUpahRoutes);
+app.use("/api", penerimaanStSawmillRoutes);
 app.use("/api", penjualanBjRoutes);
+app.use("/api", penjualanStRoutes);
 
 module.exports = app;

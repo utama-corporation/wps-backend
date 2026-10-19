@@ -1,9 +1,20 @@
 const moment = require("moment");
 const { sql, poolPromise } = require("../../../core/config/db");
+const { assertPeriodeTerbuka } = require("../../../core/utils/periode-lock");
 
 const MASTER_TABLE = "S4S_h";
 const DETAIL_TABLE = "S4S_d";
 const KEY_COLUMN = "NoS4S";
+
+/** Tanggal label (S4S_h.DateCreate) — dasar cek kunci periode sebelum CUD. */
+async function getTanggalLabel(noS4S) {
+  const pool = await poolPromise;
+  const r = await pool
+    .request()
+    .input("noS4S", sql.VarChar(50), noS4S)
+    .query(`SELECT DateCreate FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noS4S`);
+  return r.recordset[0]?.DateCreate ?? null;
+}
 
 /* ============================================================
  * QUERY
@@ -180,6 +191,7 @@ async function getHeaderForEdit(noS4S) {
  * ==========================================================*/
 
 async function updateLabel(noS4S, data) {
+  await assertPeriodeTerbuka(await getTanggalLabel(noS4S));
   const pool = await poolPromise;
   const req = pool.request();
   req.input("noS4S", sql.VarChar(50), noS4S);
@@ -250,6 +262,7 @@ async function updateDetail(noS4S, details) {
  * ==========================================================*/
 
 async function deleteLabel(noS4S) {
+  await assertPeriodeTerbuka(await getTanggalLabel(noS4S));
   const pool = await poolPromise;
 
   // Delete output references first

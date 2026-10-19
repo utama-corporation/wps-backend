@@ -159,9 +159,17 @@ async function getDetail(noProcKD) {
   return result.recordset;
 }
 
+// Normalisasi 'YYYY-MM-DD' -> 'YYYYMMDD' (format tak-ambigu untuk SQL Server); kosong -> null (= hari ini)
+function ymd8(v, label) {
+  if (v === undefined || v === null || String(v).trim() === "") return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v).trim());
+  if (!m) throw new Error(`Format ${label} tidak valid`);
+  return m[1] + m[2] + m[3];
+}
+
 // === START ROOM ===
 
-async function startRoom(noRuang, nip) {
+async function startRoom(noRuang, nip, tglMasuk) {
   const pool = await poolPromise;
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
@@ -189,9 +197,10 @@ async function startRoom(noRuang, nip) {
     const insertReq = transaction.request();
     insertReq.input("NoProcKD", sql.VarChar, noProcKD);
     insertReq.input("NoRuang", sql.Int, noRuang);
+    insertReq.input("TglMasuk", sql.VarChar, ymd8(tglMasuk, "tanggal jalan")); // kosong = hari ini
     await insertReq.query(`
       INSERT INTO KD_h (NoProcKD, NoRuangKD, TglMasuk, TglKeluar)
-      VALUES (@NoProcKD, @NoRuang, GETDATE(), NULL)
+      VALUES (@NoProcKD, @NoRuang, COALESCE(TRY_CONVERT(datetime, @TglMasuk, 112), GETDATE()), NULL)
     `);
 
     // Riwayat
@@ -215,7 +224,7 @@ async function startRoom(noRuang, nip) {
 
 // === STOP ROOM ===
 
-async function stopRoom(noRuang, nip) {
+async function stopRoom(noRuang, nip, tglKeluar) {
   const pool = await poolPromise;
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
@@ -235,7 +244,23 @@ async function stopRoom(noRuang, nip) {
     // Update TglKeluar
     const updReq = transaction.request();
     updReq.input("NoProcKD", sql.VarChar, noProcKD);
-    await updReq.query(`UPDATE KD_h SET TglKeluar = GETDATE() WHERE NoProcKD = @NoProcKD`);
+    const keluar8 = ymd8(tglKeluar, "tanggal selesai");
+    const upd = await updReq
+      .input("TglKeluar", sql.VarChar, keluar8)
+      .query(`
+        DECLARE @Keluar datetime = COALESCE(TRY_CONVERT(datetime, @TglKeluar, 112), GETDATE());
+        DECLARE @Masuk date = (SELECT TRY_CONVERT(date, TglMasuk) FROM KD_h WHERE NoProcKD = @NoProcKD);
+        IF @Masuk IS NOT NULL AND CONVERT(date, @Keluar) < @Masuk
+          SELECT 0 AS ok
+        ELSE BEGIN
+          UPDATE KD_h SET TglKeluar = @Keluar WHERE NoProcKD = @NoProcKD;
+          SELECT 1 AS ok
+        END
+      `);
+    if (!upd.recordset[0] || !upd.recordset[0].ok) {
+      await transaction.rollback();
+      throw new Error("Tanggal selesai tidak boleh lebih awal dari tanggal masuk");
+    }
 
     // Reset StartKering on ST labels
     const rstReq = transaction.request();

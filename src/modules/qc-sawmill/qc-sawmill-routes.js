@@ -57,6 +57,24 @@ router.post(
   ctrl.createDetailsByNoQc // insert (append) atau replace sesuai body.overwrite
 );
 
+router.post(
+  '/:noqc/detail',
+  requirePermission('qc_sawmill:create'),
+  ctrl.addDetail // tambah satu baris, NoUrut otomatis
+);
+
+router.put(
+  '/:noqc/details/:nourut',
+  requirePermission('qc_sawmill:update'),
+  ctrl.updateDetail
+);
+
+router.delete(
+  '/:noqc/details/:nourut',
+  requirePermission('qc_sawmill:delete'),
+  ctrl.deleteDetail // hapus satu baris + rapikan NoUrut
+);
+
 router.delete(
   '/:noqc/details',
   requirePermission('qc_sawmill:delete'),

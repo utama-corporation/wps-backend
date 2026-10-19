@@ -6,6 +6,9 @@ const router = express.Router();
 router.use(express.json());
 
 router.get("/masters", verifyToken, lembarTallyHasilSawmillController.getMasters);
+router.get("/meja", verifyToken, lembarTallyHasilSawmillController.getMeja);
+router.get("/riwayat", verifyToken, lembarTallyHasilSawmillController.getRiwayat);
+router.get("/laporan", verifyToken, lembarTallyHasilSawmillController.getLaporan);
 router.get("/kayu-bulat", verifyToken, lembarTallyHasilSawmillController.getKayuBulat);
 router.get("/operator-meja", verifyToken, lembarTallyHasilSawmillController.getOperatorMeja);
 router.get("/produk-spk", verifyToken, lembarTallyHasilSawmillController.getProdukSPK);

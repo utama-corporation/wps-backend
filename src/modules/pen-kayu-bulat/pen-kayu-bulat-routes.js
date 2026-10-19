@@ -8,6 +8,7 @@ router.use(express.json());
 router.get("/next-no", verifyToken, penKayuBulatController.getNextNo);
 router.get("/masters", verifyToken, penKayuBulatController.getMasters);
 router.get("/header", verifyToken, penKayuBulatController.getHeader);
+router.get("/laporan", verifyToken, penKayuBulatController.getLaporan);
 router.get("/detail", verifyToken, penKayuBulatController.getDetail);
 router.get("/", verifyToken, penKayuBulatController.getAll);
 router.post("/", verifyToken, penKayuBulatController.create);
