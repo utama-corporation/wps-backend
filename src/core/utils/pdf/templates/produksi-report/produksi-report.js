@@ -92,8 +92,8 @@ function buildTable(rows, total) {
 }
 
 /**
- * Tabel daftar output yang berflag Repair atau Afkir.
- * Dipanggil dua kali: sekali untuk Repair, sekali untuk Afkir.
+ * Tabel daftar REPAIR - masih berbasis label, jadi kolom No. Label & No. SPK
+ * tetap ada.
  */
 function buildFlagTable(rows, total) {
   if (!rows || rows.length === 0) {
@@ -132,6 +132,50 @@ function buildFlagTable(rows, total) {
         <th class="num">Batang</th>
         <th class="num">Kubik</th>
         <th>No. SPK</th>
+      </tr>
+    </thead>
+    <tbody>${body.join("\n")}</tbody>
+    ${foot}
+  </table>`;
+}
+
+/**
+ * Tabel AFKIR - sumbernya tabel reject proses (<Proses>Produksi_Reject)
+ * yang isinya murni dimensi, tanpa nomor label maupun nomor SPK.
+ * Karena itu kolom No. Label dihapus dari format AFKIR.
+ */
+function buildAfkirTable(rows, total) {
+  if (!rows || rows.length === 0) {
+    return `<div class="empty">Tidak ada data</div>`;
+  }
+
+  const body = rows.map(
+    (r) => `<tr>
+        <td class="num">${esc(fmtNumId(r.Tebal, 1))}</td>
+        <td class="num">${esc(fmtNumId(r.Lebar, 1))}</td>
+        <td class="num">${esc(fmtNumId(r.Panjang, 1))}</td>
+        <td class="num">${esc(fmtNumId(r.JmlhBatang, 0))}</td>
+        <td class="num">${esc(fmtNumId(r.Kubik, 4))}</td>
+      </tr>`,
+  );
+
+  const foot = `
+    <tfoot>
+      <tr>
+        <td colspan="3">TOTAL</td>
+        <td class="num">${esc(fmtNumId(total.batang, 0))}</td>
+        <td class="num">${esc(fmtNumId(total.kubik, 4))}</td>
+      </tr>
+    </tfoot>`;
+
+  return `<table class="grid">
+    <thead>
+      <tr>
+        <th class="num">Tebal</th>
+        <th class="num">Lebar</th>
+        <th class="num">Panjang</th>
+        <th class="num">Batang</th>
+        <th class="num">Kubik</th>
       </tr>
     </thead>
     <tbody>${body.join("\n")}</tbody>
@@ -194,7 +238,7 @@ function buildProduksiReportHtml(report, options = {}) {
     inputTable: buildTable(report.inputs, t.input),
     outputTable: buildTable(report.cleanOutputs, t.outputClean),
     repairTable: buildFlagTable(report.repairs, t.repair),
-    afkirTable: buildFlagTable(report.afkirs, t.afkir),
+    afkirTable: buildAfkirTable(report.afkirs, t.afkir),
   };
 
   return tpl.replace(/\{\{(\w+)\}\}/g, (m, key) =>

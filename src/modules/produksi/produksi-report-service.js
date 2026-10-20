@@ -25,6 +25,7 @@ const { sql, poolPromise } = require("../../core/config/db");
 //   nama        : tampil di sub-judul laporan
 //   filePrefix  : prefix nama file PDF
 //   headerTable : tabel header produksi
+//   rejectTable : tabel reject (afkir) proses ini - sumber tabel AFKIR
 //   inputs      : [{ grp, junction, master, detail, col }]
 //   outputs     : [{ grp, junction, master, detail, col }]
 // Urutan array = urutan tampil tabel di laporan (setiap grup dapat baris
@@ -34,6 +35,7 @@ const REPORT_CONFIGS = {
     nama: "S4S",
     filePrefix: "ProduksiS4S",
     headerTable: "S4SProduksi_h",
+    rejectTable: "S4SProduksi_Reject",
     inputs: [
       { grp: "ST", junction: "S4SProduksiInputST", master: "ST_h", detail: "ST_d", col: "NoST" },
       { grp: "S4S", junction: "S4SProduksiInputS4S", master: "S4S_h", detail: "S4S_d", col: "NoS4S" },
@@ -50,6 +52,7 @@ const REPORT_CONFIGS = {
     nama: "Finger Join",
     filePrefix: "ProduksiFJ",
     headerTable: "FJProduksi_h",
+    rejectTable: "FJProduksi_Reject",
     inputs: [
       { grp: "CCAkhir", junction: "FJProduksiInputCCAkhir", master: "CCAkhir_h", detail: "CCAkhir_d", col: "NoCCAkhir" },
       { grp: "S4S", junction: "FJProduksiInputS4S", master: "S4S_h", detail: "S4S_d", col: "NoS4S" },
@@ -64,6 +67,7 @@ const REPORT_CONFIGS = {
     nama: "Moulding",
     filePrefix: "ProduksiMld",
     headerTable: "MouldingProduksi_h",
+    rejectTable: "MouldingProduksi_Reject",
     inputs: [
       { grp: "BarangJadi", junction: "MouldingProduksiInputBarangJadi", master: "BarangJadi_h", detail: "BarangJadi_d", col: "NoBJ" },
       { grp: "CCAkhir", junction: "MouldingProduksiInputCCAkhir", master: "CCAkhir_h", detail: "CCAkhir_d", col: "NoCCAkhir" },
@@ -82,6 +86,7 @@ const REPORT_CONFIGS = {
     nama: "Laminating",
     filePrefix: "ProduksiLmt",
     headerTable: "LaminatingProduksi_h",
+    rejectTable: "LaminatingProduksi_Reject",
     inputs: [
       { grp: "BarangJadi", junction: "LaminatingProduksiInputBarangJadi", master: "BarangJadi_h", detail: "BarangJadi_d", col: "NoBJ" },
       { grp: "CCAkhir", junction: "LaminatingProduksiInputCCAkhir", master: "CCAkhir_h", detail: "CCAkhir_d", col: "NoCCAkhir" },
@@ -97,6 +102,7 @@ const REPORT_CONFIGS = {
     nama: "Cross Cut Akhir",
     filePrefix: "ProduksiCca",
     headerTable: "CCAkhirProduksi_h",
+    rejectTable: "CCAkhirProduksi_Reject",
     inputs: [
       { grp: "BarangJadi", junction: "CCAkhirProduksiInputBarangJadi", master: "BarangJadi_h", detail: "BarangJadi_d", col: "NoBJ" },
       { grp: "CCAkhir", junction: "CCAkhirProduksiInputCCAkhir", master: "CCAkhir_h", detail: "CCAkhir_d", col: "NoCCAkhir" },
@@ -116,6 +122,7 @@ const REPORT_CONFIGS = {
     nama: "Sanding",
     filePrefix: "ProduksiSnd",
     headerTable: "SandingProduksi_h",
+    rejectTable: "SandingProduksi_Reject",
     inputs: [
       { grp: "BarangJadi", junction: "SandingProduksiInputBarangJadi", master: "BarangJadi_h", detail: "BarangJadi_d", col: "NoBJ" },
       { grp: "CCAkhir", junction: "SandingProduksiInputCCAkhir", master: "CCAkhir_h", detail: "CCAkhir_d", col: "NoCCAkhir" },
@@ -132,6 +139,7 @@ const REPORT_CONFIGS = {
     nama: "Barang Jadi",
     filePrefix: "ProduksiBJ",
     headerTable: "PackingProduksi_h",
+    rejectTable: "PackingProduksi_Reject",
     inputs: [
       { grp: "BarangJadi", junction: "PackingProduksiInputBarangJadi", master: "BarangJadi_h", detail: "BarangJadi_d", col: "NoBJ" },
       { grp: "CCAkhir", junction: "PackingProduksiInputCCAkhir", master: "CCAkhir_h", detail: "CCAkhir_d", col: "NoCCAkhir" },
@@ -272,8 +280,46 @@ FROM RowsAll
 ORDER BY Seq, GrpOrd, Grp, NoLabel`;
 }
 
+/**
+ * Query tabel reject (afkir) proses: <Proses>Produksi_Reject.
+ *
+ * Tabel reject menyimpan ukuran + jumlah batang + M3 yang SUDAH dihitung saat
+ * input (faktor UOM inch/feet ikut dihitung di sisi aplikasi), jadi tabel
+ * AFKIR di laporan memakai nilai M3 tersebut. Baris lama yang M3-nya NULL
+ * (sebelum kolom M3 dipakai) dihitung ulang dari ukuran dengan faktor UOM
+ * yang sama: inch (IdUOMTblLebar=3) -> 645,16 dan kaki (IdUOMPanjang=4) ->
+ * 304,8 / meter (5) -> 1000.
+ *
+ * Berbeda dengan tabel OUTPUT, tabel reject tidak punya nomor label maupun
+ * nomor SPK - isinya murni dimensi (tebal/lebar/panjang/batang/kubik).
+ */
+function buildRejectSql(config, cols) {
+  const t = config.rejectTable;
+  if (!t) {
+    return "SELECT TOP 0 CAST(NULL AS DECIMAL(18,3)) AS Tebal, CAST(NULL AS DECIMAL(18,3)) AS Lebar, CAST(NULL AS DECIMAL(18,3)) AS Panjang, CAST(NULL AS INT) AS JmlhBatang, CAST(NULL AS DECIMAL(18,4)) AS Kubik";
+  }
+
+  const fLebar = hasCol(cols, t, "IdUOMTblLebar")
+    ? "CASE WHEN R.IdUOMTblLebar = 3 THEN 645.16 ELSE 1 END"
+    : "1";
+  const fPanjang = hasCol(cols, t, "IdUOMPanjang")
+    ? "CASE R.IdUOMPanjang WHEN 4 THEN 304.8 WHEN 5 THEN 1000 ELSE 1 END"
+    : "1";
+
+  const hitungM3 = `ROUND(R.Tebal * R.Lebar * R.Panjang * ISNULL(R.JmlhBatang, 0) / 1000000000.0 * ${fLebar} * ${fPanjang}, 4)`;
+  const m3 = hasCol(cols, t, "M3")
+    ? `CAST(ISNULL(R.M3, ${hitungM3}) AS DECIMAL(18,4))`
+    : `CAST(${hitungM3} AS DECIMAL(18,4))`;
+
+  return `
+    SELECT R.Tebal, R.Lebar, R.Panjang, R.JmlhBatang, ${m3} AS Kubik
+    FROM ${t} R
+    WHERE R.NoProduksi = @np
+    ORDER BY R.Tebal, R.Lebar, R.Panjang`;
+}
+
 function collectTableNames(config) {
-  const names = [config.headerTable];
+  const names = [config.headerTable, config.rejectTable];
   [...(config.inputs || []), ...(config.outputs || [])].forEach((b) => {
     names.push(b.junction, b.master, b.detail);
   });
@@ -298,14 +344,17 @@ async function getProduksiReport(config, noProduksi) {
 
   const headerSql = buildHeaderSql(config, cols);
   const rowsSql = buildRowsSql(config, cols);
+  const rejectSql = buildRejectSql(config, cols);
 
-  const [headerResult, rowsResult] = await Promise.all([
+  const [headerResult, rowsResult, rejectResult] = await Promise.all([
     pool.request().input("np", sql.VarChar(20), noProduksi).query(headerSql),
     pool.request().input("np", sql.VarChar(20), noProduksi).query(rowsSql),
+    pool.request().input("np", sql.VarChar(20), noProduksi).query(rejectSql),
   ]);
 
   const header = headerResult.recordset[0] || null;
   const rows = rowsResult.recordset || [];
+  const rejects = rejectResult.recordset || [];
 
   const inputs = rows.filter((r) => r.Tipe === "Input");
   const outputs = rows.filter((r) => r.Tipe === "Output");
@@ -320,10 +369,14 @@ async function getProduksiReport(config, noProduksi) {
   const outputBatang = sum(outputs);
   const outputKubik = sumKubik(outputs);
 
-  // Tabel Repair & Afkir hanya berisi output yang flag-nya true.
-  // IsReject = kolom "Afkir" di laporan.
+  // Tabel Repair berasal dari output yang flag IsRepair-nya true.
   const repairs = outputs.filter((r) => r.IsRepair === true);
-  const afkirs = outputs.filter((r) => r.IsReject === true);
+
+  // Tabel AFKIR sekarang diambil dari tabel reject proses
+  // (<Proses>Produksi_Reject), bukan dari flag IsReject pada label output.
+  // Isi tabel reject sudah berupa dimensi (tebal/lebar/panjang/batang/kubik)
+  // tanpa nomor label.
+  const afkirs = rejects;
 
   // Baris yang sudah repair/afkir tidak ditampilkan lagi di tabel OUTPUT
   // karena punya tabelnya sendiri. Tapi Rendemen tetap memakai SELURUH output
