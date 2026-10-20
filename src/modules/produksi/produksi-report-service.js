@@ -196,6 +196,7 @@ function buildBranchSql(branch, seq, ord, cols) {
 
   const isReject = hasCol(cols, m, "IsReject") ? "C.IsReject" : "CAST(NULL AS BIT)";
   const isRepair = hasCol(cols, m, "IsRepair") ? "C.IsRepair" : "CAST(NULL AS BIT)";
+  const noSpk = hasCol(cols, m, "NoSPK") ? "CAST(C.NoSPK AS VARCHAR(50))" : "CAST(NULL AS VARCHAR(50))";
 
   // Output selalu dibuat dalam mm (createLabel menulis IdUOMTblLebar=1 dan
   // IdUOMPanjang=1), jadi faktor konversi hanya dipakai untuk INPUT yang bisa
@@ -216,6 +217,7 @@ function buildBranchSql(branch, seq, ord, cols) {
            B.Tebal, B.Lebar, B.Panjang, B.JmlhBatang,
            CAST(ROUND(B.Tebal * B.Lebar * B.Panjang * B.JmlhBatang / 1000000000.0
                 * ${fLebar} * ${fPanjang}, 4, 1) AS DECIMAL(18,4)) AS Kubik,
+           ${noSpk} AS NoSPK,
            ${isReject} AS IsReject, ${isRepair} AS IsRepair,
            ${seq} AS Seq, ${ord} AS GrpOrd
     FROM ${branch.junction} A
@@ -258,14 +260,14 @@ function buildRowsSql(config, cols) {
   config.outputs.forEach((b, i) => branches.push(buildBranchSql(b, 2, i + 1, cols)));
 
   if (branches.length === 0) {
-    return "SELECT TOP 0 CAST(NULL AS VARCHAR(50)) AS Grp, CAST(NULL AS VARCHAR(50)) AS Tipe, CAST(NULL AS VARCHAR(50)) AS NoLabel, CAST(NULL AS DECIMAL(18,3)) AS Tebal, CAST(NULL AS DECIMAL(18,3)) AS Lebar, CAST(NULL AS DECIMAL(18,3)) AS Panjang, CAST(NULL AS INT) AS JmlhBatang, CAST(NULL AS DECIMAL(18,4)) AS Kubik, CAST(NULL AS BIT) AS IsReject, CAST(NULL AS BIT) AS IsRepair";
+    return "SELECT TOP 0 CAST(NULL AS VARCHAR(50)) AS Grp, CAST(NULL AS VARCHAR(50)) AS Tipe, CAST(NULL AS VARCHAR(50)) AS NoLabel, CAST(NULL AS DECIMAL(18,3)) AS Tebal, CAST(NULL AS DECIMAL(18,3)) AS Lebar, CAST(NULL AS DECIMAL(18,3)) AS Panjang, CAST(NULL AS INT) AS JmlhBatang, CAST(NULL AS DECIMAL(18,4)) AS Kubik, CAST(NULL AS VARCHAR(50)) AS NoSPK, CAST(NULL AS BIT) AS IsReject, CAST(NULL AS BIT) AS IsRepair";
   }
 
   return `
 WITH RowsAll AS (
 ${branches.join("\n  UNION ALL\n")}
 )
-SELECT Grp, Tipe, NoLabel, Tebal, Lebar, Panjang, JmlhBatang, Kubik, IsReject, IsRepair
+SELECT Grp, Tipe, NoLabel, Tebal, Lebar, Panjang, JmlhBatang, Kubik, NoSPK, IsReject, IsRepair
 FROM RowsAll
 ORDER BY Seq, GrpOrd, Grp, NoLabel`;
 }

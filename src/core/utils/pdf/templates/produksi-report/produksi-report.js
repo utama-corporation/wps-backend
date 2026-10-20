@@ -56,6 +56,7 @@ function buildTable(rows, total) {
         <th class="num">Panjang</th>
         <th class="num">Batang</th>
         <th class="num">Kubik</th>
+        <th>No. SPK</th>
       </tr>
     </thead>`;
 
@@ -64,7 +65,7 @@ function buildTable(rows, total) {
   for (const r of rows) {
     if (r.Grp !== lastGrp) {
       lastGrp = r.Grp;
-      body.push(`<tr><td class="grp" colspan="6">${esc(r.Grp)}</td></tr>`);
+      body.push(`<tr><td class="grp" colspan="7">${esc(r.Grp)}</td></tr>`);
     }
     body.push(`<tr>
         <td>${esc(r.NoLabel)}</td>
@@ -73,6 +74,7 @@ function buildTable(rows, total) {
         <td class="num">${esc(fmtNumId(r.Panjang, 1))}</td>
         <td class="num">${esc(fmtNumId(r.JmlhBatang, 0))}</td>
         <td class="num">${esc(fmtNumId(r.Kubik, 4))}</td>
+        <td>${esc(dash(r.NoSPK))}</td>
       </tr>`);
   }
 
@@ -82,6 +84,7 @@ function buildTable(rows, total) {
         <td colspan="4">TOTAL</td>
         <td class="num">${esc(fmtNumId(total.batang, 0))}</td>
         <td class="num">${esc(fmtNumId(total.kubik, 4))}</td>
+        <td></td>
       </tr>
     </tfoot>`;
 
@@ -105,6 +108,7 @@ function buildFlagTable(rows, total) {
         <td class="num">${esc(fmtNumId(r.Panjang, 1))}</td>
         <td class="num">${esc(fmtNumId(r.JmlhBatang, 0))}</td>
         <td class="num">${esc(fmtNumId(r.Kubik, 4))}</td>
+        <td>${esc(dash(r.NoSPK))}</td>
       </tr>`,
   );
 
@@ -114,6 +118,7 @@ function buildFlagTable(rows, total) {
         <td colspan="4">TOTAL</td>
         <td class="num">${esc(fmtNumId(total.batang, 0))}</td>
         <td class="num">${esc(fmtNumId(total.kubik, 4))}</td>
+        <td></td>
       </tr>
     </tfoot>`;
 
@@ -126,6 +131,7 @@ function buildFlagTable(rows, total) {
         <th class="num">Panjang</th>
         <th class="num">Batang</th>
         <th class="num">Kubik</th>
+        <th>No. SPK</th>
       </tr>
     </thead>
     <tbody>${body.join("\n")}</tbody>
