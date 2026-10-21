@@ -4,6 +4,11 @@ const {
 } = require("../produksi-report-controller");
 const { REPORT_CONFIGS } = require("../produksi-report-service");
 
+// Cetak laporan per No. Produksi memakai report microservice yang sama dengan
+// aplikasi desktop (FrmProsesFingerJoin: LblLapProduksiPerNomorProduksi).
+// Override host via REPORT_MICROSERVICE_URL (mis. "http://192.168.10.100:5006").
+const REPORT_BASE = (process.env.REPORT_MICROSERVICE_URL || `http://${process.env.DB_SERVER}:5006`).replace(/\/+$/, "");
+
 function ok(res, message, data, meta) {
   return res.status(200).json({ success: true, message, data, ...(meta || {}) });
 }
@@ -243,3 +248,38 @@ exports.removeReject = async (req, res) => {
 exports.generateProduksiReportPdf = makeProduksiReportPdf(
   REPORT_CONFIGS["finger-join"],
 );
+
+// GET /laporan?noProduksi=SA.000000 → PDF Laporan Produksi FJ per No. Produksi (inline).
+exports.getLaporan = async (req, res) => {
+  try {
+    const no = req.query.noProduksi;
+    if (!no) return res.status(400).json({ success: false, message: "Nomor produksi wajib diisi" });
+
+    // Microservice memvalidasi JWT yang sama (desktop mengirim Bearer token login).
+    const upstream = await fetch(
+      `${REPORT_BASE}/api/reports/proses-produksi/produksi-fj-per-nomor-produksi/pdf?no_produksi=${encodeURIComponent(no)}`,
+      { headers: { Authorization: req.headers.authorization || "", Accept: "application/pdf" } },
+    );
+    if (!upstream.ok) {
+      let message = `Gagal membuat laporan (${upstream.status})`;
+      try {
+        const body = await upstream.json();
+        message = body.message || body.Message || message;
+      } catch {
+        // body bukan JSON — pakai pesan default
+      }
+      return res.status(upstream.status === 404 || upstream.status === 422 ? upstream.status : 502).json({ success: false, message });
+    }
+    const pdf = Buffer.from(await upstream.arrayBuffer());
+    const file = `laporan-produksi-fj-${no}.pdf`.replace(/[^\w.-]/g, "_");
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="${file}"`,
+      "Content-Length": pdf.length,
+    });
+    res.end(pdf);
+  } catch (err) {
+    console.error("Error laporan produksi FJ:", err);
+    res.status(500).json({ success: false, message: "Gagal membuat laporan" });
+  }
+};

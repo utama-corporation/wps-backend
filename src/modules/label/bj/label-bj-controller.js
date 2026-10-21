@@ -99,6 +99,27 @@ exports.getHeaderForEdit = async (req, res) => {
 };
 
 /**
+ * GET /api/label/bj/masters -> data combo dialog Ubah
+ */
+exports.getMasters = async (req, res) => {
+  try {
+    const data = await labelBjService.getMasters();
+    return res.status(200).json({
+      success: true,
+      message: "Data master label berhasil diambil",
+      data,
+    });
+  } catch (err) {
+    console.error("BJ Masters Error:", err);
+    const status = err.statusCode || 500;
+    return res.status(status).json({
+      success: false,
+      message: err.message || "Terjadi kesalahan server",
+    });
+  }
+};
+
+/**
  * GET /api/label/bj/list -> list semua label
  */
 exports.getAllLabels = async (req, res) => {

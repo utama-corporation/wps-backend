@@ -28,8 +28,8 @@ exports.getAll = async (req, res) => {
 
 exports.getMasters = async (req, res) => {
   try {
-    const supplier = await service.getSuppliers();
-    return res.json({ success: true, message: "Masters berhasil diambil", data: { supplier } });
+    const [supplier, surat_tanah] = await Promise.all([service.getSuppliers(), service.getSuratTanah()]);
+    return res.json({ success: true, message: "Masters berhasil diambil", data: { supplier, surat_tanah } });
   } catch (err) {
     return fail(res, err, "PenerimaanSTPembelian Masters Error");
   }

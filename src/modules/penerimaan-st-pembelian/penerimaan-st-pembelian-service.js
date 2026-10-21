@@ -26,9 +26,11 @@ function hitungTon(tebal, lebar, panjang, pcs, idUOMTblLebar) {
 const SELECT_HEADER = `
   SELECT
     p.NoPenerimaanST, p.TglLaporan, p.TglMasuk, p.IdSupplier, s.NmSupplier AS Supplier,
-    p.NoTruk, p.NoPlat, p.Suket, p.TonSJ, p.Note
+    p.NoTruk, p.NoPlat, p.Suket, p.TonSJ, p.Note,
+    p.IdTanah, t.NamaTanah AS SuratTanah
   FROM ${HEADER} p
   LEFT JOIN MstSupplier s ON s.IdSupplier = p.IdSupplier
+  LEFT JOIN MstSuratTanah t ON t.IdTanah = p.IdTanah
 `;
 
 async function getAll({ search } = {}) {
@@ -58,6 +60,16 @@ async function getSuppliers() {
   const result = await pool
     .request()
     .query(`SELECT IdSupplier, NmSupplier FROM MstSupplier WHERE enable = 1 ORDER BY NmSupplier`);
+  return result.recordset;
+}
+
+async function getSuratTanah() {
+  const pool = await poolPromise;
+  const result = await pool.request().query(`
+    SELECT IdTanah AS id, NamaTanah AS nama
+    FROM MstSuratTanah
+    ORDER BY NamaTanah ASC
+  `);
   return result.recordset;
 }
 
@@ -91,18 +103,19 @@ async function getRejects(no) {
 async function nextNo(transaction) {
   const result = await new sql.Request(transaction).query(`
     SELECT TOP 1 NoPenerimaanST FROM ${HEADER} WITH (UPDLOCK, HOLDLOCK)
-    WHERE NoPenerimaanST LIKE 'BA.%'
+    WHERE NoPenerimaanST LIKE 'B.%'
     ORDER BY NoPenerimaanST DESC
   `);
   const last = result.recordset[0]?.NoPenerimaanST;
-  const n = last ? parseInt(String(last).slice(3), 10) : 0;
-  return `BA.${String((Number.isFinite(n) ? n : 0) + 1).padStart(6, "0")}`;
+  const n = last ? parseInt(String(last).slice(2), 10) : 0;
+  return `B.${String((Number.isFinite(n) ? n : 0) + 1).padStart(6, "0")}`;
 }
 
 function bindHeader(req, d) {
   req.input("tglLaporan", sql.Date, d.tglLaporan || null);
   req.input("tglMasuk", sql.Date, d.tglMasuk || null);
   req.input("idSupplier", sql.Int, Number(d.idSupplier));
+  req.input("idTanah", sql.Int, d.idTanah ? Number(d.idTanah) : null);
   req.input("noTruk", sql.VarChar(50), String(d.noTruk).trim());
   req.input("noPlat", sql.VarChar(50), String(d.noPlat).trim());
   req.input("suket", sql.VarChar(100), String(d.suket).trim());
@@ -133,9 +146,9 @@ async function create(data) {
     bindHeader(req, data);
     await req.query(`
       INSERT INTO ${HEADER}
-        (NoPenerimaanST, TglLaporan, TglMasuk, IdSupplier, NoTruk, NoPlat, Suket, TonSJ, Note)
+        (NoPenerimaanST, TglLaporan, TglMasuk, IdSupplier, IdTanah, NoTruk, NoPlat, Suket, TonSJ, Note)
       VALUES
-        (@no, @tglLaporan, @tglMasuk, @idSupplier, @noTruk, @noPlat, @suket, @tonSJ, @note)
+        (@no, @tglLaporan, @tglMasuk, @idSupplier, @idTanah, @noTruk, @noPlat, @suket, @tonSJ, @note)
     `);
     await transaction.commit();
     return { noPenerimaanST };
@@ -155,7 +168,7 @@ async function update(no, data) {
   bindHeader(req, data);
   await req.query(`
     UPDATE ${HEADER}
-    SET TglLaporan = @tglLaporan, TglMasuk = @tglMasuk, IdSupplier = @idSupplier,
+    SET TglLaporan = @tglLaporan, TglMasuk = @tglMasuk, IdSupplier = @idSupplier, IdTanah = @idTanah,
         NoTruk = @noTruk, NoPlat = @noPlat, Suket = @suket, TonSJ = @tonSJ, Note = @note
     WHERE NoPenerimaanST = @no
   `);
@@ -247,6 +260,7 @@ module.exports = {
   getAll,
   getByNo,
   getSuppliers,
+  getSuratTanah,
   getLabels,
   getRejects,
   create,

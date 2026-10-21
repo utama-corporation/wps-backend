@@ -21,6 +21,9 @@ router.get("/master-options", requirePermission("proses_fj:read"), ctrl.getMaste
 router.get("/operators", requirePermission("proses_fj:read"), ctrl.getOperators);
 router.get("/org-telly", requirePermission("proses_fj:read"), ctrl.getOrgTelly);
 
+// Laporan Produksi FJ per No. Produksi (PDF, via report microservice)
+router.get("/laporan", requirePermission("proses_fj:read"), ctrl.getLaporan);
+
 // Create (buka produksi baru)
 router.post("/header", requirePermission("proses_fj:create"), ctrl.saveHeader);
 

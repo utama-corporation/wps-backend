@@ -3,10 +3,18 @@ const router = express.Router();
 const verifyToken = require("../../../core/middleware/verify-token");
 const attachPermissions = require("../../../core/middleware/attach-permissions");
 const requirePermission = require("../../../core/middleware/require-permission");
+const { mastersHandler } = require("../label-masters-service");
 const ctrl = require("./label-fj-controller");
 
 router.use(express.json());
 router.use(verifyToken, attachPermissions);
+
+// GET /api/label/fj/masters -> data combo dialog Ubah (jenis kayu, grade, telly, SPK, lokasi)
+router.get(
+  "/label/fj/masters",
+  requirePermission("label_fj:read"),
+  mastersHandler("FINGERJOIN", "FJ"),
+);
 
 // GET /api/label/fj/list -> list semua label FJ
 router.get(

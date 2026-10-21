@@ -8,6 +8,13 @@ const ctrl = require("./label-bj-controller");
 router.use(express.json());
 router.use(verifyToken, attachPermissions);
 
+// GET /api/label/bj/masters -> data combo dialog Ubah (jenis kayu, barang jadi, telly, SPK)
+router.get(
+  "/label/bj/masters",
+  requirePermission("label_bj:read"),
+  ctrl.getMasters,
+);
+
 // GET /api/label/bj/list -> list semua label
 router.get(
   "/label/bj/list",
@@ -46,14 +53,14 @@ router.get(
 // PUT /api/label/bj/:nobj -> update label
 router.put(
   "/label/bj/:nobj",
-  requirePermission("label_bj:read"),
+  requirePermission("label_bj:update"),
   ctrl.updateLabel,
 );
 
 // DELETE /api/label/bj/:nobj -> delete label
 router.delete(
   "/label/bj/:nobj",
-  requirePermission("label_bj:read"),
+  requirePermission("label_bj:delete"),
   ctrl.deleteLabel,
 );
 

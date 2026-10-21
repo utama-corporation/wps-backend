@@ -3,11 +3,19 @@ const router = express.Router();
 const verifyToken = require("../../../core/middleware/verify-token");
 const attachPermissions = require("../../../core/middleware/attach-permissions");
 const requirePermission = require("../../../core/middleware/require-permission");
+const { mastersHandler } = require("../label-masters-service");
 const ctrl = require("./label-cca-controller");
 
 router.use(express.json());
 // urutan penting: verify → attach → require → controller
 router.use(verifyToken, attachPermissions);
+
+// GET /api/label/cca/masters -> data combo dialog Ubah (jenis kayu, grade, telly, SPK, lokasi)
+router.get(
+  "/label/cca/masters",
+  requirePermission("label_cca:read"),
+  mastersHandler("CCAKHIR", "CCA"),
+);
 
 // GET /api/label/cca/list -> all labels
 router.get(
@@ -33,14 +41,14 @@ router.get(
 // PUT /api/label/cca/:nocca -> update label
 router.put(
   "/label/cca/:nocca",
-  requirePermission("label_cca:read"),
+  requirePermission("label_cca:update"),
   ctrl.updateLabel,
 );
 
 // DELETE /api/label/cca/:nocca -> delete label
 router.delete(
   "/label/cca/:nocca",
-  requirePermission("label_cca:read"),
+  requirePermission("label_cca:delete"),
   ctrl.deleteLabel,
 );
 

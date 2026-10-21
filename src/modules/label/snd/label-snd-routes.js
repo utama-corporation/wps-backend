@@ -3,10 +3,18 @@ const router = express.Router();
 const verifyToken = require("../../../core/middleware/verify-token");
 const attachPermissions = require("../../../core/middleware/attach-permissions");
 const requirePermission = require("../../../core/middleware/require-permission");
+const { mastersHandler } = require("../label-masters-service");
 const ctrl = require("./label-snd-controller");
 
 router.use(express.json());
 router.use(verifyToken, attachPermissions);
+
+// GET /api/label/snd/masters -> data combo dialog Ubah (jenis kayu, grade, telly, SPK, lokasi)
+router.get(
+  "/label/snd/masters",
+  requirePermission("label_snd:read"),
+  mastersHandler("SANDING", "Sanding"),
+);
 
 // GET /api/label/snd/list -> list semua label
 router.get(
@@ -46,14 +54,14 @@ router.get(
 // PUT /api/label/snd/:nosnd -> update label
 router.put(
   "/label/snd/:nosnd",
-  requirePermission("label_snd:read"),
+  requirePermission("label_snd:update"),
   ctrl.updateLabel,
 );
 
 // DELETE /api/label/snd/:nosnd -> delete label
 router.delete(
   "/label/snd/:nosnd",
-  requirePermission("label_snd:read"),
+  requirePermission("label_snd:delete"),
   ctrl.deleteLabel,
 );
 

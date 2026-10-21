@@ -1,0 +1,51 @@
+const svc = require("./master-operator-service");
+
+const fail = (res, err) => res.status(err.status || 500).json({ success: false, message: err.message });
+
+/* GET /api/master/operator */
+exports.getAll = async (_req, res) => {
+  try {
+    res.json({ success: true, data: await svc.getAll() });
+  } catch (err) {
+    fail(res, err);
+  }
+};
+
+/* GET /api/master/operator/options */
+exports.getOptions = async (_req, res) => {
+  try {
+    res.json({ success: true, data: await svc.getOptions() });
+  } catch (err) {
+    fail(res, err);
+  }
+};
+
+/* POST /api/master/operator */
+exports.create = async (req, res) => {
+  try {
+    const data = await svc.create(req.body || {}, req.username);
+    res.json({ success: true, data, message: "Data master operator berhasil disimpan" });
+  } catch (err) {
+    fail(res, err);
+  }
+};
+
+/* PUT /api/master/operator/:id */
+exports.update = async (req, res) => {
+  try {
+    const data = await svc.update(req.params.id, req.body || {}, req.username);
+    res.json({ success: true, data, message: "Data master operator berhasil diubah" });
+  } catch (err) {
+    fail(res, err);
+  }
+};
+
+/* DELETE /api/master/operator/:id */
+exports.remove = async (req, res) => {
+  try {
+    const data = await svc.remove(req.params.id, req.username);
+    res.json({ success: true, data, message: "Data master operator berhasil dihapus" });
+  } catch (err) {
+    fail(res, err);
+  }
+};

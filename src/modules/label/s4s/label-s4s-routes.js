@@ -3,10 +3,18 @@ const router = express.Router();
 const verifyToken = require("../../../core/middleware/verify-token");
 const attachPermissions = require("../../../core/middleware/attach-permissions");
 const requirePermission = require("../../../core/middleware/require-permission");
+const { mastersHandler } = require("../label-masters-service");
 const ctrl = require("./label-s4s-controller");
 
 router.use(express.json());
 router.use(verifyToken, attachPermissions);
+
+// GET /api/label/s4s/masters -> data combo dialog Ubah (jenis kayu, grade, telly, SPK, lokasi)
+router.get(
+  "/label/s4s/masters",
+  requirePermission("label_s4s:read"),
+  mastersHandler("S4S", "S4S"),
+);
 
 // GET /api/label/s4s/list -> list semua label S4S
 router.get(

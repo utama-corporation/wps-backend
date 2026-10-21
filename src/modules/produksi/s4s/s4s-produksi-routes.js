@@ -20,6 +20,9 @@ router.get("/master-options", requirePermission("proses_s4s:read"), ctrl.getMast
 router.get("/operators", requirePermission("proses_s4s:read"), ctrl.getOperators);
 router.get("/org-telly", requirePermission("proses_s4s:read"), ctrl.getOrgTelly);
 
+// Laporan Produksi S4S per No. Produksi (PDF, via report microservice)
+router.get("/laporan", requirePermission("proses_s4s:read"), ctrl.getLaporan);
+
 // Create (buka produksi baru)
 router.post("/header", requirePermission("proses_s4s:create"), ctrl.saveHeader);
 

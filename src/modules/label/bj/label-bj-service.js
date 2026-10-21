@@ -103,6 +103,41 @@ async function getAllLabels({ search, topRow }) {
 }
 
 /* ============================================================
+ * MASTERS (data combo dialog Ubah)
+ * ==========================================================*/
+
+async function getMasters() {
+  const pool = await poolPromise;
+  const [jenisKayu, barangJadi, orgTelly, spk] = await Promise.all([
+    pool.request().query(`
+      SELECT IdJenisKayu, Jenis
+      FROM MstJenisKayu
+      WHERE [Enable] = 1 AND IsInternal = 1 AND IsNonST = 1
+      ORDER BY Jenis
+    `),
+    pool.request().query(`
+      SELECT IdBarangJadi, NamaBarangJadi
+      FROM MstBarangJadi
+      WHERE [Enable] = 1
+      ORDER BY NamaBarangJadi
+    `),
+    pool.request().query(`
+      SELECT IdOrgTelly, NamaOrgTelly FROM MstOrgTelly ORDER BY NamaOrgTelly
+    `),
+    pool.request().query(`
+      SELECT NoSPK FROM MstSPK_h WHERE [Enable] = 1 ORDER BY NoSPK
+    `),
+  ]);
+
+  return {
+    jenisKayu: jenisKayu.recordset,
+    barangJadi: barangJadi.recordset,
+    orgTelly: orgTelly.recordset,
+    spk: spk.recordset,
+  };
+}
+
+/* ============================================================
  * GET DETAIL BY NO BJ (for V2 list form)
  * ==========================================================*/
 
@@ -342,6 +377,7 @@ async function getLabelData(noBJ) {
 module.exports = {
   getLabelData,
   getAllLabels,
+  getMasters,
   getDetailByNo,
   getHeaderForEdit,
   updateLabel,

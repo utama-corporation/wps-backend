@@ -3,11 +3,19 @@ const router = express.Router();
 const verifyToken = require("../../../core/middleware/verify-token");
 const attachPermissions = require("../../../core/middleware/attach-permissions");
 const requirePermission = require("../../../core/middleware/require-permission");
+const { mastersHandler } = require("../label-masters-service");
 const ctrl = require("./label-lmt-controller");
 
 router.use(express.json());
 // urutan penting: verify → attach → require → controller
 router.use(verifyToken, attachPermissions);
+
+// GET /api/label/lmt/masters -> data combo dialog Ubah (jenis kayu, grade, telly, SPK, lokasi)
+router.get(
+  "/label/lmt/masters",
+  requirePermission("label_lmt:read"),
+  mastersHandler("LAMINATING", "Laminating"),
+);
 
 // GET /api/label/lmt/list -> all labels
 router.get(
@@ -33,14 +41,14 @@ router.get(
 // PUT /api/label/lmt/:nolmt -> update label
 router.put(
   "/label/lmt/:nolmt",
-  requirePermission("label_lmt:read"),
+  requirePermission("label_lmt:update"),
   ctrl.updateLabel,
 );
 
 // DELETE /api/label/lmt/:nolmt -> delete label
 router.delete(
   "/label/lmt/:nolmt",
-  requirePermission("label_lmt:read"),
+  requirePermission("label_lmt:delete"),
   ctrl.deleteLabel,
 );
 

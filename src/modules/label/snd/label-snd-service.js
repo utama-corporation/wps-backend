@@ -93,7 +93,8 @@ async function getAllLabels({ search, topRow }) {
       k.Jenis AS JenisKayu,
       g.NamaGrade AS Grade,
       t.NamaOrgTelly AS Telly,
-      h.NoSPK
+      h.NoSPK,
+      h.IdLokasi
     FROM ${MASTER_TABLE} h
     INNER JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
     LEFT JOIN MstGrade g ON g.IdGrade = h.IdGrade
@@ -140,6 +141,7 @@ async function getHeaderForEdit(noSanding) {
       h.Jam,
       h.NoSPK,
       h.NoSPKAsal,
+      h.IdLokasi,
       h.IdJenisKayu,
       h.IdGrade,
       h.IdOrgTelly,
@@ -172,6 +174,7 @@ async function updateLabel(noSanding, data) {
   req.input("idOrgTelly", sql.Int, data.idOrgTelly || null);
   req.input("noSPK", sql.VarChar(50), data.noSPK || null);
   req.input("noSPKAsal", sql.VarChar(50), data.noSPKAsal || null);
+  req.input("idLokasi", sql.VarChar(50), data.idLokasi || null);
   req.input("isReject", sql.Bit, data.isReject ? 1 : 0);
   req.input("isLembur", sql.Bit, data.isLembur ? 1 : 0);
   req.input("isRepair", sql.Bit, data.isRepair ? 1 : 0);
@@ -183,7 +186,8 @@ async function updateLabel(noSanding, data) {
         IdGrade = @idGrade,
         IdOrgTelly = @idOrgTelly,
         NoSPK = @noSPK,
-        NoSPKAsal = @noSPKAsal,
+        NoSPKAsal = ISNULL(@noSPKAsal, NoSPKAsal),
+        IdLokasi = @idLokasi,
         IsReject = @isReject,
         IsLembur = @isLembur,
         IsRepair = @isRepair,
