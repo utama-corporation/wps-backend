@@ -49,6 +49,6 @@ router.delete("/reject", requirePermission("proses_bj:delete"), ctrl.removeRejec
 router.get("/report/:noProduksi/pdf", requirePermission("proses_bj:read"), ctrl.generateProduksiReportPdf);
 
 // Laporan Produksi per No. Produksi (PDF, via report microservice)
-router.get("/laporan", requirePermission("proses_packing:read"), ctrl.getLaporan);
+router.get("/laporan", requirePermission("proses_bj:read"), ctrl.getLaporan);
 
 module.exports = router;

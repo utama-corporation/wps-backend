@@ -223,6 +223,8 @@ function normalizeUpdate(body) {
   const fName = clean(body?.fName);
   const lName = clean(body?.lName);
   const employeeId = toInt(body?.employeeId);
+  const company = clean(body?.companyId).toUpperCase();
+  const nik = clean(body?.nik);
   const resetPassword = body?.resetPassword === true || body?.resetPassword === 1;
   const groupIds = normalizeGroupIds(body?.idUGroup ?? body?.groupIds);
 
@@ -230,8 +232,11 @@ function normalizeUpdate(body) {
   if (!fName) throw badReq('Silahkan isi Nama Depan.');
   if (!employeeId) throw badReq('Employee ID harus berupa angka.');
   if (!groupIds.length) throw badReq('Pilih minimal 1 Group Permission untuk user ini.');
+  if (nik.length > 10) throw badReq('NIK maksimal 10 karakter.');
+  if (company.length > 10) throw badReq('Company ID maksimal 10 karakter.');
+  if (!!nik !== !!company) throw badReq('NIK dan Company ID harus diisi bersamaan (pilih ulang karyawan).');
 
-  return { idUsername, fName, lName, employeeId, resetPassword, groupIds };
+  return { idUsername, fName, lName, employeeId, company, nik, resetPassword, groupIds };
 }
 
 async function update(body) {
@@ -255,6 +260,18 @@ async function update(body) {
       .input('IdUsername', sql.Int, payload.idUsername);
 
     let updateSql = 'UPDATE [dbo].[MstUsername] SET FName = @FName, LName = @LName, EmployeeID = @EmployeeID';
+    if (payload.nik) {
+      const dupNik = await tx
+        .request()
+        .input('Nik', sql.VarChar, payload.nik)
+        .input('IdUsername', sql.Int, payload.idUsername)
+        .query('SELECT TOP 1 1 FROM [dbo].[MstUsername] WITH (NOLOCK) WHERE Nik = @Nik AND IdUsername <> @IdUsername');
+      if ((dupNik.recordset || []).length) {
+        throw conflict('NIK / Employee Code ini sudah terdaftar sebagai user lain.');
+      }
+      updateRequest.input('CompanyID', sql.VarChar, payload.company).input('Nik', sql.VarChar, payload.nik);
+      updateSql += ', CompanyID = @CompanyID, Nik = @Nik';
+    }
     if (payload.resetPassword) {
       const hashed = hashPassword(DEFAULT_PASSWORD);
       if (!hashed) throw badReq('Gagal meng-hash password');
@@ -278,7 +295,13 @@ async function update(body) {
     }
 
     await tx.commit();
-    return { IdUsername: payload.idUsername, FName: payload.fName, LName: payload.lName, EmployeeID: payload.employeeId };
+    return {
+      IdUsername: payload.idUsername,
+      FName: payload.fName,
+      LName: payload.lName,
+      EmployeeID: payload.employeeId,
+      ...(payload.nik ? { CompanyID: payload.company, Nik: payload.nik } : {}),
+    };
   } catch (error) {
     try {
       await tx.rollback();
