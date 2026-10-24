@@ -2,7 +2,7 @@ const vacuumV2Service = require("./vacuumv2-service");
 
 exports.getMasters = async (req, res) => {
   try {
-    const data = await vacuumV2Service.getMasters(req.username);
+    const data = await vacuumV2Service.getMasters();
     res.json({ success: true, data });
   } catch (err) {
     console.error("Error get masters:", err);

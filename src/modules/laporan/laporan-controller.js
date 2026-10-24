@@ -116,6 +116,14 @@ const PDF_REPORTS = {
     path: "/kayu-bulat/umur-kayu-bulat-non-rambung/pdf",
     params: ["start_date", "end_date"],
   },
+  "target-masuk-bb": {
+    path: "/kayu-bulat/target-masuk-bb/pdf",
+    params: ["start_date", "end_date"],
+  },
+  "target-masuk-bb-bulanan": {
+    path: "/kayu-bulat/target-masuk-bb-bulanan/pdf",
+    params: ["start_date", "end_date"],
+  },
   // --- Kategori Kayu Bulat Rambung (KG) — form FrmLaporan "Kayu Bulat Rambung (KG)".
   "mutasi-kb-kg": {
     path: "/mutasi-kayu-bulat-kg/pdf",
@@ -276,6 +284,27 @@ const PDF_REPORTS = {
   "st-hidup-kering": {
     path: "/sawn-timber/st-hidup-kering/pdf",
     params: ["hari", "include", "exclude"],
+  },
+  "saldo-st-hidup-per-produk": {
+    path: "/sawn-timber/saldo-st-hidup-per-produk/pdf",
+    params: [],
+  },
+  "st-hidup-per-spk": {
+    path: "/sawn-timber/st-hidup-per-spk/pdf",
+    params: [],
+  },
+  // --- QC Sawmill (Sawn Timber) — dari menu QC Sawmill V2.
+  "qc-sawmill": {
+    path: "/sawn-timber/qc-sawmill/pdf",
+    params: ["start_date", "end_date"],
+  },
+  "qc-sawmill-discrepancy": {
+    path: "/sawn-timber/qc-sawmill-discrepancy/pdf",
+    params: ["start_date", "end_date"],
+  },
+  "qc-sawmill-summary": {
+    path: "/sawn-timber/qc-sawmill-summary/pdf",
+    params: ["start_date", "end_date"],
   },
   "output-s4s-grade": {
     path: "/s4s/output-produksi-s4s-per-grade/pdf",
