@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { sql, poolPromise } = require("../../core/config/db");
 const authService = require("./auth-service");
 const getUserPermissions = require("../../core/utils/get-user-permissions");
 
@@ -14,8 +15,27 @@ async function login(req, res) {
       });
     }
 
-    // 🔹 Ambil permission pakai helper (tanpa duplikasi query)
+    // dY"1 Ambil permission pakai helper (tanpa duplikasi query)
     const permissions = await getUserPermissions(user.IdUsername);
+
+    // Ambil group/otoritas user
+    let groupName = "User";
+    try {
+      const pool = await poolPromise;
+      const groupResult = await pool.request()
+        .input("idUsername", sql.Int, user.IdUsername)
+        .query(`
+          SELECT TOP 1 g.UGroupName
+          FROM MstUserGroupMember m
+          LEFT JOIN MstUserGroup g ON g.IdUGroup = m.IdUGroup
+          WHERE m.IdUsername = @idUsername
+        `);
+      if (groupResult.recordset.length > 0 && groupResult.recordset[0].UGroupName) {
+        groupName = groupResult.recordset[0].UGroupName;
+      }
+    } catch (e) {
+      console.error("Error fetching user group:", e);
+    }
 
     const token = jwt.sign(
       {
@@ -34,7 +54,8 @@ async function login(req, res) {
         idUsername: user.IdUsername,
         username: user.Username,
         fullName: `${user.FName ?? ""} ${user.LName ?? ""}`.trim(),
-        permissions, // ✅ ambil dari helper, bukan query ulang
+        permissions, // �o. ambil dari helper, bukan query ulang
+        groupName,
       },
     });
   } catch (err) {
