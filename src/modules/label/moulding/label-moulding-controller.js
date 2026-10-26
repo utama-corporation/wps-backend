@@ -23,6 +23,12 @@ exports.generatePdf = async (req, res) => {
       buildMouldingLabelHtml,
     );
 
+    try {
+      await labelMouldingService.incrementPrintStatus(NoMoulding);
+    } catch (printErr) {
+      console.error("Moulding IncrementPrint Error:", printErr.message);
+    }
+
     res.set({
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="label-moulding-${NoMoulding}.pdf"`,

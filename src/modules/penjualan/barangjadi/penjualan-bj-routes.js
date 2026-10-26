@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const verifyToken = require("../../../core/middleware/verify-token");
 const attachPermissions = require("../../../core/middleware/attach-permissions");
+const requirePermission = require("../../../core/middleware/require-permission");
 const ctrl = require("./penjualan-bj-controller");
 
 router.use(express.json());
@@ -9,6 +10,7 @@ router.use(verifyToken, attachPermissions);
 
 router.get("/penjualan/bj/list",           ctrl.getAll);
 router.get("/penjualan/bj/detail/:noBJJual", ctrl.getDetail);
+router.get("/penjualan/bj/:noBJJual/pdf",  requirePermission("penjualan_bj:read"), ctrl.pdf);
 router.get("/penjualan/bj/generate-no",    ctrl.generateNo);
 router.get("/penjualan/bj/spk-list",       ctrl.getSpkList);
 router.get("/penjualan/bj/lookup-bj/:noBJ", ctrl.lookupBJ);

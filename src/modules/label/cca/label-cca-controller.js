@@ -23,6 +23,12 @@ exports.generatePdf = async (req, res) => {
       buildCcaLabelHtml,
     );
 
+    try {
+      await labelCcaService.incrementPrintStatus(NoCCA);
+    } catch (printErr) {
+      console.error("CCA IncrementPrint Error:", printErr.message);
+    }
+
     res.set({
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="label-cca-${NoCCA}.pdf"`,

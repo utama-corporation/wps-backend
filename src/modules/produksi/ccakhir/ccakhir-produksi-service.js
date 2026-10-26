@@ -300,6 +300,7 @@ async function getDetail(noProduksi) {
         ISNULL(H.IsRepair, 0) AS IsRepair,
         ISNULL(H.IsReject, 0) AS IsReject,
         ISNULL(H.IsLembur, 0) AS IsLembur,
+        ISNULL(H.HasBeenPrinted, 0) AS HasBeenPrinted,
         CAST(NULL AS varchar(100)) AS NamaWarna
       FROM CCAkhirProduksiOutput O
       LEFT JOIN CCAkhir_h H ON H.NoCCAkhir = O.NoCCAkhir
@@ -328,6 +329,7 @@ async function getDetail(noProduksi) {
         ISNULL(H.IsRepair, 0) AS IsRepair,
         ISNULL(H.IsReject, 0) AS IsReject,
         ISNULL(H.IsLembur, 0) AS IsLembur,
+        ISNULL(H.HasBeenPrinted, 0) AS HasBeenPrinted,
         ISNULL(W.NamaWarna, '') AS NamaWarna
       FROM CCAkhirProduksiOutputS4S O
       LEFT JOIN S4S_h H ON H.NoS4S = O.NoS4S
@@ -525,45 +527,34 @@ async function updateHeader(noProduksi, {
 }
 
 /**
- * Ganti produksi: ubah header. Kalau tanggal/shift berubah, buat NoProduksi VA
- * baru dan pindahkan seluruh input/output ke sana; kalau tidak, update in place.
- * Return { noProduksi, createdNew } — noProduksi = nomor yang harus dibuka UI.
+ * Ganti produksi: selalu membuat NoProduksi VA baru — header baru dengan
+ * input & output kosong. Nomor lama beserta seluruh data input/output-nya
+ * TETAP tersimpan (tidak dipindah, tidak dihapus).
+ * Return { noProduksi, createdNew: true } — noProduksi = nomor baru untuk UI.
  */
 async function gantiHeader(noProduksi, {
   shift, tanggal, idMesin, idOperator, jamKerja, jmlhAnggota, hourMeter, jamLembur,
 }) {
   const pool = await poolPromise;
-  // Normalisasi ke YYYY-MM-DD — String(Date) di JS menghasilkan "Mon Sep 07 …".
-  const toYmd = (v) =>
-    v instanceof Date ? v.toISOString().slice(0, 10) : String(v ?? "").slice(0, 10);
   const curRes = await pool
     .request()
     .input("np", sql.VarChar(20), noProduksi)
-    .query("SELECT Tanggal, [Shift] FROM CCAkhirProduksi_h WHERE NoProduksi = @np");
+    .query("SELECT Tanggal FROM CCAkhirProduksi_h WHERE NoProduksi = @np");
   if (!curRes.recordset.length) {
     const err = new Error(`Produksi '${noProduksi}' tidak ditemukan`);
     err.status = 404;
     throw err;
   }
   const cur = curRes.recordset[0];
-  // Ganti = hapus baris lama + buat baru → cek periode tanggal lama & tanggal baru.
-  await assertPeriodeTerbuka(cur.Tanggal);
+  // Hanya tanggal nomor BARU yang harus terbuka — nomor lama tidak disentuh.
   await assertPeriodeTerbuka(tanggal || cur.Tanggal);
-  const curTgl = toYmd(cur.Tanggal);
-  const newTgl = toYmd(tanggal || cur.Tanggal);
-  const sameSlot = curTgl === newTgl && String(cur.Shift) === String(shift ?? cur.Shift);
-
-  if (sameSlot) {
-    await updateHeader(noProduksi, { shift, tanggal, idMesin, idOperator, jamKerja, jmlhAnggota, hourMeter, jamLembur });
-    return { noProduksi, createdNew: false };
-  }
 
   const tx = new sql.Transaction(pool);
   await tx.begin();
   try {
     const genReq = new sql.Request(tx);
     genReq.input("sh", sql.Int, numOr(shift, 1));
-    genReq.input("tgl", sql.Date, tanggal || new Date());
+    genReq.input("tgl", sql.Date, tanggal || cur.Tanggal);
     genReq.input("idm", sql.Int, idMesin);
     genReq.input("ido", sql.Int, idOperator);
     genReq.input("jk", sql.Int, numOr(jamKerja, 0));
@@ -579,28 +570,6 @@ async function gantiHeader(noProduksi, {
       SELECT @np AS NoProduksi;
     `);
     const newNo = genRes.recordset[0].NoProduksi;
-
-    for (const m of Object.values(INPUT_META())) {
-      const r = new sql.Request(tx);
-      r.input("old", sql.VarChar(20), noProduksi);
-      r.input("new", sql.VarChar(20), newNo);
-      await r.query(`UPDATE ${m.input} SET NoProduksi = @new WHERE NoProduksi = @old`);
-    }
-    for (const out of Object.values(OUTPUT_TABLES)) {
-      const r = new sql.Request(tx);
-      r.input("old", sql.VarChar(20), noProduksi);
-      r.input("new", sql.VarChar(20), newNo);
-      await r.query(`UPDATE ${out.table} SET NoProduksi = @new WHERE NoProduksi = @old`);
-    }
-    const rejReq = new sql.Request(tx);
-    rejReq.input("old", sql.VarChar(20), noProduksi);
-    rejReq.input("new", sql.VarChar(20), newNo);
-    await rejReq.query(`UPDATE CCAkhirProduksi_Reject SET NoProduksi = @new WHERE NoProduksi = @old`);
-
-    const delReq = new sql.Request(tx);
-    delReq.input("np", sql.VarChar(20), noProduksi);
-    await delReq.query(`DELETE FROM CCAkhirProduksi_h WHERE NoProduksi = @np`);
-
     await tx.commit();
     return { noProduksi: newNo, createdNew: true };
   } catch (e) {

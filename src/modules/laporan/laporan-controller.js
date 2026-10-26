@@ -588,11 +588,28 @@ const PDF_REPORTS = {
   },
 };
 
+const KATEGORI_KODE = require("./kategori-map");
+
 exports.getPdf = async (req, res) => {
   try {
     const spec = PDF_REPORTS[req.params.kode];
     if (!spec) {
       return res.status(404).json({ success: false, message: "Laporan tidak ditemukan" });
+    }
+
+    // Permission per kategori: laporan:read (semua) ATAU laporan:<slug>:read.
+    const slug = KATEGORI_KODE[req.params.kode];
+    const perms = req.userPermissions;
+    const boleh =
+      perms.has("*") ||
+      perms.has("laporan:read") ||
+      (!!slug && perms.has(`laporan:${slug}:read`));
+    if (!boleh) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: insufficient permission",
+        required: slug ? `laporan:${slug}:read` : "laporan:read",
+      });
     }
 
     const qs = new URLSearchParams();

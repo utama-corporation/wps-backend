@@ -22,6 +22,12 @@ exports.generatePdf = async (req, res) => {
       buildS4sLabelHtml,
     );
 
+    try {
+      await labelS4sService.incrementPrintStatus(NoS4S);
+    } catch (printErr) {
+      console.error("S4S IncrementPrint Error:", printErr.message);
+    }
+
     res.set({
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="label-s4s-${NoS4S}.pdf"`,

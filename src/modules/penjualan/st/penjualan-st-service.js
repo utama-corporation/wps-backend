@@ -650,7 +650,15 @@ async function getLabelInfo(rawLabel) {
   };
 }
 
+/* Data cetak Surat Jalan ST: sp_InvoiceSTSND (paritas CrPenjualan* di VB) */
+async function getInvoiceRows(noJual) {
+  const pool = await poolPromise;
+  const r = await pool.request().input("NoJual", sql.VarChar(20), String(noJual || "").trim()).execute("sp_InvoiceSTSND");
+  return r.recordset || [];
+}
+
 module.exports = {
+  getInvoiceRows,
   getAll,
   getMasters,
   getDetail,

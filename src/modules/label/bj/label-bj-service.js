@@ -374,7 +374,23 @@ async function getLabelData(noBJ) {
   };
 }
 
+/** Tambah hitungan cetak label (BarangJadi_h.HasBeenPrinted) + waktu cetak terakhir. */
+async function incrementPrintStatus(noPacking) {
+  const pool = await poolPromise;
+  const result = await pool
+    .request()
+    .input("no", sql.VarChar(50), noPacking)
+    .query(`
+      UPDATE ${MASTER_TABLE}
+      SET HasBeenPrinted = COALESCE(HasBeenPrinted, 0) + 1,
+          LastPrintDate = GETDATE()
+      WHERE ${KEY_COLUMN} = @no
+    `);
+  return result.rowsAffected[0] > 0;
+}
+
 module.exports = {
+  incrementPrintStatus,
   getLabelData,
   getAllLabels,
   getMasters,

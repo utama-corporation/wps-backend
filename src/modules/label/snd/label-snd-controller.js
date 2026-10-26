@@ -22,6 +22,12 @@ exports.generatePdf = async (req, res) => {
       buildSndLabelHtml,
     );
 
+    try {
+      await labelSndService.incrementPrintStatus(NoSND);
+    } catch (printErr) {
+      console.error("Sanding IncrementPrint Error:", printErr.message);
+    }
+
     res.set({
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="label-snd-${NoSND}.pdf"`,

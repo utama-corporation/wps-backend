@@ -46,12 +46,15 @@ function resolvePageSize(options) {
  * @param {string} [options.height]      - eksplisit, menang atas format/orientation
  * @param {number} [options.scale]       - 0.1 - 2, default 1
  * @param {string} [options.title]        - judul di footer, default "WPS - Laporan Produksi"
+ * @param {object} [options.margin]       - margin halaman (top/right/bottom/left), default 12/10/12/10 mm
+ * @param {string} [options.footerTemplate] - HTML footer Chromium; menggantikan footer bawaan
  * @returns {Promise<Buffer>} PDF buffer
  */
 async function generateReportPdf(html, options = {}) {
   const scale = options.scale || 1;
   const printedBy = escapeHtml(options.printedBy || "-");
   const title = escapeHtml(options.title || "WPS - Laporan Produksi");
+  const margin = options.margin || { top: "12mm", right: "10mm", bottom: "12mm", left: "10mm" };
   const size = resolvePageSize(options);
 
   const browser = await getBrowser();
@@ -68,10 +71,12 @@ async function generateReportPdf(html, options = {}) {
       height: size.height,
       scale,
       printBackground: true,
-      margin: { top: "12mm", right: "10mm", bottom: "12mm", left: "10mm" },
+      margin,
       displayHeaderFooter: true,
       headerTemplate: "<div></div>",
-      footerTemplate: `
+      footerTemplate:
+        options.footerTemplate ||
+        `
         <div style="width:100%;font-size:9px;font-family:Arial,sans-serif;color:#555;
                     padding:0 10mm;display:flex;justify-content:space-between;align-items:center;">
           <span>Print by : ${printedBy}</span>

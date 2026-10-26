@@ -1,4 +1,6 @@
 const svc = require("./penjualan-bj-service");
+const { generateReportPdf } = require("../../../core/utils/pdf/report-generator");
+const { buildPenjualanBJ } = require("../../../core/utils/pdf/templates/penjualan-pdf/penjualan-report");
 
 /* GET /api/penjualan/bj/list */
 exports.getAll = async (req, res) => {
@@ -91,6 +93,27 @@ exports.scanBJ = async (req, res) => {
     const { noBJJual, noBJ, tglJual, user } = req.body;
     const result = await svc.scanBJ(noBJJual, noBJ, tglJual, user);
     res.json({ success: true, data: result.data, message: "Label BJ " + noBJ + " berhasil ditambahkan." });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/* GET /api/penjualan/bj/:noBJJual/pdf — Laporan Penjualan Barang Jadi (M3) */
+exports.pdf = async (req, res) => {
+  try {
+    const no = String(req.params.noBJJual || "").trim();
+    const rows = await svc.getReportRows(no);
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: "Data penjualan barang jadi tidak ditemukan / belum ada label" });
+    }
+    const { html, options } = buildPenjualanBJ(rows, { printedBy: req.username || "" });
+    const pdf = await generateReportPdf(html, options);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": 'inline; filename="PenjualanBJ_' + no + '.pdf"',
+      "Content-Length": pdf.length,
+    });
+    return res.end(pdf);
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

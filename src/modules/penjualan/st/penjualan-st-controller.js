@@ -1,4 +1,6 @@
 const svc = require("./penjualan-st-service");
+const { generateReportPdf } = require("../../../core/utils/pdf/report-generator");
+const { buildSuratJalanST } = require("../../../core/utils/pdf/templates/penjualan-pdf/penjualan-report");
 
 const fail = (res, err) => res.status(err.status || 500).json({ success: false, message: err.message });
 
@@ -100,6 +102,27 @@ exports.getLabelInfo = async (req, res) => {
   try {
     const data = await svc.getLabelInfo(req.query.label);
     res.json({ success: true, data });
+  } catch (err) {
+    fail(res, err);
+  }
+};
+
+/* GET /api/penjualan/st/:noJual/pdf — Surat Jalan ST */
+exports.pdf = async (req, res) => {
+  try {
+    const noJual = String(req.params.noJual || "").trim();
+    const rows = await svc.getInvoiceRows(noJual);
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: "Data penjualan ST tidak ditemukan / belum ada label ST" });
+    }
+    const { html, options } = buildSuratJalanST(rows, { printedBy: req.username || "" });
+    const pdf = await generateReportPdf(html, options);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": 'inline; filename="SuratJalan_' + noJual + '.pdf"',
+      "Content-Length": pdf.length,
+    });
+    return res.end(pdf);
   } catch (err) {
     fail(res, err);
   }

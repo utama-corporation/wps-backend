@@ -11,6 +11,7 @@ router.use(verifyToken, attachPermissions);
 router.get("/penjualan/st/list", requirePermission("penjualan_st_snd:read"), ctrl.getAll);
 router.get("/penjualan/st/masters", requirePermission("penjualan_st_snd:read"), ctrl.getMasters);
 router.get("/penjualan/st/label-info", requirePermission("penjualan_st_snd:read"), ctrl.getLabelInfo);
+router.get("/penjualan/st/:noJual/pdf", requirePermission("penjualan_st_snd:read"), ctrl.pdf);
 router.get("/penjualan/st/detail/:noJual", requirePermission("penjualan_st_snd:read"), ctrl.getDetail);
 router.get("/penjualan/st/scan-ready/:noJual", requirePermission("penjualan_st_snd:read"), ctrl.scanReady);
 router.post("/penjualan/st/lookup", requirePermission("penjualan_st_snd:read"), ctrl.lookup);

@@ -395,7 +395,18 @@ async function scanBJ(noBJJual, noBJ, tglJual, user) {
   }
 }
 
+/* Data cetak Laporan Penjualan Barang Jadi: SP_LapPenjualanBarangJadi (paritas FrmBJJual.vb) */
+async function getReportRows(noBJJual) {
+  const pool = await poolPromise;
+  const r = await pool
+    .request()
+    .input("NoJual", sql.VarChar(15), String(noBJJual || "").trim())
+    .execute("SP_LapPenjualanBarangJadi");
+  return r.recordset || [];
+}
+
 module.exports = {
+  getReportRows,
   getAll,
   getDetail,
   generateNo,

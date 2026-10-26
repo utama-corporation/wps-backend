@@ -23,6 +23,12 @@ exports.generatePdf = async (req, res) => {
       buildLmtLabelHtml,
     );
 
+    try {
+      await labelLmtService.incrementPrintStatus(NoLmt);
+    } catch (printErr) {
+      console.error("Laminating IncrementPrint Error:", printErr.message);
+    }
+
     res.set({
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="label-lmt-${NoLmt}.pdf"`,

@@ -279,7 +279,11 @@ async function getDetail(noProduksi) {
       ISNULL(H.IsRepair, 0) AS IsRepair,
       ISNULL(H.IsReject, 0) AS IsReject,
       ISNULL(H.IsLembur, 0) AS IsLembur,
+<<<<<<< Updated upstream
       ISNULL(H.NoS4SAsal, '') AS NoS4SAsal,
+=======
+      ISNULL(H.HasBeenPrinted, 0) AS HasBeenPrinted,
+>>>>>>> Stashed changes
       NULL AS NamaWarna
     FROM FJProduksiOutput O
     LEFT JOIN FJ_h H ON H.NoFJ = O.NoFJ
@@ -461,47 +465,36 @@ async function updateHeader(noProduksi, {
 }
 
 /**
- * Ganti produksi: ubah header. Kalau tanggal/shift berubah, buat NoProduksi SA
- * baru dan pindahkan seluruh input/output ke sana; kalau tidak, update in place.
- * Return { noProduksi, createdNew } — noProduksi = nomor yang harus dibuka UI.
+ * Ganti produksi: selalu membuat NoProduksi SA baru — header baru dengan
+ * input & output kosong. Nomor lama beserta seluruh data input/output-nya
+ * TETAP tersimpan (tidak dipindah, tidak dihapus).
+ * Return { noProduksi, createdNew: true } — noProduksi = nomor baru untuk UI.
  */
 async function gantiHeader(noProduksi, {
   shift, tanggal, idMesin, idOperator, jamKerja, jmlhAnggota, hourMeter, jamLembur,
 }) {
   const pool = await poolPromise;
-  // Normalisasi ke YYYY-MM-DD — String(Date) di JS menghasilkan "Mon Sep 07 …".
-  const toYmd = (v) =>
-    v instanceof Date ? v.toISOString().slice(0, 10) : String(v ?? "").slice(0, 10);
   const curRes = await pool
     .request()
     .input("np", sql.VarChar(20), noProduksi)
-    .query("SELECT Tanggal, [Shift] FROM FJProduksi_h WHERE NoProduksi = @np");
+    .query("SELECT Tanggal, IdMesin, IdOperator FROM FJProduksi_h WHERE NoProduksi = @np");
   if (!curRes.recordset.length) {
     const err = new Error(`Produksi '${noProduksi}' tidak ditemukan`);
     err.status = 404;
     throw err;
   }
   const cur = curRes.recordset[0];
-  // Ganti = hapus baris lama + buat baru → cek periode tanggal lama & tanggal baru.
-  await assertPeriodeTerbuka(cur.Tanggal);
+  // Hanya tanggal nomor BARU yang harus terbuka — nomor lama tidak disentuh.
   await assertPeriodeTerbuka(tanggal || cur.Tanggal);
-  const curTgl = toYmd(cur.Tanggal);
-  const newTgl = toYmd(tanggal || cur.Tanggal);
-  const sameSlot = curTgl === newTgl && String(cur.Shift) === String(shift ?? cur.Shift);
-
-  if (sameSlot) {
-    await updateHeader(noProduksi, { shift, tanggal, idMesin, idOperator, jamKerja, jmlhAnggota, hourMeter, jamLembur });
-    return { noProduksi, createdNew: false };
-  }
 
   const tx = new sql.Transaction(pool);
   await tx.begin();
   try {
     const genReq = new sql.Request(tx);
     genReq.input("sh", sql.VarChar(20), String(shift ?? ""));
-    genReq.input("tgl", sql.Date, tanggal || new Date());
-    genReq.input("idm", sql.Int, idMesin);
-    genReq.input("ido", sql.Int, idOperator);
+    genReq.input("tgl", sql.Date, tanggal || cur.Tanggal);
+    genReq.input("idm", sql.Int, idMesin ?? cur.IdMesin);
+    genReq.input("ido", sql.Int, idOperator ?? cur.IdOperator);
     genReq.input("jk", sql.VarChar(10), String(jamKerja ?? ""));
     genReq.input("ja", sql.Int, jmlhAnggota || 0);
     genReq.input("hm", sql.VarChar(20), String(hourMeter ?? ""));
@@ -515,23 +508,6 @@ async function gantiHeader(noProduksi, {
       SELECT @np AS NoProduksi;
     `);
     const newNo = genRes.recordset[0].NoProduksi;
-
-    for (const m of Object.values(INPUT_META())) {
-      const r = new sql.Request(tx);
-      r.input("old", sql.VarChar(20), noProduksi);
-      r.input("new", sql.VarChar(20), newNo);
-      await r.query(`UPDATE ${m.input} SET NoProduksi = @new WHERE NoProduksi = @old`);
-    }
-    const outReq = new sql.Request(tx);
-    outReq.input("old", sql.VarChar(20), noProduksi);
-    outReq.input("new", sql.VarChar(20), newNo);
-    await outReq.query(`UPDATE FJProduksiOutput SET NoProduksi = @new WHERE NoProduksi = @old`);
-    await outReq.query(`UPDATE FJProduksi_Reject SET NoProduksi = @new WHERE NoProduksi = @old`);
-
-    const delReq = new sql.Request(tx);
-    delReq.input("np", sql.VarChar(20), noProduksi);
-    await delReq.query(`DELETE FROM FJProduksi_h WHERE NoProduksi = @np`);
-
     await tx.commit();
     return { noProduksi: newNo, createdNew: true };
   } catch (e) {

@@ -22,6 +22,12 @@ exports.generatePdf = async (req, res) => {
       buildBjLabelHtml,
     );
 
+    try {
+      await labelBjService.incrementPrintStatus(NoBJ);
+    } catch (printErr) {
+      console.error("BJ IncrementPrint Error:", printErr.message);
+    }
+
     res.set({
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="label-bj-${NoBJ}.pdf"`,
