@@ -40,22 +40,8 @@ async function generateNo(transaction) {
   return result.recordset[0]?.NoVacuumV2 || "LA.000001";
 }
 
-// Helper cek-permission ubah/hapus (group 27, sama seperti form legacy)
-async function bisaUbahHapus(username) {
-  if (!username) return false;
-  const pool = await poolPromise;
-  const result = await pool.request()
-    .input("Username", sql.VarChar, username)
-    .query(`
-      SELECT B.IdUGroup FROM MstUsername A
-      INNER JOIN MstUserGroupMember B ON B.IdUsername = A.IdUsername
-      WHERE A.Username = @Username AND B.IdUGroup = 27
-    `);
-  return result.recordset.length > 0;
-}
-
 // Master data untuk isi combo (tangki chemical, tabung vacuum, jenis kayu) + permission
-exports.getMasters = async (username) => {
+exports.getMasters = async () => {
   const pool = await poolPromise;
 
   const chemical = await pool.request().query(`
@@ -97,7 +83,6 @@ exports.getMasters = async (username) => {
     chemical: chemicalWithJenis,
     vacuum_tube: vacuumTube.recordset,
     jenis_kayu: jenisKayu.recordset,
-    boleh_ubah_hapus: await bisaUbahHapus(username),
   };
 };
 
