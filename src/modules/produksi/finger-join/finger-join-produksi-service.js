@@ -279,6 +279,7 @@ async function getDetail(noProduksi) {
       ISNULL(H.IsRepair, 0) AS IsRepair,
       ISNULL(H.IsReject, 0) AS IsReject,
       ISNULL(H.IsLembur, 0) AS IsLembur,
+      ISNULL(H.NoS4SAsal, '') AS NoS4SAsal,
       NULL AS NamaWarna
     FROM FJProduksiOutput O
     LEFT JOIN FJ_h H ON H.NoFJ = O.NoFJ
