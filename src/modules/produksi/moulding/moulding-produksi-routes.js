@@ -44,7 +44,7 @@ router.delete("/input/temporary", requirePermission("proses_mld:delete"), ctrl.b
 router.delete("/output", requirePermission("proses_mld:delete"), ctrl.removeOutput);
 router.delete("/reject", requirePermission("proses_mld:delete"), ctrl.removeReject);
 
-// Laporan produksi (PDF) per nomor produksi
+// Laporan produksi (PDF) per nomor produksi tes
 router.get("/report/:noProduksi/pdf", requirePermission("proses_mld:read"), ctrl.generateProduksiReportPdf);
 
 // Laporan Produksi per No. Produksi (PDF, via report microservice)
