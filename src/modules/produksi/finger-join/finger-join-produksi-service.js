@@ -279,11 +279,8 @@ async function getDetail(noProduksi) {
       ISNULL(H.IsRepair, 0) AS IsRepair,
       ISNULL(H.IsReject, 0) AS IsReject,
       ISNULL(H.IsLembur, 0) AS IsLembur,
-<<<<<<< Updated upstream
       ISNULL(H.NoS4SAsal, '') AS NoS4SAsal,
-=======
       ISNULL(H.HasBeenPrinted, 0) AS HasBeenPrinted,
->>>>>>> Stashed changes
       NULL AS NamaWarna
     FROM FJProduksiOutput O
     LEFT JOIN FJ_h H ON H.NoFJ = O.NoFJ
