@@ -1070,6 +1070,7 @@ async function removeReject(body) {
   const req = rejectRequest(pool, noProduksi, d);
   // Baris lama bisa ber-UOM NULL (dibuat sebelum kolom UOM dipakai) → cocokkan null-safe,
   // dan pakai UOM apa adanya dari body (tanpa default) agar NULL tetap NULL.
+  //Tes simpan
   const rawUom = (v) => (v == null || v === "" ? null : Number(v));
   req.parameters.ul.value = rawUom(body.idUOMTblLebar);
   req.parameters.up.value = rawUom(body.idUOMPanjang);
