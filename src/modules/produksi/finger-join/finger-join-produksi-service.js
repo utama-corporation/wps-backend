@@ -373,6 +373,12 @@ async function getOperators() {
   return result.recordset;
 }
 
+// HourMeter di DB float — "53.4" boleh, kosong jadi NULL (bukan string '' yang
+// gagal konversi ke float).
+function numOrNull(v) {
+  return v == null || v === "" ? null : Number(v);
+}
+
 async function saveHeader({
   shift, tanggal, idMesin, idOperator, jamKerja, jmlhAnggota, hourMeter, jamLembur,
 }) {
@@ -383,9 +389,9 @@ async function saveHeader({
   req.input("tgl", sql.Date, tanggal || new Date());
   req.input("idm", sql.Int, idMesin);
   req.input("ido", sql.Int, idOperator);
-  req.input("jk", sql.VarChar(10), jamKerja || "");
+  req.input("jk", sql.Int, numOrNull(jamKerja));
   req.input("ja", sql.Int, jmlhAnggota || 0);
-  req.input("hm", sql.VarChar(20), hourMeter || "");
+  req.input("hm", sql.Float, numOrNull(hourMeter));
   req.input("jl", sql.Int, jamLembur || null);
 
   const result = await req.query(`
@@ -393,7 +399,7 @@ async function saveHeader({
     SELECT @np = 'SA.' + FORMAT(RIGHT(ISNULL(MAX(NoProduksi), 'SA.000000'), 6) + 1, '000000')
     FROM FJProduksi_h;
     INSERT INTO FJProduksi_h (NoProduksi, [Shift], Tanggal, IdMesin, IdOperator, JamKerja, JmlhAnggota, HourMeter, JamLembur)
-    VALUES (@np, @sh, @tgl, @idm, @ido, @jk, @ja, NULLIF(@hm, ''), @jl);
+    VALUES (@np, @sh, @tgl, @idm, @ido, @jk, @ja, @hm, @jl);
     SELECT @np AS NoProduksi;
   `);
 
@@ -411,9 +417,9 @@ async function getHeader(noProduksi) {
         h.Tanggal,
         h.IdMesin,
         h.IdOperator,
-        ISNULL(h.JamKerja, '') AS JamKerja,
+        ISNULL(CAST(h.JamKerja AS varchar(10)), '') AS JamKerja,
         ISNULL(h.JmlhAnggota, 0) AS JmlhAnggota,
-        ISNULL(h.HourMeter, '') AS HourMeter,
+        ISNULL(CAST(h.HourMeter AS varchar(20)), '') AS HourMeter,
         ISNULL(h.JamLembur, 0) AS JamLembur,
         ISNULL(m.NamaMesin, '-') AS NamaMesin,
         ISNULL(o.NamaOperator, '-') AS NamaOperator
@@ -448,14 +454,14 @@ async function updateHeader(noProduksi, {
   req.input("tgl", sql.Date, tanggal || new Date());
   req.input("idm", sql.Int, idMesin);
   req.input("ido", sql.Int, idOperator);
-  req.input("jk", sql.VarChar(10), String(jamKerja ?? ""));
+  req.input("jk", sql.Int, numOrNull(jamKerja));
   req.input("ja", sql.Int, jmlhAnggota || 0);
-  req.input("hm", sql.VarChar(20), String(hourMeter ?? ""));
+  req.input("hm", sql.Float, numOrNull(hourMeter));
   req.input("jl", sql.Int, jamLembur == null || jamLembur === "" ? null : Number(jamLembur));
   await req.query(`
     UPDATE FJProduksi_h
     SET [Shift] = @sh, Tanggal = @tgl, IdMesin = @idm, IdOperator = @ido,
-        JamKerja = @jk, JmlhAnggota = @ja, HourMeter = NULLIF(@hm, ''), JamLembur = @jl
+        JamKerja = @jk, JmlhAnggota = @ja, HourMeter = @hm, JamLembur = @jl
     WHERE NoProduksi = @np
   `);
   return { noProduksi };
@@ -492,16 +498,16 @@ async function gantiHeader(noProduksi, {
     genReq.input("tgl", sql.Date, tanggal || cur.Tanggal);
     genReq.input("idm", sql.Int, idMesin ?? cur.IdMesin);
     genReq.input("ido", sql.Int, idOperator ?? cur.IdOperator);
-    genReq.input("jk", sql.VarChar(10), String(jamKerja ?? ""));
+    genReq.input("jk", sql.Int, numOrNull(jamKerja));
     genReq.input("ja", sql.Int, jmlhAnggota || 0);
-    genReq.input("hm", sql.VarChar(20), String(hourMeter ?? ""));
+    genReq.input("hm", sql.Float, numOrNull(hourMeter));
     genReq.input("jl", sql.Int, jamLembur == null || jamLembur === "" ? null : Number(jamLembur));
     const genRes = await genReq.query(`
       DECLARE @np VARCHAR(20);
       SELECT @np = 'SA.' + FORMAT(RIGHT(ISNULL(MAX(NoProduksi), 'SA.000000'), 6) + 1, '000000')
       FROM FJProduksi_h WITH (UPDLOCK, HOLDLOCK);
       INSERT INTO FJProduksi_h (NoProduksi, [Shift], Tanggal, IdMesin, IdOperator, JamKerja, JmlhAnggota, HourMeter, JamLembur)
-      VALUES (@np, @sh, @tgl, @idm, @ido, @jk, @ja, NULLIF(@hm, ''), @jl);
+      VALUES (@np, @sh, @tgl, @idm, @ido, @jk, @ja, @hm, @jl);
       SELECT @np AS NoProduksi;
     `);
     const newNo = genRes.recordset[0].NoProduksi;

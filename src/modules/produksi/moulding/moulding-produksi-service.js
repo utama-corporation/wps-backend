@@ -390,7 +390,7 @@ async function saveHeader({
   req.input("tgl", sql.Date, tanggal || new Date());
   req.input("idm", sql.Int, idMesin);
   req.input("ido", sql.Int, idOperator);
-  req.input("jk", sql.Int, numOr(jamKerja, 0));
+  req.input("jk", sql.Int, numOrNull(jamKerja));
   req.input("ja", sql.Int, numOr(jmlhAnggota, 0));
   req.input("hm", sql.Float, numOrNull(hourMeter));
   req.input("jl", sql.Int, numOrNull(jamLembur));
@@ -455,7 +455,7 @@ async function updateHeader(noProduksi, {
   req.input("tgl", sql.Date, tanggal || new Date());
   req.input("idm", sql.Int, idMesin);
   req.input("ido", sql.Int, idOperator);
-  req.input("jk", sql.Int, numOr(jamKerja, 0));
+  req.input("jk", sql.Int, numOrNull(jamKerja));
   req.input("ja", sql.Int, numOr(jmlhAnggota, 0));
   req.input("hm", sql.Float, numOrNull(hourMeter));
   req.input("jl", sql.Int, numOrNull(jamLembur));
@@ -499,7 +499,7 @@ async function gantiHeader(noProduksi, {
     genReq.input("tgl", sql.Date, tanggal || cur.Tanggal);
     genReq.input("idm", sql.Int, idMesin ?? cur.IdMesin);
     genReq.input("ido", sql.Int, idOperator ?? cur.IdOperator);
-    genReq.input("jk", sql.Int, numOr(jamKerja, 0));
+    genReq.input("jk", sql.Int, numOrNull(jamKerja));
     genReq.input("ja", sql.Int, numOr(jmlhAnggota, 0));
     genReq.input("hm", sql.Float, numOrNull(hourMeter));
     genReq.input("jl", sql.Int, numOrNull(jamLembur));

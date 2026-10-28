@@ -309,6 +309,12 @@ async function getOperators() {
   return result.recordset;
 }
 
+// HourMeter di DB float — "53.4" boleh, kosong jadi NULL (bukan string '' yang
+// gagal konversi ke float).
+function numOrNull(v) {
+  return v == null || v === "" ? null : Number(v);
+}
+
 async function saveHeader({
   shift, tanggal, idMesin, idOperator, jamKerja, jmlhAnggota, hourMeter,
 }) {
@@ -320,9 +326,9 @@ async function saveHeader({
   req.input("tgl", sql.Date, tanggal || new Date());
   req.input("idm", sql.Int, idMesin);
   req.input("ido", sql.Int, idOperator);
-  req.input("jk", sql.VarChar(10), jamKerja || "");
+  req.input("jk", sql.Int, numOrNull(jamKerja));
   req.input("ja", sql.Int, jmlhAnggota || 0);
-  req.input("hm", sql.VarChar(20), hourMeter || "");
+  req.input("hm", sql.Float, numOrNull(hourMeter));
 
   const result = await req.query(`
     DECLARE @np VARCHAR(20);
@@ -897,9 +903,9 @@ async function updateHeader(noProduksi, {
   req.input("tgl", sql.Date, tanggal || new Date());
   req.input("idm", sql.Int, idMesin);
   req.input("ido", sql.Int, idOperator);
-  req.input("jk", sql.VarChar(10), String(jamKerja ?? ""));
+  req.input("jk", sql.Int, numOrNull(jamKerja));
   req.input("ja", sql.Int, jmlhAnggota || 0);
-  req.input("hm", sql.VarChar(20), String(hourMeter ?? ""));
+  req.input("hm", sql.Float, numOrNull(hourMeter));
   await req.query(`
     UPDATE S4SProduksi_h
     SET [Shift] = @sh, Tanggal = @tgl, IdMesin = @idm, IdOperator = @ido,
@@ -940,9 +946,9 @@ async function gantiHeader(noProduksi, {
     genReq.input("tgl", sql.Date, tanggal || cur.Tanggal);
     genReq.input("idm", sql.Int, idMesin ?? cur.IdMesin);
     genReq.input("ido", sql.Int, idOperator ?? cur.IdOperator);
-    genReq.input("jk", sql.VarChar(10), String(jamKerja ?? ""));
+    genReq.input("jk", sql.Int, numOrNull(jamKerja));
     genReq.input("ja", sql.Int, jmlhAnggota || 0);
-    genReq.input("hm", sql.VarChar(20), String(hourMeter ?? ""));
+    genReq.input("hm", sql.Float, numOrNull(hourMeter));
     const genRes = await genReq.query(`
       DECLARE @np VARCHAR(20);
       SELECT @np = 'RA.' + FORMAT(RIGHT(ISNULL(MAX(NoProduksi), 'RA.000000'), 6) + 1, '000000')

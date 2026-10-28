@@ -60,7 +60,11 @@ const masterTargetKayuBulatRoutes = require("./modules/master-target-kayu-bulat/
 const masterLosstimeFaktorRoutes = require("./modules/master-losstime-faktor/master-losstime-faktor-routes");
 const masterLosstimePlanningRoutes = require("./modules/master-losstime-planning/master-losstime-planning-routes");
 const masterHolidayRoutes = require("./modules/master-holiday/master-holiday-routes");
+const masterOtherSupplierRoutes = require("./modules/master-other-supplier/master-other-supplier-routes");
+const masterUomRoutes = require("./modules/master-uom/master-uom-routes");
+const masterGolPengukuranRoutes = require("./modules/master-gol-pengukuran/master-gol-pengukuran-routes");
 const mstUserRoutes = require("./modules/mst-user/mst-user-route");
+  const mstUserSoRoutes = require("./modules/mst-user-so/mst-user-so-route");
 const masterPermissionGroupRoutes = require("./modules/master-permission-group/master-permission-group-routes");
 const mesinSawmill = require("./modules/mesin-sawmill/mesin-sawmill-routes");
 const stSawmill = require("./modules/st-sawmill/st-sawmill-route");
@@ -101,6 +105,7 @@ const bongkarSusunRoutes = require('./modules/bongkar-susun/bongkar-susun-routes
 const gradeAbcRoutes = require('./modules/grade-abc/grade-abc-routes');
 const nyangkutManageRoutes = require('./modules/nyangkut/nyangkut-manage-routes');
 const laporanRoutes = require('./modules/laporan/laporan-routes');
+const labelListRoutes = require('./modules/label-list/label-list-routes');
 
 const app = express();
 
@@ -141,6 +146,9 @@ app.use("/api/master/group-kayu", masterGroupKayuRoutes);
 app.use("/api/master/supplier-group-kayu", masterSupplierGroupKayuRoutes);
 app.use("/api/supplier-intel", supplierIntelRoutes);
 app.use("/api/master/grade-kb", masterGradeKbRoutes);
+app.use("/api/master/other-supplier", masterOtherSupplierRoutes);
+app.use("/api/master/uom", masterUomRoutes);
+app.use("/api/master/gol-pengukuran", masterGolPengukuranRoutes);
 app.use("/api/master/mesin", masterMesinRoutes);
 app.use("/api/master/mesin-sawmill", masterMesinSawmillRoutes);
 app.use("/api/master/operator", masterOperatorRoutes);
@@ -178,6 +186,7 @@ app.use("/api/master/losstime-faktor", masterLosstimeFaktorRoutes);
 app.use("/api/master/losstime-planning", masterLosstimePlanningRoutes);
 app.use("/api/master/holiday", masterHolidayRoutes);
 app.use("/api/mst-user", mstUserRoutes);
+  app.use("/api/mst-user-so", mstUserSoRoutes);
 app.use("/api/master-permission-group", masterPermissionGroupRoutes);
 app.use("/api/mesin-sawmill", mesinSawmill);
 app.use("/api/sawmill", stSawmill);
@@ -218,5 +227,7 @@ app.use("/api", bongkarSusunRoutes);
 app.use("/api", gradeAbcRoutes);
 app.use("/api", nyangkutManageRoutes);
 app.use("/api/laporan", laporanRoutes);
+// Bukan "/api/label-list": path itu sudah dipakai modul mapping (tablet).
+app.use("/api/label-explorer", labelListRoutes);
 
 module.exports = app;
