@@ -608,7 +608,8 @@ async function createLabel({
   isRepair, isReject, isLembur, noProduksi,
   idUsername,
 }) {
-  await assertPeriodeTerbuka(noProduksi ? await getTanggalProduksi(noProduksi) : new Date());
+  const tanggalProduksi = noProduksi ? await getTanggalProduksi(noProduksi) : null;
+  await assertPeriodeTerbuka(tanggalProduksi || new Date());
 
   const raw = Array.isArray(ukuran) && ukuran.length
     ? ukuran
@@ -682,6 +683,8 @@ async function createLabel({
   req.input("isrep", sql.Bit, isRepair ? 1 : 0);
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
+  // Saat dibuat dari halaman produksi, DateCreate mengikuti tanggal header produksi.
+  req.input("tgl", sql.Date, tanggalProduksi || new Date());
 
   const dimTuples = rows.map((r, i) => {
     req.input(`t${i}`, sql.VarChar(20), r.tebal);
@@ -697,7 +700,7 @@ async function createLabel({
       SELECT @ns = ISNULL('I.' + FORMAT(RIGHT(MAX(NoBJ), 6) + 1, '000000'), 'I.000001')
       FROM BarangJadi_h WITH (UPDLOCK, HOLDLOCK);
       INSERT INTO BarangJadi_h (NoBJ, IdJenisKayu, IdBarangJadi, DateCreate, DateUsage, IdOrgTelly, IdFJProfile, NoSPK, NoSPKAsal, Jam, IsReject, IsRepair, IsSisa, NoWIPAsal, NoMouldingAsal, NoSandingAsal, IdWarehouse, IdLokasi, IsLembur, HasBeenPrinted)
-      VALUES (@ns, @jk, @bj, GETDATE(), NULL, @otel, @fj, NULLIF(@nospk, ''), NULLIF(@stasal, ''), FORMAT(GETDATE(), 'HH:mm'), @isrej, @isrep, 0, NULLIF(@nwip, ''), NULLIF(@nmou, ''), NULLIF(@nsan, ''), @wh, @lok, @isleb, 0);
+      VALUES (@ns, @jk, @bj, @tgl, NULL, @otel, @fj, NULLIF(@nospk, ''), NULLIF(@stasal, ''), FORMAT(GETDATE(), 'HH:mm'), @isrej, @isrep, 0, NULLIF(@nwip, ''), NULLIF(@nmou, ''), NULLIF(@nsan, ''), @wh, @lok, @isleb, 0);
       INSERT INTO BarangJadi_d (NoBJ, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};

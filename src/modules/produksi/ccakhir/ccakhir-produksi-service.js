@@ -634,7 +634,8 @@ async function createLabel({
   isRepair, isReject, isLembur, idWarna, noProduksi,
   idUsername,
 }) {
-  await assertPeriodeTerbuka(noProduksi ? await getTanggalProduksi(noProduksi) : new Date());
+  const tanggalProduksi = noProduksi ? await getTanggalProduksi(noProduksi) : null;
+  await assertPeriodeTerbuka(tanggalProduksi || new Date());
   const cat = normalizeKategori(kategori);
   const out = OUTPUT_TABLES[cat];
 
@@ -700,6 +701,8 @@ async function createLabel({
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
   req.input("wrn", sql.Int, idWarna ? Number(idWarna) : null);
+  // Saat dibuat dari halaman produksi, DateCreate mengikuti tanggal header produksi.
+  req.input("tgl", sql.Date, tanggalProduksi || new Date());
 
   const dimTuples = rows.map((r, i) => {
     req.input(`t${i}`, sql.VarChar(20), r.tebal);
@@ -713,9 +716,9 @@ async function createLabel({
   // dilanjuti INSERT detail sehingga error aslinya tertutupi FK detail.
   const insertHead = cat === "S4S"
     ? `INSERT INTO S4S_h (NoS4S, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoSTAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair, IdWarna)
-       VALUES (@ns, @jk, @gr, @otel, GETDATE(), NULL, NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep, @wrn);`
+       VALUES (@ns, @jk, @gr, @otel, @tgl, NULL, NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep, @wrn);`
     : `INSERT INTO CCAkhir_h (NoCCAkhir, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, NoLaminatingAsal, NoFJAsal, IdWarehouse, IdFJProfile, IsLembur, IdFisik, NoSPKAsal, IsRepair, IdLokasi)
-       VALUES (@ns, @jk, @gr, @otel, GETDATE(), NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), @isrej, NULL, NULL, 8, NULL, @isleb, NULL, NULLIF(@stasal, ''), @isrep, @lok);`;
+       VALUES (@ns, @jk, @gr, @otel, @tgl, NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), @isrej, NULL, NULL, 8, NULL, @isleb, NULL, NULLIF(@stasal, ''), @isrep, @lok);`;
 
   const result = await req.query(`
     BEGIN TRY
