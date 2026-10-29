@@ -104,6 +104,27 @@ async function getTanah(noSpkRaw) {
       GROUP BY G.NamaTanah, G.NamaPemilik, G.DesaKelurahan, G.KabupatenKota, G.Provinsi,
                DATEFROMPARTS(YEAR(E.DateCreate), MONTH(E.DateCreate), 1), ${SPK_EFEKTIF},
                G.NoSuratTanah, G.Luas, G.Koordinat
+      
+               union all
+
+
+	    SELECT G.NamaTanah, G.NamaPemilik, G.DesaKelurahan, G.KabupatenKota, G.Provinsi,
+             DATEFROMPARTS(YEAR(H.TglLaporan), MONTH(H.TglLaporan), 1) AS Periode,
+             ${SPK_EFEKTIF} as NoSPK, G.NoSuratTanah, G.Luas, G.Koordinat
+      FROM dbo.S4SProduksiOutput A
+      LEFT JOIN dbo.S4SProduksiInputST B ON B.NoProduksi = A.NoProduksi
+      LEFT JOIN dbo.S4SProduksi_h C ON C.NoProduksi = A.NoProduksi
+      LEFT JOIN dbo.ST_h D ON D.NoST = B.NoST
+      INNER JOIN PenerimaanSTPembelian_d E ON E.NoST = D.NoST
+      INNER JOIN PenerimaanSTPembelian_h H ON H.NoPenerimaanST = E.NoPenerimaanST
+      LEFT JOIN dbo.S4S_h F ON F.NoS4S = A.NoS4S
+      LEFT JOIN dbo.MstSuratTanah G ON G.IdTanah = H.IdTanah
+      WHERE ${SPK_EFEKTIF} = @spk AND G.NamaTanah IS NOT NULL
+      GROUP BY G.NamaTanah, G.NamaPemilik, G.DesaKelurahan, G.KabupatenKota, G.Provinsi,
+               DATEFROMPARTS(YEAR(H.TglLaporan), MONTH(H.TglLaporan), 1), ${SPK_EFEKTIF},
+               G.NoSuratTanah, G.Luas, G.Koordinat
+
+
       ORDER BY G.NamaPemilik ASC, G.NamaTanah ASC
     `);
   return rs.recordset;
@@ -132,6 +153,27 @@ async function getPemilik(noSpkRaw) {
         INNER JOIN dbo.KayuBulat_h D ON D.NoKayuBulat = A.NoKayuBulat
         LEFT JOIN dbo.MstSuratTanah F ON F.IdTanah = D.IdTanah
         WHERE A.NoSPKTujuan = @spk OR A.NoSPK = @spk
+
+        UNION ALL
+
+        SELECT L.Koordinat, ${SPK_EFEKTIF} AS NoSPK, L.NamaPemilik, L.NamaTanah,
+               L.DesaKelurahan, L.KabupatenKota, L.NoSuratTanah, L.Luas, L.Provinsi,
+          CASE
+            WHEN (ST.IdUOMTblLebar = 1 AND ST.IdUOMPanjang = 4) THEN
+              ROUND((SD.Tebal*SD.Lebar*SD.Panjang*SD.JmlhBatang*215.2542/100000)/10000, 4, 1)
+            WHEN (ST.IdUOMTblLebar = 3 AND ST.IdUOMPanjang = 4) THEN
+              ROUND((SD.Tebal*SD.Lebar*SD.Panjang*SD.JmlhBatang/7200.8*10000)/10000, 4, 1)
+            ELSE NULL
+          END AS Nilai
+        FROM dbo.S4SProduksiOutput O
+        LEFT JOIN dbo.S4SProduksiInputST I ON I.NoProduksi = O.NoProduksi
+        LEFT JOIN dbo.S4S_h F ON F.NoS4S = O.NoS4S
+        LEFT JOIN dbo.ST_h ST ON ST.NoST = I.NoST
+        INNER JOIN dbo.ST_d SD ON SD.NoST = ST.NoST
+        INNER JOIN PenerimaanSTPembelian_d PD ON PD.NoST = ST.NoST
+        INNER JOIN PenerimaanSTPembelian_h PH ON PH.NoPenerimaanST = PD.NoPenerimaanST
+        LEFT JOIN dbo.MstSuratTanah L ON L.IdTanah = PH.IdTanah
+        WHERE ${SPK_EFEKTIF} = @spk AND L.NamaTanah IS NOT NULL
       )
       SELECT NamaTanah, NamaPemilik, DesaKelurahan, KabupatenKota, Provinsi, NoSPK, NoSuratTanah, Luas, Koordinat,
              SUM(Nilai) AS Total,
@@ -198,6 +240,29 @@ async function getPersentase(noSpkRaw) {
           LEFT JOIN dbo.MstSuratTanah F ON F.IdTanah = D.IdTanah
           LEFT JOIN dbo.MstSPK_h G ON G.NoSPK = A.NoSPK
           LEFT JOIN dbo.MstBuyer H ON H.IdBuyer = G.IdBuyer
+          UNION ALL
+          SELECT JK.Jenis, L.Koordinat,
+                 ${SPK_EFEKTIF} AS NoSPK,
+                 Buyer.Buyer, SPK.Tujuan, L.NamaPemilik, YEAR(PH.TglLaporan) AS Tahun,
+            CASE
+              WHEN (ST.IdUOMTblLebar = 1 AND ST.IdUOMPanjang = 4) THEN
+                ROUND((SD.Tebal*SD.Lebar*SD.Panjang*SD.JmlhBatang*215.2542/100000)/10000, 4, 1)
+              WHEN (ST.IdUOMTblLebar = 3 AND ST.IdUOMPanjang = 4) THEN
+                ROUND((SD.Tebal*SD.Lebar*SD.Panjang*SD.JmlhBatang/7200.8*10000)/10000, 4, 1)
+              ELSE NULL
+            END AS Nilai
+          FROM dbo.S4SProduksiOutput O
+          LEFT JOIN dbo.S4SProduksiInputST I ON I.NoProduksi = O.NoProduksi
+          LEFT JOIN dbo.S4S_h F ON F.NoS4S = O.NoS4S
+          LEFT JOIN dbo.ST_h ST ON ST.NoST = I.NoST
+          INNER JOIN dbo.ST_d SD ON SD.NoST = ST.NoST
+          INNER JOIN dbo.MstJenisKayu JK ON JK.IdJenisKayu = ST.IdJenisKayu
+          INNER JOIN PenerimaanSTPembelian_d PD ON PD.NoST = ST.NoST
+          INNER JOIN PenerimaanSTPembelian_h PH ON PH.NoPenerimaanST = PD.NoPenerimaanST
+          LEFT JOIN dbo.MstSuratTanah L ON L.IdTanah = PH.IdTanah
+          LEFT JOIN dbo.MstSPK_h SPK ON SPK.NoSPK = ${SPK_EFEKTIF}
+          LEFT JOIN dbo.MstBuyer Buyer ON Buyer.IdBuyer = SPK.IdBuyer
+          WHERE ${SPK_EFEKTIF} = @spk AND L.NamaTanah IS NOT NULL
         ) A
         WHERE A.NoSPK = @spk
       )

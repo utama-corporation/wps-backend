@@ -391,7 +391,7 @@ async function saveHeader({
   req.input("tgl", sql.Date, tanggal || new Date());
   req.input("idm", sql.Int, idMesin);
   req.input("ido", sql.Int, idOperator);
-  req.input("jk", sql.Int, numOr(jamKerja, 0));
+  req.input("jk", sql.Int, numOrNull(jamKerja));
   req.input("ja", sql.Int, numOr(jmlhAnggota, 0));
   req.input("hm", sql.Float, numOrNull(hourMeter));
   req.input("jl", sql.Int, numOrNull(jamLembur));
@@ -460,7 +460,7 @@ async function updateHeader(noProduksi, {
   const req = pool.request();
   req.input("np", sql.VarChar(20), noProduksi);
   req.input("sh", sql.Int, numOr(shift, 1));
-  req.input("jk", sql.Int, numOr(jamKerja, 0));
+  req.input("jk", sql.Int, numOrNull(jamKerja));
   req.input("ja", sql.Int, numOr(jmlhAnggota, 0));
   req.input("hm", sql.Float, numOrNull(hourMeter));
   req.input("jl", sql.Int, numOrNull(jamLembur));
@@ -512,7 +512,7 @@ async function gantiHeader(noProduksi, {
   const curRes = await pool
     .request()
     .input("np", sql.VarChar(20), noProduksi)
-    .query("SELECT Tanggal FROM PackingProduksi_h WHERE NoProduksi = @np");
+    .query("SELECT Tanggal, IdMesin, IdOperator FROM PackingProduksi_h WHERE NoProduksi = @np");
   if (!curRes.recordset.length) {
     const err = new Error(`Produksi '${noProduksi}' tidak ditemukan`);
     err.status = 404;
@@ -528,9 +528,9 @@ async function gantiHeader(noProduksi, {
     const genReq = new sql.Request(tx);
     genReq.input("sh", sql.Int, numOr(shift, 1));
     genReq.input("tgl", sql.Date, tanggal || cur.Tanggal);
-    genReq.input("idm", sql.Int, idMesin);
-    genReq.input("ido", sql.Int, idOperator);
-    genReq.input("jk", sql.Int, numOr(jamKerja, 0));
+    genReq.input("idm", sql.Int, idMesin ?? cur.IdMesin);
+    genReq.input("ido", sql.Int, idOperator ?? cur.IdOperator);
+    genReq.input("jk", sql.Int, numOrNull(jamKerja));
     genReq.input("ja", sql.Int, numOr(jmlhAnggota, 0));
     genReq.input("hm", sql.Float, numOrNull(hourMeter));
     genReq.input("jl", sql.Int, numOrNull(jamLembur));
@@ -832,8 +832,9 @@ async function removeInput({ tipe, noProduksi, noLabel }) {
 }
 
 /**
- * Sahkan seluruh input temporary milik satu produksi (DateUsage = GETDATE()).
- * Dipanggil dari tombol "Simpan Input" di panel Input.
+ * Sahkan seluruh input temporary milik satu produksi. DateUsage = tanggal
+ * PackingProduksi_h.Tanggal (bukan GETDATE()) supaya produksi backdate
+ * mencantumkan tanggal produksinya sendiri. Dipanggil dari "Simpan Input".
  */
 async function simpanInput({ noProduksi }) {
   if (!noProduksi) {
@@ -841,7 +842,8 @@ async function simpanInput({ noProduksi }) {
     err.status = 400;
     throw err;
   }
-  await assertPeriodeTerbuka(await getTanggalProduksi(noProduksi));
+  const tglProduksi = await getTanggalProduksi(noProduksi);
+  await assertPeriodeTerbuka(tglProduksi);
   const pool = await poolPromise;
   let saved = 0;
   for (const [type, inputTable] of Object.entries(INPUT_TABLES)) {
@@ -849,9 +851,10 @@ async function simpanInput({ noProduksi }) {
     if (!mapping) continue;
     const req = pool.request();
     req.input("np", sql.VarChar(20), noProduksi);
+    req.input("tgl", sql.Date, tglProduksi);
     const r = await req.query(`
       UPDATE H
-      SET H.DateUsage = GETDATE()
+      SET H.DateUsage = @tgl
       FROM ${mapping.master} H
       INNER JOIN ${inputTable} I ON I.${mapping.col} = H.${mapping.col}
       WHERE I.NoProduksi = @np AND H.DateUsage IS NULL

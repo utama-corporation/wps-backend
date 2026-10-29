@@ -309,6 +309,12 @@ async function getOperators() {
   return result.recordset;
 }
 
+// HourMeter di DB float — "53.4" boleh, kosong jadi NULL (bukan string '' yang
+// gagal konversi ke float).
+function numOrNull(v) {
+  return v == null || v === "" ? null : Number(v);
+}
+
 async function saveHeader({
   shift, tanggal, idMesin, idOperator, jamKerja, jmlhAnggota, hourMeter,
 }) {
@@ -320,9 +326,9 @@ async function saveHeader({
   req.input("tgl", sql.Date, tanggal || new Date());
   req.input("idm", sql.Int, idMesin);
   req.input("ido", sql.Int, idOperator);
-  req.input("jk", sql.VarChar(10), jamKerja || "");
+  req.input("jk", sql.Int, numOrNull(jamKerja));
   req.input("ja", sql.Int, jmlhAnggota || 0);
-  req.input("hm", sql.VarChar(20), hourMeter || "");
+  req.input("hm", sql.Float, numOrNull(hourMeter));
 
   const result = await req.query(`
     DECLARE @np VARCHAR(20);
@@ -660,26 +666,70 @@ async function removeInput({ tipe, noProduksi, noLabel }) {
 }
 
 /**
- * Sahkan seluruh input temporary milik satu produksi (DateUsage = GETDATE()).
- * Dipanggil dari tombol "Simpan Input" di panel Input.
+ * Sahkan seluruh input temporary milik satu produksi. DateUsage = tanggal
+ * S4SProduksi_h.Tanggal (bukan GETDATE()) supaya produksi backdate mencantumkan
+ * tanggal produksinya sendiri. Dipanggil dari tombol "Simpan Input".
  */
-async function simpanInput({ noProduksi }) {
+async function simpanInput({ noProduksi, spkTujuan }) {
   if (!noProduksi) {
     const err = new Error("noProduksi wajib diisi");
     err.status = 400;
     throw err;
   }
-  await assertPeriodeTerbuka(await getTanggalProduksi(noProduksi));
+  const tglProduksi = await getTanggalProduksi(noProduksi);
+  await assertPeriodeTerbuka(tglProduksi);
   const pool = await poolPromise;
+
+  // SPK tujuan per label (dipilih di popup setelah scan) diisi ke NoSPKTujuan header label
+  // hanya saat Simpan Input — dan hanya untuk label temporary milik produksi ini.
+  const items = Array.isArray(spkTujuan) ? spkTujuan : [];
+  if (items.length) {
+    const spkSet = new Set(
+      (await pool.request().query(`SELECT NoSPK FROM MstSPK_h WHERE [Enable] = 1`)).recordset.map((r) => r.NoSPK),
+    );
+    const hasCol = {};
+    for (const it of items) {
+      const type = normalizeType(it?.tipe);
+      const mapping = MASTER_BY_KEY[type];
+      const noSpk = String(it?.noSpk ?? "").trim();
+      const noLabel = String(it?.noLabel ?? "").trim();
+      if (!mapping || !noLabel || !noSpk) continue;
+      if (!spkSet.has(noSpk)) {
+        const err = new Error(`SPK tujuan '${noSpk}' tidak valid / tidak aktif`);
+        err.status = 400;
+        throw err;
+      }
+      if (hasCol[type] === undefined) {
+        const c = await pool
+          .request()
+          .query(`SELECT COL_LENGTH('${mapping.master}', 'NoSPKTujuan') AS L`);
+        hasCol[type] = c.recordset[0].L !== null;
+      }
+      if (!hasCol[type]) continue;
+      await pool
+        .request()
+        .input("np", sql.VarChar(20), noProduksi)
+        .input("lbl", sql.VarChar(50), noLabel)
+        .input("spk", sql.VarChar(20), noSpk)
+        .query(`
+          UPDATE H SET H.NoSPKTujuan = @spk
+          FROM ${mapping.master} H
+          INNER JOIN ${INPUT_TABLES[type]} I ON I.${mapping.col} = H.${mapping.col}
+          WHERE I.NoProduksi = @np AND H.${mapping.col} = @lbl AND H.DateUsage IS NULL
+        `);
+    }
+  }
+
   let saved = 0;
   for (const [type, inputTable] of Object.entries(INPUT_TABLES)) {
     const mapping = MASTER_BY_KEY[type];
     if (!mapping) continue;
     const req = pool.request();
     req.input("np", sql.VarChar(20), noProduksi);
+    req.input("tgl", sql.Date, tglProduksi);
     const r = await req.query(`
       UPDATE H
-      SET H.DateUsage = GETDATE()
+      SET H.DateUsage = @tgl
       FROM ${mapping.master} H
       INNER JOIN ${inputTable} I ON I.${mapping.col} = H.${mapping.col}
       WHERE I.NoProduksi = @np AND H.DateUsage IS NULL
@@ -856,9 +906,9 @@ async function updateHeader(noProduksi, {
   req.input("tgl", sql.Date, tanggal || new Date());
   req.input("idm", sql.Int, idMesin);
   req.input("ido", sql.Int, idOperator);
-  req.input("jk", sql.VarChar(10), String(jamKerja ?? ""));
+  req.input("jk", sql.Int, numOrNull(jamKerja));
   req.input("ja", sql.Int, jmlhAnggota || 0);
-  req.input("hm", sql.VarChar(20), String(hourMeter ?? ""));
+  req.input("hm", sql.Float, numOrNull(hourMeter));
   await req.query(`
     UPDATE S4SProduksi_h
     SET [Shift] = @sh, Tanggal = @tgl, IdMesin = @idm, IdOperator = @ido,
@@ -899,9 +949,9 @@ async function gantiHeader(noProduksi, {
     genReq.input("tgl", sql.Date, tanggal || cur.Tanggal);
     genReq.input("idm", sql.Int, idMesin ?? cur.IdMesin);
     genReq.input("ido", sql.Int, idOperator ?? cur.IdOperator);
-    genReq.input("jk", sql.VarChar(10), String(jamKerja ?? ""));
+    genReq.input("jk", sql.Int, numOrNull(jamKerja));
     genReq.input("ja", sql.Int, jmlhAnggota || 0);
-    genReq.input("hm", sql.VarChar(20), String(hourMeter ?? ""));
+    genReq.input("hm", sql.Float, numOrNull(hourMeter));
     const genRes = await genReq.query(`
       DECLARE @np VARCHAR(20);
       SELECT @np = 'RA.' + FORMAT(RIGHT(ISNULL(MAX(NoProduksi), 'RA.000000'), 6) + 1, '000000')

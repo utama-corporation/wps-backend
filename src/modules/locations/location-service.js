@@ -5,10 +5,10 @@ exports.getAllLokasi = async () => {
   const request = pool.request();
 
   const query = `
-    SELECT IdLokasi, Blok, Enable
+    SELECT IdLokasi, Description, Blok, Enable
     FROM MstLokasi 
     WHERE Enable = 1
-    ORDER BY Blok ASC
+    ORDER BY Blok ASC, IdLokasi ASC
   `;
 
   const result = await request.query(query);
