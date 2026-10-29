@@ -572,10 +572,15 @@ async function createLabel({
   idJenisKayu, idGrade, noSPKAsal, noSPK, ukuran,
   tebal, lebar, panjang, jmlhBatang, idLokasi,
   isRepair, isReject, isLembur, noProduksi,
+  noBongkarSusun, dateCreate, tanggal, rawDate, jam,
+  idUOMTblLebar, idUOMPanjang,
   idUsername,
 }) {
-  const tanggalProduksi = noProduksi ? await getTanggalProduksi(noProduksi) : null;
-  await assertPeriodeTerbuka(tanggalProduksi || new Date());
+  // Label dari produksi harus mengikuti tanggal header produksi (termasuk backdate).
+  // Label Bongkar Susun tidak memiliki noProduksi, sehingga tetap memakai tanggal form.
+  const productionDate = noProduksi ? await getTanggalProduksi(noProduksi) : null;
+  const effectiveDate = productionDate || dateCreate || tanggal || rawDate || new Date();
+  await assertPeriodeTerbuka(effectiveDate);
 
   const raw = Array.isArray(ukuran) && ukuran.length
     ? ukuran
@@ -636,8 +641,10 @@ async function createLabel({
   req.input("isrep", sql.Bit, isRepair ? 1 : 0);
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
-  // Saat dibuat dari halaman produksi, DateCreate mengikuti tanggal header produksi.
-  req.input("tgl", sql.Date, tanggalProduksi || new Date());
+  req.input("date", sql.Date, effectiveDate);
+  req.input("jam", sql.VarChar(8), jam || new Date().toTimeString().slice(0, 5));
+  req.input("uomLebar", sql.Int, Number(idUOMTblLebar) || 1);
+  req.input("uomPanjang", sql.Int, Number(idUOMPanjang) || 1);
 
   const dimTuples = rows.map((r, i) => {
     req.input(`t${i}`, sql.VarChar(20), r.tebal);
@@ -653,7 +660,7 @@ async function createLabel({
       SELECT @ns = ISNULL('T.' + FORMAT(RIGHT(MAX(NoMoulding), 6) + 1, '000000'), 'T.000001')
       FROM Moulding_h;
       INSERT INTO Moulding_h (NoMoulding, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair)
-      VALUES (@ns, @jk, @gr, @otel, @tgl, NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep);
+       VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep);
       INSERT INTO Moulding_d (NoMoulding, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};
@@ -673,6 +680,16 @@ async function createLabel({
     await attachReq.query(`
       IF NOT EXISTS (SELECT 1 FROM MouldingProduksiOutput WHERE NoProduksi = @np AND NoMoulding = @ns)
         INSERT INTO MouldingProduksiOutput (NoProduksi, NoMoulding) VALUES (@np, @ns)
+    `);
+  }
+
+  if (noMoulding && noBongkarSusun) {
+    const attachReq = pool.request();
+    attachReq.input("nbs", sql.VarChar(20), noBongkarSusun);
+    attachReq.input("nm", sql.VarChar(20), noMoulding);
+    await attachReq.query(`
+      IF NOT EXISTS (SELECT 1 FROM BongkarSusunOutputMoulding WHERE NoMoulding = @nm AND NoBongkarSusun = @nbs)
+        INSERT INTO BongkarSusunOutputMoulding (NoMoulding, NoBongkarSusun) VALUES (@nm, @nbs)
     `);
   }
 

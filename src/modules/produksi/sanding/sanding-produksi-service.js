@@ -570,10 +570,13 @@ async function createLabel({
   idJenisKayu, idGrade, noSPKAsal, noSPK, ukuran,
   tebal, lebar, panjang, jmlhBatang, idLokasi,
   isRepair, isReject, isLembur, noProduksi,
+  noBongkarSusun, dateCreate, tanggal, rawDate, jam,
+  idUOMTblLebar, idUOMPanjang,
   idUsername,
 }) {
-  const tanggalProduksi = noProduksi ? await getTanggalProduksi(noProduksi) : null;
-  await assertPeriodeTerbuka(tanggalProduksi || new Date());
+  const productionDate = noProduksi ? await getTanggalProduksi(noProduksi) : null;
+  const effectiveDate = productionDate || dateCreate || tanggal || rawDate || new Date();
+  await assertPeriodeTerbuka(effectiveDate);
 
   const raw = Array.isArray(ukuran) && ukuran.length
     ? ukuran
@@ -634,8 +637,10 @@ async function createLabel({
   req.input("isrep", sql.Bit, isRepair ? 1 : 0);
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
-  // Saat dibuat dari halaman produksi, DateCreate mengikuti tanggal header produksi.
-  req.input("tgl", sql.Date, tanggalProduksi || new Date());
+  req.input("date", sql.Date, effectiveDate);
+  req.input("jam", sql.VarChar(8), jam || new Date().toTimeString().slice(0, 5));
+  req.input("uomLebar", sql.Int, Number(idUOMTblLebar) || 1);
+  req.input("uomPanjang", sql.Int, Number(idUOMPanjang) || 1);
 
   const dimTuples = rows.map((r, i) => {
     req.input(`t${i}`, sql.VarChar(20), r.tebal);
@@ -651,7 +656,7 @@ async function createLabel({
       SELECT @ns = ISNULL('W.' + FORMAT(RIGHT(MAX(NoSanding), 6) + 1, '000000'), 'W.000001')
       FROM Sanding_h;
       INSERT INTO Sanding_h (NoSanding, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFJProfile, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair)
-      VALUES (@ns, @jk, @gr, @otel, @tgl, NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), @isrej, @isleb, 9, NULL, NULLIF(@stasal, ''), @lok, 0, @isrep);
+       VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 9, NULL, NULLIF(@stasal, ''), @lok, 0, @isrep);
       INSERT INTO Sanding_d (NoSanding, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};
@@ -671,6 +676,16 @@ async function createLabel({
     await attachReq.query(`
       IF NOT EXISTS (SELECT 1 FROM SandingProduksiOutput WHERE NoProduksi = @np AND NoSanding = @ns)
         INSERT INTO SandingProduksiOutput (NoProduksi, NoSanding) VALUES (@np, @ns)
+    `);
+  }
+
+  if (noSanding && noBongkarSusun) {
+    const attachReq = pool.request();
+    attachReq.input("nbs", sql.VarChar(20), noBongkarSusun);
+    attachReq.input("ns", sql.VarChar(20), noSanding);
+    await attachReq.query(`
+      IF NOT EXISTS (SELECT 1 FROM BongkarSusunOutputSanding WHERE NoSanding = @ns AND NoBongkarSusun = @nbs)
+        INSERT INTO BongkarSusunOutputSanding (NoSanding, NoBongkarSusun) VALUES (@ns, @nbs)
     `);
   }
 

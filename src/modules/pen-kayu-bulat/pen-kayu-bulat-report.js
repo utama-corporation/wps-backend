@@ -162,6 +162,14 @@ function infoHtml(h, supplier) {
   </table>`;
 }
 
+function signatureHtml(thirdLabel) {
+  return `<table class="signatures"><tbody><tr>
+      <td class="name">Ukur 1</td><td class="name">Diperiksa Oleh</td><td class="name">${thirdLabel}</td>
+    </tr><tr>
+      <td class="line">(                    )</td><td class="line">(                              )</td><td class="line">(                        )</td>
+    </tr></tbody></table>`;
+}
+
 function tonBody(rows, external) {
   const totalTon = rows.reduce((a, r) => a + Number(r.Ton || 0), 0);
   const head = external
@@ -196,6 +204,7 @@ function tonBody(rows, external) {
       <table class="sum"><thead><tr><th>KETERANGAN</th><th class="r">JMLH BATANG</th><th class="r">TON</th></tr></thead>
       <tbody>${sum}</tbody></table>`;
   }
+  if (!external) html += signatureHtml("Dibuat");
   return html;
 }
 
@@ -210,13 +219,7 @@ function kgBody(rows, h, internal) {
         `<tr><td class="c">${r.NoUrut}</td><td>${esc(r.NamaGrade)}</td><td class="r">${fmt(r.JmlhBatang, 2)}</td><td class="r">${fmt(r.Berat, 4)}</td></tr>`,
     )
     .join("");
-  const signatures = internal
-    ? `<table class="signatures"><tbody><tr>
-        <td class="name">Ukur 1</td><td class="name">Diperiksa Oleh</td><td class="name">DiInput Oleh</td>
-      </tr><tr>
-        <td class="line">(                    )</td><td class="line">(                              )</td><td class="line">(                        )</td>
-      </tr></tbody></table>`
-    : "";
+  const signatures = internal ? signatureHtml("DiInput Oleh") : "";
   return `<table class="grid"><thead><tr><th class="c">NO</th><th>GRADE</th><th class="r">JMLH BATANG</th><th class="r">BERAT (KG)</th></tr></thead>
     <tbody>${body}</tbody>
     <tfoot><tr><td colspan="2" class="r">TOTAL</td><td class="r">${fmt(totalBatang, 2)}</td><td class="r">${fmt(totalBerat, 4)}</td></tr></tfoot></table>
