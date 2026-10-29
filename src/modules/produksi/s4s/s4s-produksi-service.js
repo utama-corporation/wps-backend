@@ -346,9 +346,14 @@ async function createLabel({
   idJenisKayu, idGrade, noSPKAsal, noSPK, ukuran,
   tebal, lebar, panjang, jmlhBatang, idLokasi,
   isRepair, isReject, isLembur, idWarna, noProduksi,
+  noBongkarSusun, dateCreate, tanggal, rawDate, jam,
+  idUOMTblLebar, idUOMPanjang,
   idUsername,
 }) {
-  await assertPeriodeTerbuka(noProduksi ? await getTanggalProduksi(noProduksi) : new Date());
+  // Paritas tablet S4S: tanggal label berasal dari tanggal form, bukan GETDATE().
+  // `dateCreate` adalah nama utama; alias dipertahankan untuk payload lama/web.
+  const effectiveDate = dateCreate || tanggal || rawDate || new Date();
+  await assertPeriodeTerbuka(noProduksi ? await getTanggalProduksi(noProduksi) : effectiveDate);
 
   // Daftar ukuran — satu label boleh punya > 1 baris S4S_d.
   const raw = Array.isArray(ukuran) && ukuran.length
@@ -413,6 +418,10 @@ async function createLabel({
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
   req.input("wrn", sql.Int, idWarna ? Number(idWarna) : null);
+  req.input("date", sql.Date, effectiveDate);
+  req.input("jam", sql.VarChar(8), jam || new Date().toTimeString().slice(0, 5));
+  req.input("uomLebar", sql.Int, Number(idUOMTblLebar) || 1);
+  req.input("uomPanjang", sql.Int, Number(idUOMPanjang) || 1);
 
   const dimTuples = rows.map((r, i) => {
     req.input(`t${i}`, sql.VarChar(20), r.tebal);
@@ -431,7 +440,7 @@ async function createLabel({
       SELECT @ns = ISNULL('R.' + FORMAT(RIGHT(MAX(NoS4S), 6) + 1, '000000'), 'R.000001')
       FROM S4S_h;
       INSERT INTO S4S_h (NoS4S, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoSTAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair, IdWarna)
-      VALUES (@ns, @jk, @gr, @otel, GETDATE(), NULL, NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep, @wrn);
+      VALUES (@ns, @jk, @gr, @otel, @date, NULL, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep, @wrn);
       INSERT INTO S4S_d (NoS4S, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};
@@ -452,6 +461,17 @@ async function createLabel({
     await attachReq.query(`
       IF NOT EXISTS (SELECT 1 FROM S4SProduksiOutput WHERE NoProduksi = @np AND NoS4S = @ns)
         INSERT INTO S4SProduksiOutput (NoProduksi, NoS4S) VALUES (@np, @ns)
+    `);
+  }
+
+  // Paritas tablet S4S: label non-mesin masuk ke output Bongkar Susun.
+  if (noS4S && noBongkarSusun) {
+    const attachReq = pool.request();
+    attachReq.input("nbs", sql.VarChar(20), noBongkarSusun);
+    attachReq.input("ns", sql.VarChar(20), noS4S);
+    await attachReq.query(`
+      IF NOT EXISTS (SELECT 1 FROM BongkarSusunOutputS4S WHERE NoBongkarSusun = @nbs AND NoS4S = @ns)
+        INSERT INTO BongkarSusunOutputS4S (NoS4S, NoBongkarSusun) VALUES (@ns, @nbs)
     `);
   }
 

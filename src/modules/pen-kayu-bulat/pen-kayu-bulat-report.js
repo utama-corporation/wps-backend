@@ -143,6 +143,10 @@ const CSS = `
   table.sum { border-collapse: collapse; min-width: 55%; }
   table.sum th { background: #444; color: #fff; padding: 3px 8px; text-align: left; font-size: 10px; }
   table.sum td { padding: 3px 8px; border-bottom: 1px solid #ddd; }
+  table.signatures { width: 100%; border-collapse: collapse; margin-top: 18px; table-layout: fixed; }
+  table.signatures td { width: 33.333%; padding: 0 6px; text-align: center; vertical-align: top; }
+  table.signatures .name { font-weight: 600; }
+  table.signatures .line { padding-top: 24px; font-size: 10px; white-space: pre; }
   .foot { margin-top: 18px; font-size: 9px; color: #555; }
 `;
 
@@ -195,7 +199,7 @@ function tonBody(rows, external) {
   return html;
 }
 
-function kgBody(rows, h) {
+function kgBody(rows, h, internal) {
   const totalBatang = rows.reduce((a, r) => a + Number(r.JmlhBatang || 0), 0);
   const totalBerat = rows.reduce((a, r) => a + Number(r.Berat || 0), 0);
   const bruto = h.Bruto != null ? Number(h.Bruto) : null;
@@ -206,6 +210,13 @@ function kgBody(rows, h) {
         `<tr><td class="c">${r.NoUrut}</td><td>${esc(r.NamaGrade)}</td><td class="r">${fmt(r.JmlhBatang, 2)}</td><td class="r">${fmt(r.Berat, 4)}</td></tr>`,
     )
     .join("");
+  const signatures = internal
+    ? `<table class="signatures"><tbody><tr>
+        <td class="name">Ukur 1</td><td class="name">Diperiksa Oleh</td><td class="name">DiInput Oleh</td>
+      </tr><tr>
+        <td class="line">(                    )</td><td class="line">(                              )</td><td class="line">(                        )</td>
+      </tr></tbody></table>`
+    : "";
   return `<table class="grid"><thead><tr><th class="c">NO</th><th>GRADE</th><th class="r">JMLH BATANG</th><th class="r">BERAT (KG)</th></tr></thead>
     <tbody>${body}</tbody>
     <tfoot><tr><td colspan="2" class="r">TOTAL</td><td class="r">${fmt(totalBatang, 2)}</td><td class="r">${fmt(totalBerat, 4)}</td></tr></tfoot></table>
@@ -214,7 +225,7 @@ function kgBody(rows, h) {
       <tr><td>Bruto</td><td class="r">${bruto != null ? fmt(bruto, 2) : "-"}</td></tr>
       <tr><td>Tara</td><td class="r">${tara != null ? fmt(tara, 2) : "-"}</td></tr>
       <tr><td>Netto (Bruto − Tara)</td><td class="r">${bruto != null && tara != null ? fmt(bruto - tara, 2) : "-"}</td></tr>
-    </tbody></table>`;
+    </tbody></table>${signatures}`;
 }
 
 async function buildHtml(jenis, no, username) {
@@ -229,7 +240,7 @@ async function buildHtml(jenis, no, username) {
 
   const supplier = supplierLabel(h, cfg.external);
   const body =
-    cfg.mode === "KG" ? kgBody(await fetchKg(no), h) : tonBody(await fetchTon(no, h.IdPengukuran), cfg.external);
+    cfg.mode === "KG" ? kgBody(await fetchKg(no), h, !cfg.external) : tonBody(await fetchTon(no, h.IdPengukuran), cfg.external);
 
   const now = new Date();
   const cetak = `${fmtTanggal(now)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
