@@ -194,7 +194,7 @@ const CSS = `
   .tp-sign { margin-top: 3mm; font-size: 11px; display: flex; align-items: flex-start; gap: 4mm; }
   .tp-sign .sg { flex: 1; }
   .tp-sign table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .tp-sign td { vertical-align: top; padding: 0 2px; }
+  .tp-sign td { vertical-align: top; padding: 0 2px; text-align: center; }
   .tp-sum { border-collapse: collapse; } .tp-sum td { padding: 0 4px; } .tp-sum td.v { text-align: right; }
   .tp-foot { position: absolute; left: 10mm; right: 10mm; bottom: 6mm; font-size: 8.5px; }
   .tp-foot .row { display: flex; justify-content: space-between; }
@@ -214,13 +214,6 @@ function infoHtml(h, supplier) {
   </table>`;
 }
 
-function signatureHtml(thirdLabel) {
-  return `<table class="signatures"><tbody><tr>
-      <td class="name">Ukur 1</td><td class="name">Diperiksa Oleh</td><td class="name">${thirdLabel}</td>
-    </tr><tr>
-      <td class="line">(                    )</td><td class="line">(                              )</td><td class="line">(                        )</td>
-    </tr></tbody></table>`;
-}
 
 function externalSignatureHtml() {
   const labels = ["Ukur 1 ;", "Ukur 2 ;", "Tally Tulis ;", "Diperiksa Oleh ;", "QC Oleh ;", "DiInput Oleh ;", "Supir ;"];
@@ -287,7 +280,7 @@ function tonReportHtml(h, supplier, rows, external, username) {
   return out;
 }
 
-function kgBody(rows, h, internal) {
+function kgBody(rows, h) {
   const totalBatang = rows.reduce((a, r) => a + Number(r.JmlhBatang || 0), 0);
   const totalBerat = rows.reduce((a, r) => a + Number(r.Berat || 0), 0);
   const bruto = h.Bruto != null ? Number(h.Bruto) : null;
@@ -298,7 +291,7 @@ function kgBody(rows, h, internal) {
         `<tr><td class="c">${r.NoUrut}</td><td>${esc(r.NamaGrade)}</td><td class="r">${fmt(r.JmlhBatang, 2)}</td><td class="r">${fmt(r.Berat, 4)}</td></tr>`,
     )
     .join("");
-  const signatures = internal ? signatureHtml("DiInput Oleh") : externalSignatureHtml();
+  const signatures = externalSignatureHtml();
   return `<table class="grid"><thead><tr><th class="c">NO</th><th>GRADE</th><th class="r">JMLH BATANG</th><th class="r">BERAT (KG)</th></tr></thead>
     <tbody>${body}</tbody>
     <tfoot><tr><td colspan="2" class="r">TOTAL</td><td class="r">${fmt(totalBatang, 2)}</td><td class="r">${fmt(totalBerat, 4)}</td></tr></tfoot></table>
@@ -325,7 +318,7 @@ async function buildHtml(jenis, no, username) {
     const rows = await fetchTon(no, h.IdPengukuran);
     return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</style></head><body class="ton-report">${tonReportHtml(h, supplier, rows, cfg.external, username)}</body></html>`;
   }
-  const body = kgBody(await fetchKg(no), h, !cfg.external);
+  const body = kgBody(await fetchKg(no), h);
 
   const now = new Date();
   const cetak = `${fmtTanggal(now)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;

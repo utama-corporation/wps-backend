@@ -336,10 +336,14 @@ exports.getRiwayat = async ({ noMeja = "", top = 40, search = "" } = {}) => {
       CASE WHEN A.Operator IS NULL
         THEN CONCAT_WS(' - ', NULLIF(E.NamaOperator,''), NULLIF(F.NamaOperator,''))
         ELSE ISNULL(A.Operator, '-') END AS operator,
-      ISNULL(J.Jenis, '-') AS jenis
+      ISNULL(J.Jenis, '-') AS jenis,
+      ISNULL(S.NmSupplier, '-') AS supplier,
+      A.BalokTerpakai AS balok_terpakai,
+      A.BeratBalok AS berat_balok
     FROM STSawmill_h A
     INNER JOIN KayuBulat_h B ON B.NoKayuBulat = A.NoKayuBulat
     INNER JOIN MstJenisKayu J ON J.IdJenisKayu = B.IdJenisKayu
+    LEFT JOIN MstSupplier S ON S.IdSupplier = B.IdSupplier
     LEFT JOIN MstOperator E ON E.IdOperator = A.IdOperator1
     LEFT JOIN MstOperator F ON F.IdOperator = A.IdOperator2
     LEFT JOIN MstMesinSawmill G ON G.NoMeja = A.NoMeja
