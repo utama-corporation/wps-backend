@@ -9,10 +9,10 @@ const { sql, poolPromise } = require("../../core/config/db");
 const { getBrowser } = require("../../core/utils/pdf/browser");
 
 const JENIS = {
-  "int-ton": { mode: "TON", external: false, title: "Laporan Penerimaan Kayu Bulat (Internal)" },
-  "ext-ton": { mode: "TON", external: true, title: "Laporan Penerimaan Kayu Bulat (External)" },
-  "int-kg": { mode: "KG", external: false, title: "Laporan Penerimaan Kayu Bulat KG (Internal)" },
-  "ext-kg": { mode: "KG", external: true, title: "Laporan Penerimaan Kayu Bulat KG (External)" },
+  "int-ton": { mode: "TON", external: false, title: "Laporan Penerimaan Kayu Bulat" },
+  "ext-ton": { mode: "TON", external: true, title: "Laporan Penerimaan Kayu Bulat" },
+  "int-kg": { mode: "KG", external: false, title: "Laporan Penerimaan Kayu Bulat KG" },
+  "ext-kg": { mode: "KG", external: true, title: "Laporan Penerimaan Kayu Bulat KG" },
 };
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
@@ -124,9 +124,12 @@ function supplierLabel(h, external) {
 
 const CSS = `
   @page { size: A4; margin: 14mm 12mm; }
+  @page ton-report { size: A4; margin: 7.5mm; }
   * { box-sizing: border-box; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5px; color: #111; margin: 0; }
   h1 { font-size: 15px; margin: 0 0 2px; text-align: center; letter-spacing: .3px; }
+  .ton-report { page: ton-report; }
+  .ton-report h1 { font-size: 12px; margin-bottom: 4px; }
   .sub { text-align: center; font-size: 10px; color: #555; margin-bottom: 10px; }
   table.info { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
   table.info td { padding: 2px 4px; vertical-align: top; }
@@ -137,6 +140,23 @@ const CSS = `
   table.grid th { background: #222; color: #fff; padding: 4px 6px; text-align: left; font-size: 10px; }
   table.grid td { padding: 3px 6px; border-bottom: 1px solid #ddd; }
   table.grid tr:nth-child(even) td { background: #f6f7f8; }
+  .ton-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+  .ton-panel { min-width: 0; border: 1px solid #111; }
+  table.ton-grid { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8.1px; }
+  table.ton-grid th, table.ton-grid td { border-right: 1px solid #111; border-bottom: 1px solid #111; padding: 2px 3px; white-space: nowrap; }
+  table.ton-grid th:last-child, table.ton-grid td:last-child { border-right: 0; }
+  table.ton-grid th { font-weight: 400; text-align: center; }
+  table.ton-grid .no { width: 15%; text-align: center; }
+  table.ton-grid .dim { width: 19%; text-align: right; }
+  table.ton-grid .ton { width: 22%; text-align: right; }
+  table.ton-grid .ket { width: 24%; }
+  table.ton-grid tfoot td { border-top: 1px solid #111 !important; border-bottom: 0; font-weight: 700; }
+  .ton-summary { margin: 12px 0 0 auto; width: 42%; }
+  .ton-info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+  table.ton-info-table { width: 100%; border: 1px solid #111; border-collapse: collapse; font-size: 8.1px; }
+  table.ton-info-table td { border-bottom: 1px solid #111; padding: 4px 5px; }
+  table.ton-info-table tr:last-child td { border-bottom: 0; }
+  table.ton-info-table td:first-child { width: 34%; }
   .r, table.grid th.r, table.sum th.r { text-align: right; } .c, table.grid th.c { text-align: center; }
   tfoot td { font-weight: 700; border-top: 2px solid #222 !important; background: #fff !important; }
   h2 { font-size: 11px; margin: 14px 0 4px; }
@@ -145,9 +165,38 @@ const CSS = `
   table.sum td { padding: 3px 8px; border-bottom: 1px solid #ddd; }
   table.signatures { width: 100%; border-collapse: collapse; margin-top: 18px; table-layout: fixed; }
   table.signatures td { width: 33.333%; padding: 0 6px; text-align: center; vertical-align: top; }
+  table.signatures.seven td { width: 14.2857%; padding: 0 2px; font-size: 8.5px; }
+  table.signatures.seven .line { padding-top: 40px; }
   table.signatures .name { font-weight: 600; }
   table.signatures .line { padding-top: 24px; font-size: 10px; white-space: pre; }
-  .foot { margin-top: 18px; font-size: 9px; color: #555; }
+
+  @page ton-report { size: A4; margin: 0; }
+  body.ton-report { page: ton-report; padding: 0; font-size: 9px; }
+  .tp { position: relative; width: 210mm; height: 296mm; padding: 8mm 10mm 0; page-break-after: always; overflow: hidden; }
+  .tp:last-child { page-break-after: auto; }
+  .tp-title { text-align: center; font-size: 12px; font-weight: 700; position: relative; }
+  .tp-title .pg { position: absolute; right: 0; top: 0; font-size: 9px; font-weight: 400; }
+  .tp-info { display: flex; margin: 8px 0 6px; font-size: 9px; }
+  .tp-info table { border-collapse: collapse; table-layout: fixed; } .tp-info td { padding: 1px 3px; }
+  .tp-info td:first-child { width: 16mm; white-space: nowrap; }
+  .tp-info .il { width: 62%; } .tp-info .ir { width: 38%; }
+  table.tp-grid { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9px; }
+  table.tp-grid th { font-weight: 400; text-align: center; padding: 1px 3px; border-top: 1px solid #111; border-bottom: 1px solid #111; }
+  table.tp-grid td { text-align: right; padding: 0 3px; height: 4.55mm; }
+  table.tp-grid .n { text-align: left; } table.tp-grid .k { text-align: left; }
+  .tp-panels { display: flex; gap: 3mm; }
+  .tp-panels table.tp-grid th, .tp-panels table.tp-grid td { border-right: 1px solid #111; }
+  .tp-panels table.tp-grid th:last-child, .tp-panels table.tp-grid td:last-child { border-right: 0; }
+  .tp-panels table.tp-grid { flex: 1; min-width: 0; border: 1px solid #111; }
+  .tp-sign { margin-top: 3mm; font-size: 9px; display: flex; align-items: flex-start; gap: 4mm; }
+  .tp-sign .sg { flex: 1; }
+  .tp-sign table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .tp-sign td { vertical-align: top; padding: 0 2px; }
+  .tp-sum { border-collapse: collapse; } .tp-sum td { padding: 0 4px; } .tp-sum td.v { text-align: right; }
+  .tp-foot { position: absolute; left: 10mm; right: 10mm; bottom: 6mm; font-size: 8.5px; }
+  .tp-foot .row { display: flex; justify-content: space-between; }
+  body { padding-bottom: 12mm; }
+  .foot { position: fixed; left: 0; bottom: 0; width: 100%; font-size: 9px; color: #555; text-align: left; }
 `;
 
 function infoHtml(h, supplier) {
@@ -170,42 +219,71 @@ function signatureHtml(thirdLabel) {
     </tr></tbody></table>`;
 }
 
-function tonBody(rows, external) {
-  const totalTon = rows.reduce((a, r) => a + Number(r.Ton || 0), 0);
-  const head = external
-    ? `<th class="c">NO</th><th class="r">TEBAL</th><th class="r">LEBAR</th><th class="r">PANJANG</th><th class="r">TON</th>`
-    : `<th class="c">NO</th><th class="r">TEBAL</th><th class="r">LEBAR</th><th class="r">PANJANG</th><th class="r">TON</th><th>KETERANGAN</th>`;
-  const body = rows
-    .map(
-      (r) =>
-        `<tr><td class="c">${r.NoLog}</td><td class="r">${fmt(r.Tebal)}</td><td class="r">${fmt(r.Lebar)}</td>` +
-        `<td class="r">${fmt(r.Panjang)}</td><td class="r">${fixed4(r.Ton)}</td>` +
-        (external ? "" : `<td>${esc(r.Ket)}</td>`) +
-        `</tr>`,
-    )
-    .join("");
-  const colspan = 4;
-  let html = `<table class="grid"><thead><tr>${head}</tr></thead><tbody>${body}</tbody>
-    <tfoot><tr><td colspan="${colspan}" class="r">TOTAL (${rows.length} batang)</td><td class="r">${fixed4(totalTon)}</td>${external ? "" : "<td></td>"}</tr></tfoot></table>`;
+function externalSignatureHtml() {
+  const labels = ["Ukur 1 ;", "Ukur 2 ;", "Tally Tulis ;", "Diperiksa Oleh ;", "QC Oleh ;", "DiInput Oleh ;", "Supir ;"];
+  return `<table class="signatures seven"><tbody><tr>${labels.map((label) => `<td class="name">${label}</td>`).join("")}</tr><tr>${labels.map(() => `<td class="line">(                    )</td>`).join("")}</tr></tbody></table>`;
+}
 
-  if (!external) {
-    const per = new Map();
-    for (const r of rows) {
-      const cur = per.get(r.Ket) || { n: 0, ton: 0 };
-      cur.n += 1;
-      cur.ton += Number(r.Ton || 0);
-      per.set(r.Ket, cur);
-    }
-    const sum = [...per.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `<tr><td>${esc(k)}</td><td class="r">${v.n}</td><td class="r">${fixed4(v.ton)}</td></tr>`)
-      .join("");
-    html += `<h2>Ringkasan per Keterangan</h2>
-      <table class="sum"><thead><tr><th>KETERANGAN</th><th class="r">JMLH BATANG</th><th class="r">TON</th></tr></thead>
-      <tbody>${sum}</tbody></table>`;
+const ENG_MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const tanggalEn = (d) => {
+  const x = d instanceof Date ? d : new Date(d);
+  return Number.isNaN(x.getTime()) ? "-" : `${pad(x.getDate())} ${ENG_MONTH[x.getMonth()]} ${x.getFullYear()}`;
+};
+const dot4 = (v) => Number(v ?? 0).toFixed(4);
+const dim2 = (v) => Number(v ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const TON_PER_PAGE = 90; // 45 baris x 2 panel, sama dengan laporan Crystal
+
+// Laporan TON mengikuti format Crystal: judul + "Page x of y" tiap halaman, dua panel (ganjil | genap),
+// tanda tangan + ringkasan hanya di halaman terakhir, footer "*//internal|external" + "Print by".
+function tonReportHtml(h, supplier, rows, external, username) {
+  const pages = Math.max(1, Math.ceil(rows.length / TON_PER_PAGE));
+  const isAfkir = (r) => r.Ket === "AFKIR";
+  const stdTon = rows.filter((r) => !isAfkir(r)).reduce((a, r) => a + Number(r.Ton || 0), 0);
+  const afkirTon = rows.filter(isAfkir).reduce((a, r) => a + Number(r.Ton || 0), 0);
+  const jenis = String(h.Jenis || "").toUpperCase();
+  const now = new Date();
+  const cetak = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
+  const cell = (r) =>
+    r
+      ? `<td class="n">${r.NoLog}</td><td>${dim2(r.Tebal)}</td><td>${dim2(r.Lebar)}</td><td>${dim2(r.Panjang)}</td><td>${dot4(r.Ton)}</td>${external ? "" : `<td class="k">${esc(r.Ket)}</td>`}`
+      : `<td></td><td></td><td></td><td></td><td></td>${external ? "" : "<td></td>"}`;
+  const head = `<th>No</th><th>Tebal</th><th>Lebar</th><th>Panjang</th><th>Ton</th>${external ? "" : '<th>Keterangan</th>'}`;
+  const cols = external
+    ? '<col style="width:9%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:13%">'
+    : '<col style="width:7%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:8%">';
+  
+
+  const sign = external
+    ? ["Ukur 1 ;", "Ukur 2 ;", "Tally Tulis ;", "Diperiksa Oleh ;", "QC Oleh ;", "", "Supir ;"]
+    : ["Ukur 1 ;", "Ukur 2 ;", "Tally Tulis ;", "Diperiksa Oleh ;", "QC Oleh ;", "", ""];
+  const summary =
+    (() => {
+        const per = new Map();
+        for (const r of rows) per.set(r.Ket, (per.get(r.Ket) || 0) + Number(r.Ton || 0));
+        const keys = [...per.keys()].sort((a, b) => (a === "AFKIR" ? -1 : b === "AFKIR" ? 1 : a.localeCompare(b)));
+        const total = [...per.values()].reduce((a, v) => a + v, 0);
+        return keys.map((k) => `<tr><td>${external ? "" : `KB ${esc(jenis)} `}${esc(k)} :</td><td class="v">${dot4(per.get(k))}</td></tr>`).join("") + `<tr><td>Total :</td><td class="v">${dot4(total)}</td></tr>`;
+      })();
+  const lastBlock = `<div class="tp-sign"><div class="sg"><table><tr>${sign.map((l) => `<td>${l}</td>`).join("")}</tr>
+      <tr>${sign.map((l) => `<td style="padding-top:9mm">${l ? "(&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)" : ""}</td>`).join("")}</tr></table>
+      </div><table class="tp-sum" style="width:auto;flex:none">${summary}</table></div>`;
+
+  let out = "";
+  for (let p = 0; p < pages; p++) {
+    const chunk = rows.slice(p * TON_PER_PAGE, (p + 1) * TON_PER_PAGE);
+    let bodyL = "", bodyR = "";
+    for (let i = 0; i < chunk.length; i += 2) { bodyL += `<tr>${cell(chunk[i])}</tr>`; bodyR += `<tr>${cell(chunk[i + 1])}</tr>`; }
+    out += `<div class="tp">
+      <div class="tp-title">Laporan Penerimaan Kayu Bulat<span class="pg">Page ${p + 1} of ${pages}</span></div>
+      <div class="tp-info"><table class="il"><tr><td>Nomor</td><td>: ${esc(h.NoKayuBulat)}</td></tr><tr><td>Tanggal</td><td>: ${esc(tanggalEn(h.DateCreate))}</td></tr><tr><td>Supplier</td><td>: ${esc(supplier)}</td></tr></table>
+      <table class="ir"><tr><td>Jenis Kayu</td><td>: ${esc(h.Jenis || "-")}</td></tr><tr><td>No.Plat</td><td>: ${esc(h.NoPlat || "-")}</td></tr><tr><td>No.Suket</td><td>: ${esc(h.Suket || "-")}</td></tr></table></div>
+      <div class="tp-panels">${[bodyL, bodyR].map((b) => `<table class="tp-grid"><colgroup>${cols}</colgroup><thead><tr>${head}</tr></thead><tbody>${b}</tbody></table>`).join("")}</div>
+      ${p === pages - 1 ? lastBlock : ""}
+      <div class="tp-foot"><div class="row"><span>*//${external ? "external" : "internal"}</span><span>Page ${p + 1} of ${pages}</span></div><div>Print by ${esc(username || "-")} on ${cetak}</div></div>
+    </div>`;
   }
-  if (!external) html += signatureHtml("Dibuat");
-  return html;
+  return out;
 }
 
 function kgBody(rows, h, internal) {
@@ -219,7 +297,7 @@ function kgBody(rows, h, internal) {
         `<tr><td class="c">${r.NoUrut}</td><td>${esc(r.NamaGrade)}</td><td class="r">${fmt(r.JmlhBatang, 2)}</td><td class="r">${fmt(r.Berat, 4)}</td></tr>`,
     )
     .join("");
-  const signatures = internal ? signatureHtml("DiInput Oleh") : "";
+  const signatures = internal ? signatureHtml("DiInput Oleh") : externalSignatureHtml();
   return `<table class="grid"><thead><tr><th class="c">NO</th><th>GRADE</th><th class="r">JMLH BATANG</th><th class="r">BERAT (KG)</th></tr></thead>
     <tbody>${body}</tbody>
     <tfoot><tr><td colspan="2" class="r">TOTAL</td><td class="r">${fmt(totalBatang, 2)}</td><td class="r">${fmt(totalBerat, 4)}</td></tr></tfoot></table>
@@ -242,17 +320,19 @@ async function buildHtml(jenis, no, username) {
   if (cfg.mode === "TON" && isKg) throw httpError(400, "Maaf, laporan ini bukan bagian dari penerimaan kayu bulat (KG)");
 
   const supplier = supplierLabel(h, cfg.external);
-  const body =
-    cfg.mode === "KG" ? kgBody(await fetchKg(no), h, !cfg.external) : tonBody(await fetchTon(no, h.IdPengukuran), cfg.external);
+  if (cfg.mode === "TON") {
+    const rows = await fetchTon(no, h.IdPengukuran);
+    return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</style></head><body class="ton-report">${tonReportHtml(h, supplier, rows, cfg.external, username)}</body></html>`;
+  }
+  const body = kgBody(await fetchKg(no), h, !cfg.external);
 
   const now = new Date();
   const cetak = `${fmtTanggal(now)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
   return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</style></head><body>
     <h1>${esc(cfg.title.toUpperCase())}</h1>
-    <div class="sub">${esc(h.NoKayuBulat)}</div>
     ${infoHtml(h, supplier)}
     ${body}
-    <div class="foot">Dicetak oleh ${esc(username || "-")} pada ${esc(cetak)}</div>
+    <div class="foot">${cfg.external ? "<div>*//external</div>" : ""}<div>Print by ${esc(username || "-")} pada ${esc(cetak)}</div></div>
   </body></html>`;
 }
 
