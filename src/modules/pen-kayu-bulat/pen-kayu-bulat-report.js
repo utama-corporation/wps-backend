@@ -166,9 +166,9 @@ const CSS = `
   table.signatures { width: 100%; border-collapse: collapse; margin-top: 18px; table-layout: fixed; }
   table.signatures td { width: 33.333%; padding: 0 6px; text-align: center; vertical-align: top; }
   table.signatures.seven td { width: 14.2857%; padding: 0 2px; font-size: 8.5px; }
-  table.signatures.seven .line { padding-top: 40px; }
+  table.signatures.seven .line { padding-top: 54px; }
   table.signatures .name { font-weight: 600; }
-  table.signatures .line { padding-top: 24px; font-size: 10px; white-space: pre; }
+  table.signatures .line { padding-top: 38px; font-size: 10px; white-space: pre; }
 
   @page ton-report { size: A4; margin: 0; }
   body.ton-report { page: ton-report; padding: 0; font-size: 9px; }
@@ -215,10 +215,14 @@ function infoHtml(h, supplier) {
 }
 
 
-function externalSignatureHtml() {
-  const labels = ["Ukur 1 ;", "Ukur 2 ;", "Tally Tulis ;", "Diperiksa Oleh ;", "QC Oleh ;", "DiInput Oleh ;", "Supir ;"];
-  return `<table class="signatures seven"><tbody><tr>${labels.map((label) => `<td class="name">${label}</td>`).join("")}</tr><tr>${labels.map(() => `<td class="line">(                    )</td>`).join("")}</tr></tbody></table>`;
+function signatureHtml(thirdLabel) {
+  return `<table class="signatures"><tbody><tr>
+      <td class="name">Ukur 1</td><td class="name">Diperiksa Oleh</td><td class="name">${thirdLabel}</td>
+    </tr><tr>
+      <td class="line">(                    )</td><td class="line">(                              )</td><td class="line">(                        )</td>
+    </tr></tbody></table>`;
 }
+
 
 const ENG_MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const tanggalEn = (d) => {
@@ -260,7 +264,7 @@ function tonReportHtml(h, supplier, rows, external, username) {
     return keys.map((k) => `<tr><td>${external ? "" : `KB ${esc(jenis)} `}${esc(k)} :</td><td class="v">${dot4(per.get(k))}</td></tr>`).join("") + `<tr><td>Total :</td><td class="v">${dot4(total)}</td></tr>`;
   })();
   const lastBlock = `<div class="tp-sign"><div class="sg"><table><tr>${sign.map((l) => `<td>${l}</td>`).join("")}</tr>
-      <tr>${sign.map((l) => `<td style="padding-top:9mm">${l ? `(${"&nbsp;".repeat(34)})` : ""}</td>`).join("")}</tr></table>
+      <tr>${sign.map((l) => `<td style="padding-top:13mm">${l ? `(${"&nbsp;".repeat(34)})` : ""}</td>`).join("")}</tr></table>
       </div><table class="tp-sum" style="width:auto;flex:none">${summary}</table></div>`;
 
   let out = "";
@@ -291,7 +295,7 @@ function kgBody(rows, h) {
         `<tr><td class="c">${r.NoUrut}</td><td>${esc(r.NamaGrade)}</td><td class="r">${fmt(r.JmlhBatang, 2)}</td><td class="r">${fmt(r.Berat, 4)}</td></tr>`,
     )
     .join("");
-  const signatures = externalSignatureHtml();
+  const signatures = signatureHtml("DiInput Oleh");
   return `<table class="grid"><thead><tr><th class="c">NO</th><th>GRADE</th><th class="r">JMLH BATANG</th><th class="r">BERAT (KG)</th></tr></thead>
     <tbody>${body}</tbody>
     <tfoot><tr><td colspan="2" class="r">TOTAL</td><td class="r">${fmt(totalBatang, 2)}</td><td class="r">${fmt(totalBerat, 4)}</td></tr></tfoot></table>
@@ -326,7 +330,7 @@ async function buildHtml(jenis, no, username) {
     <h1>${esc(cfg.title.toUpperCase())}</h1>
     ${infoHtml(h, supplier)}
     ${body}
-    <div class="foot">${cfg.external ? "<div>*//external</div>" : ""}<div>Print by ${esc(username || "-")} pada ${esc(cetak)}</div></div>
+    <div class="foot"><div>*//${cfg.external ? "external" : "internal"}</div><div>Print by ${esc(username || "-")} pada ${esc(cetak)}</div></div>
   </body></html>`;
 }
 
