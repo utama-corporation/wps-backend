@@ -174,21 +174,22 @@ const CSS = `
   body.ton-report { page: ton-report; padding: 0; font-size: 9px; }
   .tp { position: relative; width: 210mm; height: 296mm; padding: 8mm 10mm 0; page-break-after: always; overflow: hidden; }
   .tp:last-child { page-break-after: auto; }
-  .tp-title { text-align: center; font-size: 12px; font-weight: 700; position: relative; }
+  .tp-title { text-align: center; font-size: 13px; font-weight: 700; position: relative; }
   .tp-title .pg { position: absolute; right: 0; top: 0; font-size: 9px; font-weight: 400; }
-  .tp-info { display: flex; margin: 8px 0 6px; font-size: 9px; }
+  .tp-info { display: flex; margin: 8px 0 6px; font-size: 11px; }
   .tp-info table { border-collapse: collapse; table-layout: fixed; } .tp-info td { padding: 1px 3px; }
-  .tp-info td:first-child { width: 16mm; white-space: nowrap; }
+  .tp-info td:first-child { width: 19mm; white-space: nowrap; }
   .tp-info .il { width: 62%; } .tp-info .ir { width: 38%; }
-  table.tp-grid { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9px; }
+  table.tp-grid { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }
   table.tp-grid th { font-weight: 400; text-align: center; padding: 1px 3px; border-top: 1px solid #111; border-bottom: 1px solid #111; }
-  table.tp-grid td { text-align: right; padding: 0 3px; height: 4.55mm; }
+  table.tp-grid td { text-align: right; padding: 0 3px; height: 3.45mm; line-height: 1; }
+  table.tp-grid td.c { text-align: center; }
   table.tp-grid .n { text-align: left; } table.tp-grid .k { text-align: left; }
   .tp-panels { display: flex; gap: 3mm; }
   .tp-panels table.tp-grid th, .tp-panels table.tp-grid td { border-right: 1px solid #111; }
   .tp-panels table.tp-grid th:last-child, .tp-panels table.tp-grid td:last-child { border-right: 0; }
   .tp-panels table.tp-grid { flex: 1; min-width: 0; border: 1px solid #111; }
-  .tp-sign { margin-top: 3mm; font-size: 9px; display: flex; align-items: flex-start; gap: 4mm; }
+  .tp-sign { margin-top: 3mm; font-size: 11px; display: flex; align-items: flex-start; gap: 4mm; }
   .tp-sign .sg { flex: 1; }
   .tp-sign table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   .tp-sign td { vertical-align: top; padding: 0 2px; }
@@ -231,42 +232,40 @@ const tanggalEn = (d) => {
 };
 const dot4 = (v) => Number(v ?? 0).toFixed(4);
 const dim2 = (v) => Number(v ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const TON_PER_PAGE = 90; // 45 baris x 2 panel, sama dengan laporan Crystal
+const TON_PER_PAGE = 120; // 60 baris x 2 panel
 
 // Laporan TON mengikuti format Crystal: judul + "Page x of y" tiap halaman, dua panel (ganjil | genap),
 // tanda tangan + ringkasan hanya di halaman terakhir, footer "*//internal|external" + "Print by".
 function tonReportHtml(h, supplier, rows, external, username) {
   const pages = Math.max(1, Math.ceil(rows.length / TON_PER_PAGE));
-  const isAfkir = (r) => r.Ket === "AFKIR";
-  const stdTon = rows.filter((r) => !isAfkir(r)).reduce((a, r) => a + Number(r.Ton || 0), 0);
-  const afkirTon = rows.filter(isAfkir).reduce((a, r) => a + Number(r.Ton || 0), 0);
-  const jenis = String(h.Jenis || "").toUpperCase();
+
+
+
+
   const now = new Date();
   const cetak = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
   const cell = (r) =>
     r
-      ? `<td class="n">${r.NoLog}</td><td>${dim2(r.Tebal)}</td><td>${dim2(r.Lebar)}</td><td>${dim2(r.Panjang)}</td><td>${dot4(r.Ton)}</td>${external ? "" : `<td class="k">${esc(r.Ket)}</td>`}`
+      ? `<td class="n">${r.NoLog}</td><td class="c">${dim2(r.Tebal)}</td><td class="c">${dim2(r.Lebar)}</td><td class="c">${dim2(r.Panjang)}</td><td>${dot4(r.Ton)}</td>${external ? "" : `<td class="k">${esc(r.Ket)}</td>`}`
       : `<td></td><td></td><td></td><td></td><td></td>${external ? "" : "<td></td>"}`;
-  const head = `<th>No</th><th>Tebal</th><th>Lebar</th><th>Panjang</th><th>Ton</th>${external ? "" : '<th>Keterangan</th>'}`;
+  const head = `<th>No</th><th>Tebal</th><th>Lebar</th><th>Panjang</th><th>Ton</th>${external ? "" : '<th>Ket</th>'}`;
   const cols = external
     ? '<col style="width:9%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:13%">'
     : '<col style="width:7%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:8%">';
   
 
-  const sign = external
-    ? ["Ukur 1 ;", "Ukur 2 ;", "Tally Tulis ;", "Diperiksa Oleh ;", "QC Oleh ;", "", "Supir ;"]
-    : ["Ukur 1 ;", "Ukur 2 ;", "Tally Tulis ;", "Diperiksa Oleh ;", "QC Oleh ;", "", ""];
-  const summary =
-    (() => {
-        const per = new Map();
-        for (const r of rows) per.set(r.Ket, (per.get(r.Ket) || 0) + Number(r.Ton || 0));
-        const keys = [...per.keys()].sort((a, b) => (a === "AFKIR" ? -1 : b === "AFKIR" ? 1 : a.localeCompare(b)));
-        const total = [...per.values()].reduce((a, v) => a + v, 0);
-        return keys.map((k) => `<tr><td>${external ? "" : `KB ${esc(jenis)} `}${esc(k)} :</td><td class="v">${dot4(per.get(k))}</td></tr>`).join("") + `<tr><td>Total :</td><td class="v">${dot4(total)}</td></tr>`;
-      })();
+  const sign = ["Ukur 1", "Diperiksa Oleh", "DiInput Oleh"];
+  const jenis = String(h.Jenis || "").toUpperCase();
+  const summary = (() => {
+    const per = new Map();
+    for (const r of rows) per.set(r.Ket, (per.get(r.Ket) || 0) + Number(r.Ton || 0));
+    const keys = [...per.keys()].sort((a, b) => (a === "AFKIR" ? -1 : b === "AFKIR" ? 1 : a.localeCompare(b)));
+    const total = [...per.values()].reduce((a, v) => a + v, 0);
+    return keys.map((k) => `<tr><td>${external ? "" : `KB ${esc(jenis)} `}${esc(k)} :</td><td class="v">${dot4(per.get(k))}</td></tr>`).join("") + `<tr><td>Total :</td><td class="v">${dot4(total)}</td></tr>`;
+  })();
   const lastBlock = `<div class="tp-sign"><div class="sg"><table><tr>${sign.map((l) => `<td>${l}</td>`).join("")}</tr>
-      <tr>${sign.map((l) => `<td style="padding-top:9mm">${l ? "(&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)" : ""}</td>`).join("")}</tr></table>
+      <tr>${sign.map((l) => `<td style="padding-top:9mm">${l ? `(${"&nbsp;".repeat(34)})` : ""}</td>`).join("")}</tr></table>
       </div><table class="tp-sum" style="width:auto;flex:none">${summary}</table></div>`;
 
   let out = "";
