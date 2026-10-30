@@ -1,15 +1,9 @@
 const service = require("./penerimaan-st-pembelian-service");
-
-// Cetak memakai Crystal Report yang sama dengan tablet (CrPenSTSawmillPembelian), bukan laporan baru.
-// Tablet: "http://<DB_IP>:3000/api/crystalreport/wps/export-pdf". Override via CRYSTAL_REPORT_URL.
-const CRYSTAL_REPORT_URL =
-  process.env.CRYSTAL_REPORT_URL ||
-  `http://${process.env.DB_SERVER}:3000/api/crystalreport/wps/export-pdf`;
-const REPORT_NAME = "CrPenSTSawmillPembelian";
+const report = require("./penerimaan-st-pembelian-report");
 
 const fail = (res, err, label) => {
   console.error(`${label}:`, err);
-  return res.status(err.statusCode || 500).json({
+  return res.status(err.statusCode || err.status || 500).json({
     success: false,
     message: err.message || "Terjadi kesalahan server",
   });
@@ -108,29 +102,7 @@ exports.addReject = async (req, res) => {
 exports.generatePdf = async (req, res) => {
   try {
     const no = noOf(req);
-    const header = await service.getByNo(no);
-    if (!header) {
-      return res.status(404).json({ success: false, message: "Penerimaan ST tidak ditemukan" });
-    }
-
-    // Parameter identik dengan tablet: NoProduksi, Username, reportName
-    const url =
-      `${CRYSTAL_REPORT_URL}?NoProduksi=${encodeURIComponent(no)}` +
-      `&Username=${encodeURIComponent(req.username || "")}` +
-      `&reportName=${encodeURIComponent(REPORT_NAME)}`;
-
-    const upstream = await fetch(url);
-    if (!upstream.ok) {
-      let message = `Gagal membuat laporan (${upstream.status})`;
-      try {
-        const body = await upstream.json();
-        message = body.Message || body.message || message;
-      } catch {
-        // body bukan JSON — pakai pesan default
-      }
-      return res.status(upstream.status === 400 ? 404 : 502).json({ success: false, message });
-    }
-    const pdf = Buffer.from(await upstream.arrayBuffer());
+    const pdf = await report.generate(no, req.username);
 
     res.set({
       "Content-Type": "application/pdf",

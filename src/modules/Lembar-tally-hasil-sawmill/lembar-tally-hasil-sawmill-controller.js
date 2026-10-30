@@ -60,6 +60,7 @@ exports.getRiwayat = async (req, res) => {
     const data = await lembarTallyHasilSawmillService.getRiwayat({
       noMeja: req.query.noMeja || "",
       top: req.query.top || 40,
+      search: req.query.search || "",
     });
     res.json({ success: true, data, total: data.length });
   } catch (err) {

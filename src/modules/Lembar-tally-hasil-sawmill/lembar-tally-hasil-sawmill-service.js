@@ -267,11 +267,15 @@ const getMejaStatus = async (pool) => {
         CASE WHEN P.NoSTSawmill IS NULL THEN 0 ELSE 1 END AS isBerjalan,
         ISNULL(P.NoSTSawmill, '') AS lastNo,
         CONVERT(varchar(5), P.HourStart, 108) AS lastHourStart,
-        CONVERT(varchar(5), P.HourEnd, 108) AS lastHourEnd
+        CONVERT(varchar(5), P.HourEnd, 108) AS lastHourEnd,
+        ISNULL(P.NoKayuBulat, '') AS lastNoKayuBulat,
+        ISNULL(P.Jenis, '') AS lastJenis
       FROM MstMesinSawmill m
       OUTER APPLY (
-        SELECT TOP 1 s.NoSTSawmill, s.HourStart, s.HourEnd
+        SELECT TOP 1 s.NoSTSawmill, s.HourStart, s.HourEnd, s.NoKayuBulat, J.Jenis
         FROM STSawmill_h s
+        LEFT JOIN KayuBulat_h kb ON kb.NoKayuBulat = s.NoKayuBulat
+        LEFT JOIN MstJenisKayu J ON J.IdJenisKayu = kb.IdJenisKayu
         WHERE s.NoMeja = m.NoMeja AND s.TglSawmill = @tgl
         ORDER BY s.NoSTSawmill DESC
       ) P
@@ -290,6 +294,8 @@ const getMejaStatus = async (pool) => {
       noTerakhir: st ? st.lastNo : "",
       hourStartTerakhir: st ? st.lastHourStart : "",
       hourEndTerakhir: st ? st.lastHourEnd : "",
+      noKayuBulatTerakhir: st ? st.lastNoKayuBulat : "",
+      jenisTerakhir: st ? st.lastJenis : "",
     };
   });
   return meja;
@@ -301,16 +307,22 @@ exports.getMeja = async () => getMejaStatus(await poolPromise);
  * Riwayat proses tally terakhir lintas tanggal (paritas FrmPilihMejaSawmill.LoadHistoryDataFast).
  * noMeja opsional untuk filter satu meja.
  */
-exports.getRiwayat = async ({ noMeja = "", top = 40 } = {}) => {
+exports.getRiwayat = async ({ noMeja = "", top = 40, search = "" } = {}) => {
   const pool = await poolPromise;
   const req = pool.request();
   req.input("top", sql.Int, Math.min(Math.max(toInt(top) || 40, 1), 200));
-  let where = "";
+  const conds = [];
   const m = toInt(noMeja);
   if (m !== null) {
     req.input("noMeja", sql.Int, m);
-    where = "WHERE A.NoMeja = @noMeja";
+    conds.push("A.NoMeja = @noMeja");
   }
+  const q = String(search || "").trim();
+  if (q) {
+    req.input("search", sql.VarChar, `%${q}%`);
+    conds.push("(A.NoSTSawmill LIKE @search OR A.NoKayuBulat LIKE @search)");
+  }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
   const r = await req.query(`
     SELECT TOP (@top)
       A.NoSTSawmill AS no,
@@ -682,6 +694,31 @@ exports.getByNo = async (no) => {
   };
 };
 
+/**
+ * Tally berbasis KG (paritas tablet): jenis kayu Rambung ATAU pengukuran KG (IdPengukuran = 5).
+ * Jenis & pengukuran diambil dari KayuBulat_h bila tidak dikirim client.
+ */
+async function isTallyKG(transaction, noKayuBulat, idPengukuran, jenis) {
+  let pengukuran = toInt(idPengukuran);
+  let namaJenis = String(jenis || "");
+  if (pengukuran !== 5 && !namaJenis && noKayuBulat) {
+    const r = await transaction.request()
+      .input("noKB", sql.VarChar, noKayuBulat)
+      .query(`
+        SELECT B.IdPengukuran, J.Jenis
+        FROM KayuBulat_h B
+        LEFT JOIN MstJenisKayu J ON J.IdJenisKayu = B.IdJenisKayu
+        WHERE B.NoKayuBulat = @noKB
+      `);
+    const row = r.recordset[0];
+    if (row) {
+      pengukuran = toInt(row.IdPengukuran);
+      namaJenis = row.Jenis || "";
+    }
+  }
+  return pengukuran === 5 || namaJenis.toLowerCase().includes("rambung");
+}
+
 // CREATE : header + detail + balokTim + KG + alokasi stok
 exports.create = async (data) => {
   const pool = await poolPromise;
@@ -787,7 +824,7 @@ exports.create = async (data) => {
     }
 
     // KG detail
-    const isKG = toInt(data.id_pengukuran) === 5;
+    const isKG = await isTallyKG(transaction, noKayuBulat, data.id_pengukuran, data.jenis);
     if (isKG) {
       for (const d of data.detail || []) {
         if (!d.nama_grade) continue;
@@ -917,6 +954,7 @@ exports.update = async (data) => {
       .input("no", sql.VarChar, no)
       .query(`DELETE FROM STSawmill_d WHERE NoSTSawmill = @no`);
 
+    const isKG = await isTallyKG(transaction, noKayuBulat, data.id_pengukuran, data.jenis);
     for (const d of data.detail || []) {
       const dReq = transaction.request();
       dReq.input("no", sql.VarChar, no)
@@ -940,7 +978,7 @@ exports.update = async (data) => {
           @IsLocal, @IdUOMTblLebar, @IdUOMPanjang, @IsBagusKulit, @NoSPK, @IdProdukSPK
         )
       `);
-      if (toInt(data.id_pengukuran) === 5 && d.nama_grade) {
+      if (isKG && d.nama_grade) {
         const kgReq = transaction.request();
         kgReq.input("no", sql.VarChar, no)
           .input("NoUrut", sql.Int, toInt(d.no_urut))

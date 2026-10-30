@@ -175,6 +175,7 @@ const CSS = `
   .tp { position: relative; width: 210mm; height: 296mm; padding: 8mm 10mm 0; page-break-after: always; overflow: hidden; }
   .tp:last-child { page-break-after: auto; }
   .tp-title { text-align: center; font-size: 13px; font-weight: 700; position: relative; }
+  .tp-title .tt { display: inline-block; border-bottom: 1px solid #111; padding: 0 5mm 1px; }
   .tp-title .pg { position: absolute; right: 0; top: 0; font-size: 9px; font-weight: 400; }
   .tp-info { display: flex; margin: 8px 0 6px; font-size: 11px; }
   .tp-info table { border-collapse: collapse; table-layout: fixed; } .tp-info td { padding: 1px 3px; }
@@ -182,9 +183,10 @@ const CSS = `
   .tp-info .il { width: 62%; } .tp-info .ir { width: 38%; }
   table.tp-grid { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }
   table.tp-grid th { font-weight: 400; text-align: center; padding: 1px 3px; border-top: 1px solid #111; border-bottom: 1px solid #111; }
-  table.tp-grid td { text-align: right; padding: 0 3px; height: 3.45mm; line-height: 1; }
+  table.tp-grid td { text-align: center; padding: 0 3px; height: 3.45mm; line-height: 1; }
   table.tp-grid td.c { text-align: center; }
-  table.tp-grid .n { text-align: left; } table.tp-grid .k { text-align: left; }
+  table.tp-grid td.k { text-align: left; padding-left: 6px; } table.tp-grid .k { font-size: 10px; }
+  table.tp-grid td:nth-child(5) { font-size: 10px; }
   .tp-panels { display: flex; gap: 3mm; }
   .tp-panels table.tp-grid th, .tp-panels table.tp-grid td { border-right: 1px solid #111; }
   .tp-panels table.tp-grid th:last-child, .tp-panels table.tp-grid td:last-child { border-right: 0; }
@@ -249,10 +251,10 @@ function tonReportHtml(h, supplier, rows, external, username) {
     r
       ? `<td class="n">${r.NoLog}</td><td class="c">${dim2(r.Tebal)}</td><td class="c">${dim2(r.Lebar)}</td><td class="c">${dim2(r.Panjang)}</td><td>${dot4(r.Ton)}</td>${external ? "" : `<td class="k">${esc(r.Ket)}</td>`}`
       : `<td></td><td></td><td></td><td></td><td></td>${external ? "" : "<td></td>"}`;
-  const head = `<th>No</th><th>Tebal</th><th>Lebar</th><th>Panjang</th><th>Ton</th>${external ? "" : '<th>Ket</th>'}`;
+  const head = `<th>No</th><th>Tebal</th><th>Lebar</th><th>Panjang</th><th>Ton</th>${external ? "" : '<th class="k">Keterangan</th>'}`;
   const cols = external
-    ? '<col style="width:9%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:13%">'
-    : '<col style="width:7%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:8%">';
+    ? '<col style="width:9%"><col style="width:21%"><col style="width:21%"><col style="width:21%"><col style="width:28%">'
+    : '<col style="width:9%"><col style="width:16%"><col style="width:16%"><col style="width:16%"><col style="width:19%"><col style="width:24%">';
   
 
   const sign = ["Ukur 1", "Diperiksa Oleh", "DiInput Oleh"];
@@ -274,7 +276,7 @@ function tonReportHtml(h, supplier, rows, external, username) {
     let bodyL = "", bodyR = "";
     for (let i = 0; i < chunk.length; i += 2) { bodyL += `<tr>${cell(chunk[i])}</tr>`; bodyR += `<tr>${cell(chunk[i + 1])}</tr>`; }
     out += `<div class="tp">
-      <div class="tp-title">Laporan Penerimaan Kayu Bulat<span class="pg">Page ${p + 1} of ${pages}</span></div>
+      <div class="tp-title"><span class="tt">Laporan Penerimaan Kayu Bulat</span><span class="pg">Page ${p + 1} of ${pages}</span></div>
       <div class="tp-info"><table class="il"><tr><td>Nomor</td><td>: ${esc(h.NoKayuBulat)}</td></tr><tr><td>Tanggal</td><td>: ${esc(tanggalEn(h.DateCreate))}</td></tr><tr><td>Supplier</td><td>: ${esc(supplier)}</td></tr></table>
       <table class="ir"><tr><td>Jenis Kayu</td><td>: ${esc(h.Jenis || "-")}</td></tr><tr><td>No.Plat</td><td>: ${esc(h.NoPlat || "-")}</td></tr><tr><td>No.Suket</td><td>: ${esc(h.Suket || "-")}</td></tr></table></div>
       <div class="tp-panels">${[bodyL, bodyR].map((b) => `<table class="tp-grid"><colgroup>${cols}</colgroup><thead><tr>${head}</tr></thead><tbody>${b}</tbody></table>`).join("")}</div>
