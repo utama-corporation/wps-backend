@@ -655,8 +655,8 @@ async function createLabel({
       DECLARE @ns VARCHAR(20);
       SELECT @ns = ISNULL('W.' + FORMAT(RIGHT(MAX(NoSanding), 6) + 1, '000000'), 'W.000001')
       FROM Sanding_h;
-      INSERT INTO Sanding_h (NoSanding, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFJProfile, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair)
-       VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 9, NULL, NULLIF(@stasal, ''), @lok, 0, @isrep);
+      INSERT INTO Sanding_h (NoSanding, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, IdFJProfile, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair)
+       VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 9, 9, NULL, NULLIF(@stasal, ''), @lok, 0, @isrep);
       INSERT INTO Sanding_d (NoSanding, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};

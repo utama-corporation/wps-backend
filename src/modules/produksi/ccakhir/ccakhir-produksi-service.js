@@ -721,9 +721,9 @@ async function createLabel({
   // dilanjuti INSERT detail sehingga error aslinya tertutupi FK detail.
   const insertHead = cat === "S4S"
     ? `INSERT INTO S4S_h (NoS4S, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoSTAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair, IdWarna)
-       VALUES (@ns, @jk, @gr, @otel, @date, NULL, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep, @wrn);`
+       VALUES (@ns, @jk, @gr, @otel, @date, NULL, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 4, 4, NULLIF(@stasal, ''), @lok, 0, @isrep, @wrn);`
     : `INSERT INTO CCAkhir_h (NoCCAkhir, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, NoLaminatingAsal, NoFJAsal, IdWarehouse, IdFJProfile, IsLembur, IdFisik, NoSPKAsal, IsRepair, IdLokasi)
-        VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, NULL, NULL, 8, NULL, @isleb, NULL, NULLIF(@stasal, ''), @isrep, @lok);`;
+        VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, NULL, NULL, 8, NULL, @isleb, 8, NULLIF(@stasal, ''), @isrep, @lok);`;
 
   const result = await req.query(`
     BEGIN TRY

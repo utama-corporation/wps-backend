@@ -680,7 +680,7 @@ async function createLabel({
   req.input("nwip", sql.VarChar(13), noWIPAsal || "");
   req.input("nmou", sql.VarChar(13), noMouldingAsal || "");
   req.input("nsan", sql.VarChar(13), noSandingAsal || "");
-  req.input("wh", sql.Int, idWarehouse == null || idWarehouse === "" ? 10 : idWarehouse);
+  req.input("wh", sql.Int, idWarehouse == null || idWarehouse === "" ? 11 : idWarehouse);
   req.input("lok", sql.VarChar(5), lokasi);
   req.input("otel", sql.Int, idOrgTelly);
   req.input("isrep", sql.Bit, isRepair ? 1 : 0);

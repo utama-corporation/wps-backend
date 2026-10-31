@@ -655,7 +655,7 @@ async function createLabel({
       SELECT @ns = ISNULL('U.' + FORMAT(RIGHT(MAX(NoLaminating), 6) + 1, '000000'), 'U.000001')
       FROM Laminating_h;
       INSERT INTO Laminating_h (NoLaminating, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair)
-       VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep);
+       VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 7, 7, NULLIF(@stasal, ''), @lok, 0, @isrep);
       INSERT INTO Laminating_d (NoLaminating, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};

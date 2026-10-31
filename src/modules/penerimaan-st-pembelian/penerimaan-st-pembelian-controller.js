@@ -1,5 +1,10 @@
 const service = require("./penerimaan-st-pembelian-service");
-const report = require("./penerimaan-st-pembelian-report");
+
+// Cetak memakai service laporan (open-api-report). Autentikasi: token JWT user diteruskan apa adanya.
+// Override via REPORT_API_ST_PEMBELIAN_URL.
+const REPORT_URL =
+  process.env.REPORT_API_ST_PEMBELIAN_URL ||
+  "http://192.168.10.100:5006/api/reports/sawn-timber/penerimaan-st-pembelian-ton/pdf";
 
 const fail = (res, err, label) => {
   console.error(`${label}:`, err);
@@ -102,7 +107,33 @@ exports.addReject = async (req, res) => {
 exports.generatePdf = async (req, res) => {
   try {
     const no = noOf(req);
-    const pdf = await report.generate(no, req.username);
+    const header = await service.getByNo(no);
+    if (!header) {
+      return res.status(404).json({ success: false, message: "Penerimaan ST tidak ditemukan" });
+    }
+
+    const upstream = await fetch(REPORT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/pdf",
+        Authorization: req.header("Authorization") || "",
+      },
+      body: JSON.stringify({ NoPenerimaanST: no }),
+    });
+    if (!upstream.ok) {
+      let message = `Gagal membuat laporan (${upstream.status})`;
+      try {
+        const body = await upstream.json();
+        message = body.message || body.Message || message;
+      } catch {
+        // body bukan JSON — pakai pesan default
+      }
+      // 401 dari service laporan sengaja jadi 502 supaya frontend tidak mengira sesi user habis.
+      const status = upstream.status === 404 || upstream.status === 422 ? upstream.status : 502;
+      return res.status(status).json({ success: false, message });
+    }
+    const pdf = Buffer.from(await upstream.arrayBuffer());
 
     res.set({
       "Content-Type": "application/pdf",

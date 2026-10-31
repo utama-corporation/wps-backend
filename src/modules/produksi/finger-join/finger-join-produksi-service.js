@@ -667,7 +667,7 @@ async function createLabel({
       SELECT @ns = ISNULL('S.' + FORMAT(RIGHT(MAX(NoFJ), 6) + 1, '000000'), 'S.000001')
       FROM FJ_h;
       INSERT INTO FJ_h (NoFJ, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoS4SAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair)
-      VALUES (@ns, @jk, @gr, @otel, @date, NULL, NULLIF(@s4sasal, ''), @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 5, NULL, NULLIF(@stasal, ''), @lok, 0, @isrep);
+      VALUES (@ns, @jk, @gr, @otel, @date, NULL, NULLIF(@s4sasal, ''), @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep);
       INSERT INTO FJ_d (NoFJ, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};
