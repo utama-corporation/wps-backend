@@ -653,3 +653,28 @@ exports.getPdf = async (req, res) => {
     res.status(500).json({ success: false, message: "Gagal membuat laporan" });
   }
 };
+
+/* GET /api/laporan/lookup/supplier — MstSupplier yang Enable = 1 */
+exports.getSupplierLookup = async (req, res) => {
+  try {
+    const perms = req.userPermissions;
+    const boleh =
+      perms.has("*") ||
+      perms.has("laporan:read") ||
+      [...perms].some((p) => /^laporan:[^:]+:read$/.test(p));
+    if (!boleh) {
+      return res.status(403).json({ success: false, message: "Forbidden: insufficient permission" });
+    }
+    const { poolPromise } = require("../../core/config/db");
+    const pool = await poolPromise;
+    const rs = await pool.request().query(`
+      SELECT IdSupplier, NmSupplier
+      FROM dbo.MstSupplier
+      WHERE [Enable] = 1
+      ORDER BY NmSupplier ASC
+    `);
+    res.json({ success: true, data: rs.recordset });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
