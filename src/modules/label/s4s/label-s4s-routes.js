@@ -5,6 +5,7 @@ const attachPermissions = require("../../../core/middleware/attach-permissions")
 const requirePermission = require("../../../core/middleware/require-permission");
 const { mastersHandler } = require("../label-masters-service");
 const ctrl = require("./label-s4s-controller");
+const { getSusunList } = require("../st/label-st-controller");
 
 router.use(express.json());
 router.use(verifyToken, attachPermissions);
@@ -14,6 +15,13 @@ router.get(
   "/label/s4s/masters",
   requirePermission("label_s4s:read"),
   mastersHandler("S4S", "S4S"),
+);
+
+// GET /api/label/s4s/susun?date= -> list bongkar susun per tanggal (form Buat Label)
+router.get(
+  "/label/s4s/susun",
+  requirePermission("label_s4s:create"),
+  getSusunList,
 );
 
 // GET /api/label/s4s/list -> list semua label S4S

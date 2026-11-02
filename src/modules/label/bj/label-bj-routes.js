@@ -4,6 +4,7 @@ const verifyToken = require("../../../core/middleware/verify-token");
 const attachPermissions = require("../../../core/middleware/attach-permissions");
 const requirePermission = require("../../../core/middleware/require-permission");
 const ctrl = require("./label-bj-controller");
+const { getSusunList } = require("../st/label-st-controller");
 
 router.use(express.json());
 router.use(verifyToken, attachPermissions);
@@ -13,6 +14,13 @@ router.get(
   "/label/bj/masters",
   requirePermission("label_bj:read"),
   ctrl.getMasters,
+);
+
+// GET /api/label/bj/susun?date= -> list bongkar susun per tanggal (form Buat Label)
+router.get(
+  "/label/bj/susun",
+  requirePermission("label_bj:create"),
+  getSusunList,
 );
 
 // GET /api/label/bj/list -> list semua label
