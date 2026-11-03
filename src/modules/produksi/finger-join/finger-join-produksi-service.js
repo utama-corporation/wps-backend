@@ -1,5 +1,6 @@
 const { sql, poolPromise } = require("../../../core/config/db");
 const { assertPeriodeTerbuka } = require("../../../core/utils/periode-lock");
+const { currentJamWib } = require("../../../core/utils/format-utils");
 
 /** Tanggal produksi (FJProduksi_h.Tanggal) — dasar cek kunci periode. */
 async function getTanggalProduksi(noProduksi) {
@@ -647,7 +648,7 @@ async function createLabel({
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
   req.input("date", sql.Date, tanggalProduksi || effectiveDate);
-  req.input("jam", sql.VarChar(8), jam || new Date().toTimeString().slice(0, 5));
+  req.input("jam", sql.VarChar(8), jam || currentJamWib());
   req.input("uomLebar", sql.Int, Number(idUOMTblLebar) || 1);
   req.input("uomPanjang", sql.Int, Number(idUOMPanjang) || 1);
 
