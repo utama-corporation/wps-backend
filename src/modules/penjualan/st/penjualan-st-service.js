@@ -179,12 +179,12 @@ async function getAll({ search, topRow }) {
 async function getMasters() {
   const pool = await poolPromise;
   const buyers = await pool.request().query(`
-    SELECT TOP 100 IdBuyer, Buyer, IsExport
+    SELECT IdBuyer, Buyer, IsExport
     FROM dbo.MstBuyer
     ORDER BY Buyer ASC
   `);
   const kendaraan = await pool.request().query(`
-    SELECT TOP 1000 IdJenisKendaraan, [Type], [Model], [Enable]
+    SELECT IdJenisKendaraan, [Type], [Model], [Enable]
     FROM dbo.MstJenisKendaraan
     WHERE [Enable] = 1
     ORDER BY [Type] ASC, [Model] ASC
