@@ -19,7 +19,7 @@ exports.generatePdf = async (req, res) => {
     const data = await labelCcaService.getLabelData(NoCCA);
 
     const pdfBuffer = await generateLabelPdf(
-      { ...data, noLabel: data.noCCA },
+      { ...data, noLabel: data.noCCAkhir },
       buildCcaLabelHtml,
     );
 

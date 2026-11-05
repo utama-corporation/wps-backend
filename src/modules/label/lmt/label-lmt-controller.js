@@ -19,7 +19,7 @@ exports.generatePdf = async (req, res) => {
     const data = await labelLmtService.getLabelData(NoLmt);
 
     const pdfBuffer = await generateLabelPdf(
-      { ...data, noLabel: data.noLmt },
+      { ...data, noLabel: data.noLaminating },
       buildLmtLabelHtml,
     );
 
