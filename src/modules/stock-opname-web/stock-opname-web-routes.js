@@ -10,6 +10,7 @@ router.use(verifyToken, attachPermissions);
 
 /* Permission: stock_opname:read | create | update | delete (lihat permissions.sql) */
 router.post('/', requirePermission('stock_opname:create'), ctrl.create);
+router.delete('/:noso', requirePermission('stock_opname:delete'), ctrl.removeSo);
 router.get('/meta-ascend', requirePermission('stock_opname:read'), ctrl.ascendMeta);
 router.get('/family', requirePermission('stock_opname:read'), ctrl.ascendFamilyByCategory);
 router.get('/headers', requirePermission('stock_opname:read'), ctrl.headers);

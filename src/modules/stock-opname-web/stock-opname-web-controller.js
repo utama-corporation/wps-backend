@@ -63,6 +63,10 @@ exports.create = async (req, res) => {
     return fail(res, error, 'creating');
   }
 };
+exports.removeSo = handle('deleting stock opname', async (req) => ({
+  message: 'Stock Opname berhasil dihapus',
+  data: await create.removeSo(req.params.noso, req.username),
+}));
 exports.laporanKayu = handle('laporan kayu', async (req) => {
   const header = await svc.getHeader(req.params.noso);
   const raw = String(req.query.jenis || '').trim();
