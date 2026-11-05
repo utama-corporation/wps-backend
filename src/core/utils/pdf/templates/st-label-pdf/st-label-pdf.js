@@ -21,15 +21,17 @@ function fmtNumId(v) {
   return dec ? `${sign}${withThousands},${dec}` : `${sign}${withThousands}`;
 }
 
-function buildDetailRows(detail = [], uomTebal = "", uomPanjang = "") {
-  const tSuffix = uomTebal ? ` ${uomTebal}` : "";
-  const pSuffix = uomPanjang ? ` ${uomPanjang}` : "";
+function withUnit(label, uom) {
+  return uom ? `${label} (${uom})` : label;
+}
+
+function buildDetailRows(detail = []) {
   return detail
     .map(
       (r) => `<tr>
-        <td>${fmtNumId(r.tebal)}${tSuffix}</td>
-        <td>${fmtNumId(r.lebar)}${tSuffix}</td>
-        <td>${fmtNumId(r.panjang)}${pSuffix}</td>
+        <td>${fmtNumId(r.tebal)}</td>
+        <td>${fmtNumId(r.lebar)}</td>
+        <td>${fmtNumId(r.panjang)}</td>
         <td>${fmtNumId(r.pcs)}</td>
       </tr>`,
     )
@@ -62,7 +64,10 @@ function buildStLabelHtml(data) {
     .replace("{{telly}}", esc(data.telly))
     .replace("{{stickBy}}", esc(data.stickBy))
     .replace("{{kbRow}}", kbRow)
-    .replace("{{detailRows}}", buildDetailRows(data.detail, data.uomTebal, data.uomPanjang))
+    .replace("{{headTebal}}", esc(withUnit("Tebal", data.uomTebal)))
+    .replace("{{headLebar}}", esc(withUnit("Lebar", data.uomTebal)))
+    .replace("{{headPanjang}}", esc(withUnit("Panjang", data.uomPanjang)))
+    .replace("{{detailRows}}", buildDetailRows(data.detail))
     .replace("{{totalPcs}}", esc(data.totalPcs))
     .replace("{{totalTon}}", esc(data.totalTon))
     .replace("{{totalM3}}", esc(data.totalM3))
