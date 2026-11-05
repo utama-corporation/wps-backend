@@ -1,6 +1,7 @@
 const { sql, poolPromise } = require("../../../core/config/db");
 const { assertPeriodeTerbuka } = require("../../../core/utils/periode-lock");
 const { currentJamWib } = require("../../../core/utils/format-utils");
+const { findUsage } = require("../../../core/utils/label-usage-trace");
 
 /** Tanggal produksi (FJProduksi_h.Tanggal) — dasar cek kunci periode. */
 async function getTanggalProduksi(noProduksi) {
@@ -753,7 +754,11 @@ async function addInput({ tipe, noProduksi, noLabel }) {
     `SELECT COUNT(*) AS Cnt FROM ${mapping.master} WHERE ${mapping.col} = @lbl AND DateUsage IS NOT NULL`
   );
   if (used.recordset[0].Cnt > 0) {
-    const err = new Error(`Label '${noLabel}' sudah pernah dipakai (DateUsage terisi)`);
+    // Telusuri proses/no transaksi pemakai supaya operator tahu label dipakai di mana.
+    const trace = await findUsage(type, noLabel);
+    const err = new Error(
+      trace || `Label '${noLabel}' sudah pernah dipakai (DateUsage terisi)`,
+    );
     err.status = 400;
     throw err;
   }
