@@ -37,7 +37,7 @@ async function getHeader(noCCA) {
       SELECT NoProduksi, NoCCAkhir FROM CCAkhirProduksiOutput      
     ) o ON o.NoCCAkhir = h.${KEY_COLUMN}
     LEFT JOIN (
-      SELECT NoProduksi, IdMesin FROM FJProduksi_h      
+      SELECT NoProduksi, IdMesin FROM CCAkhirProduksi_h
     ) p ON p.NoProduksi = o.NoProduksi
     LEFT JOIN BongkarSusunOutputCCAkhir s ON s.NoCCAkhir = h.${KEY_COLUMN}
     LEFT JOIN MstSPK_h sp      ON sp.NoSPK = h.NoSPK
