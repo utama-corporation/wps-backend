@@ -2,7 +2,7 @@ const sql = require('mssql');
 const { poolPromise } = require('../../core/config/db');
 const { badReq } = require('../../core/utils/http-error');
 const { assertPeriodeTerbuka } = require('../../core/utils/periode-lock');
-const { JENIS } = require('./stock-opname-web-service');
+const { JENIS, getHeader } = require('./stock-opname-web-service');
 
 // Kolom flag di StockOpname_h per kode jenis (paritas FrmStockOpname.vb BtnSimpan_Click).
 const HEADER_FLAG = {
@@ -341,4 +341,44 @@ async function laporanAscend(noso) {
   });
 }
 
-module.exports = { ascendMeta, ascendFamilyByCategory, create, laporanKayu, laporanAscend };
+// ---------- hapus ----------
+
+// Semua tabel anak ber-kolom NoSO (termasuk tabel lama KayuBulat/STBasah/STKering/Reproses/WIP), dihapus sebelum StockOpname_h.
+const SO_CHILD_TABLES = [
+  ...Object.values(JENIS).flatMap((j) => [j.hasil, j.so]),
+  ...['KayuBulat', 'STBasah', 'STKering', 'Reproses', 'WIP'].flatMap((n) => [`StockOpname_Hasil_d_${n}`, `StockOpname${n}`]),
+  'StockOpnameAscendHasil',
+  'StockOpnameAscend',
+  'StockOpnameAscend_dFamily',
+  'StockOpname_h_WarehouseID',
+];
+
+// Hapus header + seluruh detail (stok awal, hasil scan, data Ascend) satu SO dalam satu transaksi.
+async function removeSo(noso, username) {
+  const header = await getHeader(noso);
+  const noSO = clean(header.NoSO);
+  await assertPeriodeTerbuka(new Date(header.Tgl));
+
+  const pool = await poolPromise;
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    for (const table of SO_CHILD_TABLES) {
+      await tx.request().input('NoSO', sql.VarChar, noSO).query(`DELETE FROM [dbo].[${table}] WHERE NoSO = @NoSO`);
+    }
+    await tx.request().input('NoSO', sql.VarChar, noSO).query('DELETE FROM [dbo].[StockOpname_h] WHERE NoSO = @NoSO');
+
+    await riwayat(tx, username, `Menghapus Stock Opname ${noSO}`);
+    await tx.commit();
+    return { NoSO: noSO };
+  } catch (error) {
+    try {
+      await tx.rollback();
+    } catch {
+      // transaksi mungkin sudah gagal ditutup driver
+    }
+    throw error;
+  }
+}
+
+module.exports = { ascendMeta, ascendFamilyByCategory, create, laporanKayu, laporanAscend, removeSo };
