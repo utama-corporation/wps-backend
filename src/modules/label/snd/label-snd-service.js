@@ -37,7 +37,7 @@ async function getHeader(noSND) {
       SELECT NoProduksi, NoSanding FROM SandingProduksiOutput
     ) o ON o.NoSanding = h.${KEY_COLUMN}
     LEFT JOIN (
-      SELECT NoProduksi, IdMesin FROM FJProduksi_h
+      SELECT NoProduksi, IdMesin FROM SandingProduksi_h
     ) p ON p.NoProduksi = o.NoProduksi
     LEFT JOIN BongkarSusunOutputSanding s ON s.NoSanding = h.${KEY_COLUMN}
     LEFT JOIN MstSPK_h sp      ON sp.NoSPK = h.NoSPK

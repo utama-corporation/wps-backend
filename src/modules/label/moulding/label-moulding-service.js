@@ -39,7 +39,7 @@ async function getHeader(noMoulding) {
       SELECT NoProduksi, NoMoulding FROM MouldingProduksiOutput      
     ) o ON o.NoMoulding = h.${KEY_COLUMN}
     LEFT JOIN (
-      SELECT NoProduksi, IdMesin FROM FJProduksi_h
+      SELECT NoProduksi, IdMesin FROM MouldingProduksi_h
     ) p ON p.NoProduksi = o.NoProduksi
     LEFT JOIN BongkarSusunOutputMoulding s ON s.NoMoulding = h.${KEY_COLUMN}
     LEFT JOIN MstSPK_h sp      ON sp.NoSPK = h.NoSPK
