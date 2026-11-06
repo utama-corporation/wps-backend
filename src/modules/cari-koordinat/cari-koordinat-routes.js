@@ -15,6 +15,7 @@ router.get("/spk", requirePermission("cari_koordinat:read"), ctrl.getSpkList);
 router.get("/", requirePermission("cari_koordinat:read"), ctrl.getTanah);
 router.get("/pemilik", requirePermission("cari_koordinat:read"), ctrl.getPemilik);
 router.get("/persentase", requirePermission("cari_koordinat:read"), ctrl.getPersentase);
+router.get("/pdf", requirePermission("cari_koordinat:read"), ctrl.generatePdf);
 router.get("/export/csv", requirePermission("cari_koordinat:export"), ctrl.exportCsv);
 router.post("/export/geojson", requirePermission("cari_koordinat:export"), ctrl.exportGeoJson);
 

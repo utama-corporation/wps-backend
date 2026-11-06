@@ -1,4 +1,5 @@
 const svc = require("./cari-koordinat-service");
+const report = require("./cari-koordinat-report");
 
 const fail = (res, err) => res.status(err.status || 500).json({ success: false, message: err.message });
 
@@ -53,6 +54,22 @@ exports.exportCsv = async (req, res) => {
       "Content-Disposition": `attachment; filename="koordinat_${nama}.csv"`,
     });
     res.send(csv);
+  } catch (err) {
+    fail(res, err);
+  }
+};
+
+/* GET /api/operasional/cari-koordinat/pdf?noSpk= */
+exports.generatePdf = async (req, res) => {
+  try {
+    const pdf = await report.buildPdf(req.query.noSpk);
+    const nama = String(req.query.noSpk).trim().replace(/[^\w.-]+/g, "_");
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="koordinat_${nama}.pdf"`,
+      "Content-Length": pdf.length,
+    });
+    res.end(pdf);
   } catch (err) {
     fail(res, err);
   }

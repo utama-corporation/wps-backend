@@ -1,5 +1,7 @@
 const { sql, poolPromise } = require("../../../core/config/db");
 const { assertPeriodeTerbuka } = require("../../../core/utils/periode-lock");
+const { currentJamWib } = require("../../../core/utils/format-utils");
+const { findUsage } = require("../../../core/utils/label-usage-trace");
 
 /** Tanggal produksi (LaminatingProduksi_h.Tanggal) — dasar cek kunci periode. */
 async function getTanggalProduksi(noProduksi) {
@@ -569,12 +571,13 @@ async function createLabel({
   idJenisKayu, idGrade, noSPKAsal, noSPK, ukuran,
   tebal, lebar, panjang, jmlhBatang, idLokasi,
   isRepair, isReject, isLembur, noProduksi,
-  noBongkarSusun, dateCreate, jam,
+  noBongkarSusun, dateCreate, tanggal, rawDate, jam,
+  idUOMTblLebar, idUOMPanjang,
   idUsername,
 }) {
-  const effectiveDate = dateCreate || new Date();
-  const tanggalProduksi = noProduksi ? await getTanggalProduksi(noProduksi) : null;
-  await assertPeriodeTerbuka(tanggalProduksi || effectiveDate);
+  const productionDate = noProduksi ? await getTanggalProduksi(noProduksi) : null;
+  const effectiveDate = productionDate || dateCreate || tanggal || rawDate || new Date();
+  await assertPeriodeTerbuka(effectiveDate);
 
   const raw = Array.isArray(ukuran) && ukuran.length
     ? ukuran
@@ -635,11 +638,11 @@ async function createLabel({
   req.input("isrep", sql.Bit, isRepair ? 1 : 0);
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
-  // Saat dibuat dari halaman produksi, DateCreate mengikuti tanggal header produksi.
-  req.input("tgl", sql.Date, tanggalProduksi || effectiveDate);
-
-  req.input('bongkar', sql.VarChar(20), noBongkarSusun || null);
-  req.input('formJam', sql.VarChar(10), jam || null);
+  req.input("date", sql.Date, effectiveDate);
+  req.input("jam", sql.VarChar(8), jam || currentJamWib());
+  req.input("uomLebar", sql.Int, Number(idUOMTblLebar) || 1);
+  req.input("uomPanjang", sql.Int, Number(idUOMPanjang) || 1);
+  req.input("bongkar", sql.VarChar(20), noBongkarSusun || null);
 
   const dimTuples = rows.map((r, i) => {
     req.input(`t${i}`, sql.VarChar(20), r.tebal);
@@ -655,13 +658,13 @@ async function createLabel({
       BEGIN TRANSACTION;
       IF @bongkar IS NOT NULL AND NOT EXISTS (
         SELECT 1 FROM BongkarSusun_h WITH (HOLDLOCK)
-        WHERE NoBongkarSusun = @bongkar AND CONVERT(date, Tanggal) = @tgl
+        WHERE NoBongkarSusun = @bongkar AND CONVERT(date, Tanggal) = @date
       ) THROW 50001, 'Nomor Bongkar Susun tidak sesuai tanggal label.', 1;
       DECLARE @ns VARCHAR(20);
       SELECT @ns = ISNULL('U.' + FORMAT(RIGHT(MAX(NoLaminating), 6) + 1, '000000'), 'U.000001')
       FROM Laminating_h WITH (UPDLOCK, HOLDLOCK);
       INSERT INTO Laminating_h (NoLaminating, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair)
-      VALUES (@ns, @jk, @gr, @otel, @tgl, NULL, 1, 1, NULLIF(@nospk, ''), COALESCE(@formJam, FORMAT(GETDATE(), 'HH:mm')), @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep);
+       VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 7, 7, NULLIF(@stasal, ''), @lok, 0, @isrep);
       INSERT INTO Laminating_d (NoLaminating, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};
@@ -685,6 +688,16 @@ async function createLabel({
     await attachReq.query(`
       IF NOT EXISTS (SELECT 1 FROM LaminatingProduksiOutput WHERE NoProduksi = @np AND NoLaminating = @ns)
         INSERT INTO LaminatingProduksiOutput (NoProduksi, NoLaminating) VALUES (@np, @ns)
+    `);
+  }
+
+  if (noLaminating && noBongkarSusun) {
+    const attachReq = pool.request();
+    attachReq.input("nbs", sql.VarChar(20), noBongkarSusun);
+    attachReq.input("nl", sql.VarChar(20), noLaminating);
+    await attachReq.query(`
+      IF NOT EXISTS (SELECT 1 FROM BongkarSusunOutputLaminating WHERE NoLaminating = @nl AND NoBongkarSusun = @nbs)
+        INSERT INTO BongkarSusunOutputLaminating (NoLaminating, NoBongkarSusun) VALUES (@nl, @nbs)
     `);
   }
 
@@ -740,7 +753,11 @@ async function addInput({ tipe, noProduksi, noLabel }) {
     `SELECT COUNT(*) AS Cnt FROM ${mapping.master} WHERE ${mapping.col} = @lbl AND DateUsage IS NOT NULL`
   );
   if (used.recordset[0].Cnt > 0) {
-    const err = new Error(`Label '${noLabel}' sudah pernah dipakai (DateUsage terisi)`);
+    // Telusuri proses/no transaksi pemakai supaya operator tahu label dipakai di mana.
+    const trace = await findUsage(type, noLabel);
+    const err = new Error(
+      trace || `Label '${noLabel}' sudah pernah dipakai (DateUsage terisi)`,
+    );
     err.status = 400;
     throw err;
   }

@@ -1,5 +1,7 @@
 const { sql, poolPromise } = require("../../../core/config/db");
 const { assertPeriodeTerbuka } = require("../../../core/utils/periode-lock");
+const { currentJamWib } = require("../../../core/utils/format-utils");
+const { findUsage } = require("../../../core/utils/label-usage-trace");
 
 /** Tanggal produksi (PackingProduksi_h.Tanggal) — dasar cek kunci periode. */
 async function getTanggalProduksi(noProduksi) {
@@ -606,12 +608,13 @@ async function createLabel({
   noWIPAsal, noMouldingAsal, noSandingAsal, idWarehouse, idLokasi,
   ukuran, tebal, lebar, panjang, jmlhBatang,
   isRepair, isReject, isLembur, noProduksi,
-  noBongkarSusun, dateCreate, jam,
+  noBongkarSusun, dateCreate, tanggal, rawDate, jam,
+  idUOMTblLebar, idUOMPanjang,
   idUsername,
 }) {
-  const effectiveDate = dateCreate || new Date();
-  const tanggalProduksi = noProduksi ? await getTanggalProduksi(noProduksi) : null;
-  await assertPeriodeTerbuka(tanggalProduksi || effectiveDate);
+  const productionDate = noProduksi ? await getTanggalProduksi(noProduksi) : null;
+  const effectiveDate = productionDate || dateCreate || tanggal || rawDate || new Date();
+  await assertPeriodeTerbuka(effectiveDate);
 
   const raw = Array.isArray(ukuran) && ukuran.length
     ? ukuran
@@ -679,17 +682,15 @@ async function createLabel({
   req.input("nwip", sql.VarChar(13), noWIPAsal || "");
   req.input("nmou", sql.VarChar(13), noMouldingAsal || "");
   req.input("nsan", sql.VarChar(13), noSandingAsal || "");
-  req.input("wh", sql.Int, idWarehouse == null || idWarehouse === "" ? 10 : idWarehouse);
+  req.input("wh", sql.Int, idWarehouse == null || idWarehouse === "" ? 11 : idWarehouse);
   req.input("lok", sql.VarChar(5), lokasi);
   req.input("otel", sql.Int, idOrgTelly);
   req.input("isrep", sql.Bit, isRepair ? 1 : 0);
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
-  // Saat dibuat dari halaman produksi, DateCreate mengikuti tanggal header produksi.
-  req.input("tgl", sql.Date, tanggalProduksi || effectiveDate);
-
-  req.input('bongkar', sql.VarChar(20), noBongkarSusun || null);
-  req.input('formJam', sql.VarChar(10), jam || null);
+  req.input("date", sql.Date, effectiveDate);
+  req.input("jam", sql.VarChar(8), jam || currentJamWib());
+  req.input("bongkar", sql.VarChar(20), noBongkarSusun || null);
 
   const dimTuples = rows.map((r, i) => {
     req.input(`t${i}`, sql.VarChar(20), r.tebal);
@@ -705,13 +706,13 @@ async function createLabel({
       BEGIN TRANSACTION;
       IF @bongkar IS NOT NULL AND NOT EXISTS (
         SELECT 1 FROM BongkarSusun_h WITH (HOLDLOCK)
-        WHERE NoBongkarSusun = @bongkar AND CONVERT(date, Tanggal) = @tgl
+        WHERE NoBongkarSusun = @bongkar AND CONVERT(date, Tanggal) = @date
       ) THROW 50001, 'Nomor Bongkar Susun tidak sesuai tanggal label.', 1;
       DECLARE @ns VARCHAR(20);
       SELECT @ns = ISNULL('I.' + FORMAT(RIGHT(MAX(NoBJ), 6) + 1, '000000'), 'I.000001')
       FROM BarangJadi_h WITH (UPDLOCK, HOLDLOCK);
       INSERT INTO BarangJadi_h (NoBJ, IdJenisKayu, IdBarangJadi, DateCreate, DateUsage, IdOrgTelly, IdFJProfile, NoSPK, NoSPKAsal, Jam, IsReject, IsRepair, IsSisa, NoWIPAsal, NoMouldingAsal, NoSandingAsal, IdWarehouse, IdLokasi, IsLembur, HasBeenPrinted)
-      VALUES (@ns, @jk, @bj, @tgl, NULL, @otel, @fj, NULLIF(@nospk, ''), NULLIF(@stasal, ''), COALESCE(@formJam, FORMAT(GETDATE(), 'HH:mm')), @isrej, @isrep, 0, NULLIF(@nwip, ''), NULLIF(@nmou, ''), NULLIF(@nsan, ''), @wh, @lok, @isleb, 0);
+       VALUES (@ns, @jk, @bj, @date, NULL, @otel, @fj, NULLIF(@nospk, ''), NULLIF(@stasal, ''), @jam, @isrej, @isrep, 0, NULLIF(@nwip, ''), NULLIF(@nmou, ''), NULLIF(@nsan, ''), @wh, @lok, @isleb, 0);
       INSERT INTO BarangJadi_d (NoBJ, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};
@@ -735,6 +736,16 @@ async function createLabel({
     await attachReq.query(`
       IF NOT EXISTS (SELECT 1 FROM PackingProduksiOutput WHERE NoProduksi = @np AND NoBJ = @ns)
         INSERT INTO PackingProduksiOutput (NoProduksi, NoBJ) VALUES (@np, @ns)
+    `);
+  }
+
+  if (noBJ && noBongkarSusun) {
+    const attachReq = pool.request();
+    attachReq.input("nbs", sql.VarChar(20), noBongkarSusun);
+    attachReq.input("nb", sql.VarChar(20), noBJ);
+    await attachReq.query(`
+      IF NOT EXISTS (SELECT 1 FROM BongkarSusunOutputBarangJadi WHERE NoBJ = @nb AND NoBongkarSusun = @nbs)
+        INSERT INTO BongkarSusunOutputBarangJadi (NoBJ, NoBongkarSusun) VALUES (@nb, @nbs)
     `);
   }
 
@@ -790,7 +801,11 @@ async function addInput({ tipe, noProduksi, noLabel }) {
     `SELECT COUNT(*) AS Cnt FROM ${mapping.master} WHERE ${mapping.col} = @lbl AND DateUsage IS NOT NULL`
   );
   if (used.recordset[0].Cnt > 0) {
-    const err = new Error(`Label '${noLabel}' sudah pernah dipakai (DateUsage terisi)`);
+    // Telusuri proses/no transaksi pemakai supaya operator tahu label dipakai di mana.
+    const trace = await findUsage(type, noLabel);
+    const err = new Error(
+      trace || `Label '${noLabel}' sudah pernah dipakai (DateUsage terisi)`,
+    );
     err.status = 400;
     throw err;
   }

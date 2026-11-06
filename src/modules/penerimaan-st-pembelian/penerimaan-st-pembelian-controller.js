@@ -1,15 +1,14 @@
 const service = require("./penerimaan-st-pembelian-service");
 
-// Cetak memakai Crystal Report yang sama dengan tablet (CrPenSTSawmillPembelian), bukan laporan baru.
-// Tablet: "http://<DB_IP>:3000/api/crystalreport/wps/export-pdf". Override via CRYSTAL_REPORT_URL.
-const CRYSTAL_REPORT_URL =
-  process.env.CRYSTAL_REPORT_URL ||
-  `http://${process.env.DB_SERVER}:3000/api/crystalreport/wps/export-pdf`;
-const REPORT_NAME = "CrPenSTSawmillPembelian";
+// Cetak memakai service laporan (open-api-report). Autentikasi: token JWT user diteruskan apa adanya.
+// Override via REPORT_API_ST_PEMBELIAN_URL.
+const REPORT_URL =
+  process.env.REPORT_API_ST_PEMBELIAN_URL ||
+  "http://192.168.10.100:5006/api/reports/sawn-timber/penerimaan-st-pembelian-ton/pdf";
 
 const fail = (res, err, label) => {
   console.error(`${label}:`, err);
-  return res.status(err.statusCode || 500).json({
+  return res.status(err.statusCode || err.status || 500).json({
     success: false,
     message: err.message || "Terjadi kesalahan server",
   });
@@ -113,22 +112,26 @@ exports.generatePdf = async (req, res) => {
       return res.status(404).json({ success: false, message: "Penerimaan ST tidak ditemukan" });
     }
 
-    // Parameter identik dengan tablet: NoProduksi, Username, reportName
-    const url =
-      `${CRYSTAL_REPORT_URL}?NoProduksi=${encodeURIComponent(no)}` +
-      `&Username=${encodeURIComponent(req.username || "")}` +
-      `&reportName=${encodeURIComponent(REPORT_NAME)}`;
-
-    const upstream = await fetch(url);
+    const upstream = await fetch(REPORT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/pdf",
+        Authorization: req.header("Authorization") || "",
+      },
+      body: JSON.stringify({ NoPenerimaanST: no }),
+    });
     if (!upstream.ok) {
       let message = `Gagal membuat laporan (${upstream.status})`;
       try {
         const body = await upstream.json();
-        message = body.Message || body.message || message;
+        message = body.message || body.Message || message;
       } catch {
         // body bukan JSON — pakai pesan default
       }
-      return res.status(upstream.status === 400 ? 404 : 502).json({ success: false, message });
+      // 401 dari service laporan sengaja jadi 502 supaya frontend tidak mengira sesi user habis.
+      const status = upstream.status === 404 || upstream.status === 422 ? upstream.status : 502;
+      return res.status(status).json({ success: false, message });
     }
     const pdf = Buffer.from(await upstream.arrayBuffer());
 

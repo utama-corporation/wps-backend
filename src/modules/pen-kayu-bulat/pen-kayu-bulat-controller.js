@@ -1,5 +1,5 @@
 const penKayuBulatService = require("./pen-kayu-bulat-service");
-const penKayuBulatReport = require("./pen-kayu-bulat-report");
+const { REPORT_BASE } = require("../../core/config/report");
 
 exports.getNextNo = async (_req, res) => {
   try {
@@ -88,10 +88,37 @@ exports.remove = async (req, res) => {
 };
 
 // GET /laporan?jenis=int-ton|ext-ton|int-kg|ext-kg&no=A.000000 → PDF inline.
+// PDF dibuat report microservice (open-api-report) dengan JWT login yang sama.
+const LAPORAN_PATH = {
+  "int-ton": "penerimaan-kayu-bulat-int-ton",
+  "ext-ton": "penerimaan-kayu-bulat-ext-ton",
+  "int-kg": "penerimaan-kayu-bulat-kg",
+  "ext-kg": "penerimaan-kayu-bulat-extkg",
+};
+
 exports.getLaporan = async (req, res) => {
   try {
     const { jenis, no } = req.query;
-    const pdf = await penKayuBulatReport.generatePdf(jenis, no, req.username);
+    const path = LAPORAN_PATH[jenis];
+    if (!path) return res.status(400).json({ success: false, message: "Jenis laporan tidak dikenal" });
+    if (!no) return res.status(400).json({ success: false, message: "Nomor penerimaan wajib diisi" });
+
+    const upstream = await fetch(
+      `${REPORT_BASE}/api/reports/kayu-bulat/${path}/pdf?NoKayuBulat=${encodeURIComponent(no)}`,
+      { headers: { Authorization: req.headers.authorization || "", Accept: "application/pdf" } },
+    );
+    if (!upstream.ok) {
+      let message = `Gagal membuat laporan (${upstream.status})`;
+      try {
+        const body = await upstream.json();
+        message = body.message || body.Message || message;
+      } catch {
+        // body bukan JSON — pakai pesan default
+      }
+      const status = upstream.status === 404 || upstream.status === 422 ? upstream.status : 502;
+      return res.status(status).json({ success: false, message });
+    }
+    const pdf = Buffer.from(await upstream.arrayBuffer());
     const file = `penerimaan-kayu-bulat-${jenis}-${no}.pdf`.replace(/[^\w.-]/g, "_");
     res.set({
       "Content-Type": "application/pdf",

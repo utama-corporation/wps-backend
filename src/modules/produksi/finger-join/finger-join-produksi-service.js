@@ -1,5 +1,7 @@
 const { sql, poolPromise } = require("../../../core/config/db");
 const { assertPeriodeTerbuka } = require("../../../core/utils/periode-lock");
+const { currentJamWib } = require("../../../core/utils/format-utils");
+const { findUsage } = require("../../../core/utils/label-usage-trace");
 
 /** Tanggal produksi (FJProduksi_h.Tanggal) — dasar cek kunci periode. */
 async function getTanggalProduksi(noProduksi) {
@@ -647,7 +649,7 @@ async function createLabel({
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
   req.input("date", sql.Date, tanggalProduksi || effectiveDate);
-  req.input("jam", sql.VarChar(8), jam || new Date().toTimeString().slice(0, 5));
+  req.input("jam", sql.VarChar(8), jam || currentJamWib());
   req.input("uomLebar", sql.Int, Number(idUOMTblLebar) || 1);
   req.input("uomPanjang", sql.Int, Number(idUOMPanjang) || 1);
 
@@ -667,7 +669,7 @@ async function createLabel({
       SELECT @ns = ISNULL('S.' + FORMAT(RIGHT(MAX(NoFJ), 6) + 1, '000000'), 'S.000001')
       FROM FJ_h;
       INSERT INTO FJ_h (NoFJ, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoS4SAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair)
-      VALUES (@ns, @jk, @gr, @otel, @date, NULL, NULLIF(@s4sasal, ''), @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 5, NULL, NULLIF(@stasal, ''), @lok, 0, @isrep);
+      VALUES (@ns, @jk, @gr, @otel, @date, NULL, NULLIF(@s4sasal, ''), @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep);
       INSERT INTO FJ_d (NoFJ, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};
@@ -752,7 +754,11 @@ async function addInput({ tipe, noProduksi, noLabel }) {
     `SELECT COUNT(*) AS Cnt FROM ${mapping.master} WHERE ${mapping.col} = @lbl AND DateUsage IS NOT NULL`
   );
   if (used.recordset[0].Cnt > 0) {
-    const err = new Error(`Label '${noLabel}' sudah pernah dipakai (DateUsage terisi)`);
+    // Telusuri proses/no transaksi pemakai supaya operator tahu label dipakai di mana.
+    const trace = await findUsage(type, noLabel);
+    const err = new Error(
+      trace || `Label '${noLabel}' sudah pernah dipakai (DateUsage terisi)`,
+    );
     err.status = 400;
     throw err;
   }

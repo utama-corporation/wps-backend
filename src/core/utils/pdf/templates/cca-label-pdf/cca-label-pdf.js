@@ -25,9 +25,9 @@ function buildDetailRows(detail = []) {
   return detail
     .map(
       (r) => `<tr>
-        <td>${fmtNumId(r.tebal)} mm</td>
-        <td>${fmtNumId(r.lebar)} mm</td>
-        <td>${fmtNumId(r.panjang)} mm</td>
+        <td>${fmtNumId(r.tebal)}</td>
+        <td>${fmtNumId(r.lebar)}</td>
+        <td>${fmtNumId(r.panjang)}</td>
         <td>${fmtNumId(r.pcs)}</td>
       </tr>`,
     )

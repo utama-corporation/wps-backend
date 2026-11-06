@@ -9,6 +9,8 @@ router.use(verifyToken, attachPermissions);
 // PDF per kode laporan (menu Laporan — paritas FrmLaporan aplikasi desktop).
 // Cek permission dilakukan di controller per kategori
 // (laporan:read = semua, atau laporan:<slug>:read per kategori).
+// Lookup supplier aktif (Enable = 1) untuk combobox filter laporan.
+router.get("/lookup/supplier", ctrl.getSupplierLookup);
 router.get("/:kode/pdf", ctrl.getPdf);
 
 module.exports = router;

@@ -26,7 +26,7 @@ function hitungTon(tebal, lebar, panjang, pcs, idUOMTblLebar) {
 const SELECT_HEADER = `
   SELECT
     p.NoPenerimaanST, p.TglLaporan, p.TglMasuk, p.IdSupplier, s.NmSupplier AS Supplier,
-    p.NoTruk, p.NoPlat, p.Suket, p.TonSJ, p.Note,
+    p.NoTruk, p.NoPlat, p.Suket, p.TonSJ, p.Note, p.IsKering,
     p.IdTanah, t.NamaTanah AS SuratTanah
   FROM ${HEADER} p
   LEFT JOIN MstSupplier s ON s.IdSupplier = p.IdSupplier
@@ -121,6 +121,9 @@ function bindHeader(req, d) {
   req.input("suket", sql.VarChar(100), String(d.suket).trim());
   req.input("tonSJ", sql.VarChar(50), String(d.tonSJ).trim());
   req.input("note", sql.VarChar(50), d.note ? String(d.note).slice(0, 50) : null);
+  // 1 = Kering, 0 = Basah, NULL = tidak ditentukan.
+  const k = d.isKering;
+  req.input("isKering", sql.Bit, k === null || k === undefined || k === "" ? null : k === true || k === 1 || k === "1" || k === "true" ? 1 : 0);
 }
 
 function validateHeader(d) {
@@ -146,9 +149,9 @@ async function create(data) {
     bindHeader(req, data);
     await req.query(`
       INSERT INTO ${HEADER}
-        (NoPenerimaanST, TglLaporan, TglMasuk, IdSupplier, IdTanah, NoTruk, NoPlat, Suket, TonSJ, Note)
+        (NoPenerimaanST, TglLaporan, TglMasuk, IdSupplier, IdTanah, NoTruk, NoPlat, Suket, TonSJ, Note, IsKering)
       VALUES
-        (@no, @tglLaporan, @tglMasuk, @idSupplier, @idTanah, @noTruk, @noPlat, @suket, @tonSJ, @note)
+        (@no, @tglLaporan, @tglMasuk, @idSupplier, @idTanah, @noTruk, @noPlat, @suket, @tonSJ, @note, @isKering)
     `);
     await transaction.commit();
     return { noPenerimaanST };
@@ -169,7 +172,7 @@ async function update(no, data) {
   await req.query(`
     UPDATE ${HEADER}
     SET TglLaporan = @tglLaporan, TglMasuk = @tglMasuk, IdSupplier = @idSupplier, IdTanah = @idTanah,
-        NoTruk = @noTruk, NoPlat = @noPlat, Suket = @suket, TonSJ = @tonSJ, Note = @note
+        NoTruk = @noTruk, NoPlat = @noPlat, Suket = @suket, TonSJ = @tonSJ, Note = @note, IsKering = @isKering
     WHERE NoPenerimaanST = @no
   `);
   return { noPenerimaanST: no };
