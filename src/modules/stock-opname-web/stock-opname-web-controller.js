@@ -78,9 +78,9 @@ exports.laporanAscend = handle('laporan ascend', async (req) => {
   return { data: await create.laporanAscend(String(header.NoSO).trim()) };
 });
 
-// Laporan Crystal Report (service .NET: E:/JOB/API/wps-crystal). Baru kategori yang sudah diuji.
+// Laporan Crystal Report (service .NET: E:/JOB/API/wps-crystal). Hanya kategori yang sudah diuji render-nya.
 const CRYSTAL_URL = (process.env.CRYSTAL_SO_URL || "http://127.0.0.1:5199").replace(/\/+$/, "");
-const CRYSTAL_KEYS = ["s4s"];
+const CRYSTAL_KEYS = ["s4s", "fj", "moulding", "laminating", "ccakhir", "sanding", "bj"];
 
 exports.crystalPdf = async (req, res) => {
   try {

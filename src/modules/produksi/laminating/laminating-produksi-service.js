@@ -20,6 +20,7 @@ async function getMesinList() {
     SELECT
       M.IdMesin,
       M.NamaMesin,
+      S.ShiftNo AS ShiftSlot,
       CASE WHEN P.NoProduksi IS NULL THEN 0 ELSE 1 END AS IsJalanHariIni,
       ISNULL(P.Shift, '') AS Shift,
       ISNULL(P.NoProduksi, '') AS NoProduksi,
@@ -30,18 +31,20 @@ async function getMesinList() {
       ISNULL(D.NamaOperator, '') AS DefaultOperatorName
     FROM MstMesin M
     INNER JOIN MstBagian B ON B.IdBagian = M.IdBagian
+    CROSS JOIN (VALUES (1), (2), (3)) S(ShiftNo)
     OUTER APPLY (
       SELECT TOP 1 H.NoProduksi, H.Shift, H.JamKerja, H.JmlhAnggota, H.IdOperator
       FROM LaminatingProduksi_h H
       WHERE H.IdMesin = M.IdMesin
         AND H.Tanggal = CONVERT(date, GETDATE())
+        AND TRY_CAST(H.Shift AS int) = S.ShiftNo
       ORDER BY H.NoProduksi DESC
     ) P
     LEFT JOIN MstOperator C ON C.IdOperator = P.IdOperator
     LEFT JOIN MstOperator D ON D.IdOperator = M.DefaultOprator
     WHERE M.Enable = 1
       AND B.NamaBagian LIKE '%LAMINATING%'
-    ORDER BY CASE WHEN P.NoProduksi IS NULL THEN 1 ELSE 0 END, M.NamaMesin
+    ORDER BY M.NamaMesin, S.ShiftNo
   `);
   return result.recordset;
 }
