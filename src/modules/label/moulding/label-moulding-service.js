@@ -74,7 +74,7 @@ async function getDetail(noMoulding) {
  * LIST ALL LABELS (header only, for V2 list form)
  * ==========================================================*/
 
-async function getAllLabels({ search, topRow }) {
+async function getAllLabels({ search, topRow, includeTotal = false }) {
   const pool = await poolPromise;
   const req = pool.request();
   const top = parseInt(topRow, 10) || 100;
@@ -103,10 +103,15 @@ async function getAllLabels({ search, topRow }) {
     LEFT JOIN MstGrade g ON g.IdGrade = h.IdGrade
     LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = h.IdOrgTelly
     ${whereClause}
-    ORDER BY h.NoMoulding DESC
+    ORDER BY h.NoMoulding DESC;
+    ${includeTotal ? `
+      SELECT COUNT_BIG(*) AS Total FROM ${MASTER_TABLE} h
+      INNER JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+      ${whereClause};
+    ` : ''}
   `);
 
-  return result.recordset;
+  return includeTotal ? { items: result.recordset, total: Number(result.recordsets[1][0].Total) } : result.recordset;
 }
 
 /* ============================================================
@@ -183,12 +188,16 @@ async function updateLabel(noMoulding, data) {
   req.input("isRepair", sql.Bit, data.isRepair ? 1 : 0);
   req.input("jam", sql.VarChar(10), data.jam || null);
 
+  req.input("noSPKAsal", sql.VarChar(20), data.noSPKAsal || null);
+
+  req.input('hasSPKAsal', sql.Bit, Object.prototype.hasOwnProperty.call(data, 'noSPKAsal') ? 1 : 0);
   await req.query(`
     UPDATE ${MASTER_TABLE}
     SET IdJenisKayu = @idJenisKayu,
         IdGrade = @idGrade,
         IdOrgTelly = @idOrgTelly,
         NoSPK = @noSPK,
+        NoSPKAsal = CASE WHEN @hasSPKAsal = 1 THEN @noSPKAsal ELSE NoSPKAsal END,
         IdLokasi = @idLokasi,
         IsReject = @isReject,
         IsLembur = @isLembur,
@@ -235,20 +244,31 @@ async function updateDetail(noMoulding, details) {
 
 async function deleteLabel(noMoulding) {
   const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const link = new sql.Request(transaction);
+    link.input('labelNo', sql.VarChar(50), noMoulding);
+    await link.query('DELETE FROM BongkarSusunOutputMoulding WHERE NoMoulding = @labelNo');
 
-  const outReq = pool.request();
-  outReq.input("noMoulding", sql.VarChar(50), noMoulding);
-  await outReq.query(`DELETE FROM MouldingProduksiOutput WHERE NoMoulding = @noMoulding`);
+    const outReq = new sql.Request(transaction);
+    outReq.input("noMoulding", sql.VarChar(50), noMoulding);
+    await outReq.query(`DELETE FROM MouldingProduksiOutput WHERE NoMoulding = @noMoulding`);
 
-  const detReq = pool.request();
-  detReq.input("noMoulding", sql.VarChar(50), noMoulding);
-  await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noMoulding`);
+    const detReq = new sql.Request(transaction);
+    detReq.input("noMoulding", sql.VarChar(50), noMoulding);
+    await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noMoulding`);
 
-  const hdrReq = pool.request();
-  hdrReq.input("noMoulding", sql.VarChar(50), noMoulding);
-  await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noMoulding`);
+    const hdrReq = new sql.Request(transaction);
+    hdrReq.input("noMoulding", sql.VarChar(50), noMoulding);
+    await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noMoulding`);
 
-  return { noMoulding };
+    await transaction.commit();
+    return { noMoulding };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
 }
 
 /* ============================================================
@@ -328,6 +348,7 @@ async function getLabelData(noMoulding) {
   }
 
   return {
+    ...header,
     noMoulding: header.NoMoulding,
     jenisKayu: header.JenisKayu || "-",
     grade: header.Grade || "-",

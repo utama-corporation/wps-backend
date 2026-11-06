@@ -52,11 +52,12 @@ exports.generatePdf = async (req, res) => {
 exports.getAllLabels = async (req, res) => {
   try {
     const { search, topRow } = req.query;
-    const data = await labelMouldingService.getAllLabels({ search, topRow });
+    const { items: data, total } = await labelMouldingService.getAllLabels({ search, topRow, includeTotal: true });
     return res.status(200).json({
       success: true,
       message: "Data label Moulding berhasil diambil",
       data,
+      total,
     });
   } catch (err) {
     console.error("Moulding getAllLabels Error:", err);

@@ -169,7 +169,7 @@ async function getDetail(noProduksi) {
 
   const inputBranches = Object.entries(INPUT_META()).map(([tipe, m]) => `
     SELECT '${tipe}' AS Tipe, A.${m.key} AS NoLabel, A.DateTimeSaved,
-      D.Tebal, D.Lebar, D.Panjang,
+      D.Tebal, D.Lebar, D.Panjang, H.IdUOMTblLebar, H.IdUOMPanjang,
       COALESCE(AGG.JmlhBatang, 0) AS JmlhBatang,
       AGG.M3,
       COALESCE(AGG.JmlhUkuran, 0) AS JmlhUkuran,
@@ -266,7 +266,7 @@ async function getNextNoLabel() {
 
 async function getMasterOptions() {
   const pool = await poolPromise;
-  const [jenisKayu, grade, spk, warna] = await Promise.all([
+  const [jenisKayu, grade, spk, warna, lokasi, orgTelly] = await Promise.all([
     pool.request().query(`
       SELECT Jenis, IdJenisKayu
       FROM MstJenisKayu
@@ -289,6 +289,8 @@ async function getMasterOptions() {
     pool.request().query(`
       SELECT IdWarna, NamaWarna FROM MstWarna ORDER BY IdWarna
     `),
+    pool.request().query('SELECT CAST(IdLokasi AS VARCHAR(50)) AS IdLokasi FROM MstLokasi WHERE [Enable] = 1 ORDER BY IdLokasi'),
+    pool.request().query('SELECT IdOrgTelly, NamaOrgTelly FROM MstOrgTelly ORDER BY NamaOrgTelly'),
   ]);
 
   return {
@@ -296,6 +298,8 @@ async function getMasterOptions() {
     grade: grade.recordset,
     spk: spk.recordset,
     warna: warna.recordset,
+    lokasi: lokasi.recordset,
+    orgTelly: orgTelly.recordset,
   };
 }
 

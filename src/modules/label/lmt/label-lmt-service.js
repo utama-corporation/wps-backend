@@ -73,7 +73,7 @@ async function getDetail(noLMT) {
  * LIST ALL LABELS (header only, for V2 list form)
  * ==========================================================*/
 
-async function getAllLabels({ search, topRow }) {
+async function getAllLabels({ search, topRow, includeTotal = false }) {
   const pool = await poolPromise;
   const req = pool.request();
   const top = parseInt(topRow, 10) || 100;
@@ -89,6 +89,7 @@ async function getAllLabels({ search, topRow }) {
       h.NoLaminating,
       h.DateCreate,
       h.Jam,
+      h.HasBeenPrinted,
       h.IsReject,
       h.IsLembur,
       k.Jenis AS JenisKayu,
@@ -101,10 +102,15 @@ async function getAllLabels({ search, topRow }) {
     LEFT JOIN MstGrade g ON g.IdGrade = h.IdGrade
     LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = h.IdOrgTelly
     ${whereClause}
-    ORDER BY h.NoLaminating DESC
+    ORDER BY h.NoLaminating DESC;
+    ${includeTotal ? `
+      SELECT COUNT_BIG(*) AS Total FROM ${MASTER_TABLE} h
+      INNER JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+      ${whereClause};
+    ` : ''}
   `);
 
-  return result.recordset;
+  return includeTotal ? { items: result.recordset, total: Number(result.recordsets[1][0].Total) } : result.recordset;
 }
 
 /* ============================================================
@@ -180,12 +186,16 @@ async function updateLabel(noLaminating, data) {
   req.input("isRepair", sql.Bit, data.isRepair ? 1 : 0);
   req.input("jam", sql.VarChar(10), data.jam || null);
 
+  req.input("noSPKAsal", sql.VarChar(20), data.noSPKAsal || null);
+
+  req.input('hasSPKAsal', sql.Bit, Object.prototype.hasOwnProperty.call(data, 'noSPKAsal') ? 1 : 0);
   await req.query(`
     UPDATE ${MASTER_TABLE}
     SET IdJenisKayu = @idJenisKayu,
         IdGrade = @idGrade,
         IdOrgTelly = @idOrgTelly,
         NoSPK = @noSPK,
+        NoSPKAsal = CASE WHEN @hasSPKAsal = 1 THEN @noSPKAsal ELSE NoSPKAsal END,
         IdLokasi = @idLokasi,
         IsReject = @isReject,
         IsLembur = @isLembur,
@@ -232,20 +242,31 @@ async function updateDetail(noLaminating, details) {
 
 async function deleteLabel(noLaminating) {
   const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const link = new sql.Request(transaction);
+    link.input('labelNo', sql.VarChar(50), noLaminating);
+    await link.query('DELETE FROM BongkarSusunOutputLaminating WHERE NoLaminating = @labelNo');
 
-  const outReq = pool.request();
-  outReq.input("noLaminating", sql.VarChar(50), noLaminating);
-  await outReq.query(`DELETE FROM LaminatingProduksiOutput WHERE NoLaminating = @noLaminating`);
+    const outReq = new sql.Request(transaction);
+    outReq.input("noLaminating", sql.VarChar(50), noLaminating);
+    await outReq.query(`DELETE FROM LaminatingProduksiOutput WHERE NoLaminating = @noLaminating`);
 
-  const detReq = pool.request();
-  detReq.input("noLaminating", sql.VarChar(50), noLaminating);
-  await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noLaminating`);
+    const detReq = new sql.Request(transaction);
+    detReq.input("noLaminating", sql.VarChar(50), noLaminating);
+    await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noLaminating`);
 
-  const hdrReq = pool.request();
-  hdrReq.input("noLaminating", sql.VarChar(50), noLaminating);
-  await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noLaminating`);
+    const hdrReq = new sql.Request(transaction);
+    hdrReq.input("noLaminating", sql.VarChar(50), noLaminating);
+    await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noLaminating`);
 
-  return { noLaminating };
+    await transaction.commit();
+    return { noLaminating };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
 }
 
 /* ============================================================
@@ -325,6 +346,7 @@ async function getLabelData(noLMT) {
   }
 
   return {
+    ...header,
     noLaminating: header.NoLaminating,
     jenisKayu: header.JenisKayu || "-",
     grade: header.Grade || "-",

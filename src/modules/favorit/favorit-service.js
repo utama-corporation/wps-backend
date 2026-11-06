@@ -6,7 +6,7 @@ const list = async (idUsername) => {
     .request()
     .input("id", sql.Int, idUsername)
     .query(`
-      SELECT Tipe AS tipe, Kode AS kode, Urutan AS urutan
+      SELECT Tipe AS tipe, Kode AS kode, Urutan AS urutan, Komentar AS komentar
       FROM dbo.MstUserFavorit
       WHERE IdUsername = @id
       ORDER BY Urutan, Kode
@@ -15,21 +15,23 @@ const list = async (idUsername) => {
 };
 
 // Idempoten: bila sudah ada, tidak berubah. Entri baru masuk di urutan paling bawah.
-const add = async (idUsername, tipe, kode) => {
+const add = async (idUsername, tipe, kode, komentar = null) => {
   const pool = await poolPromise;
   await pool
     .request()
     .input("id", sql.Int, idUsername)
     .input("tipe", sql.VarChar(20), tipe)
     .input("kode", sql.VarChar(200), kode)
+    .input("komentar", sql.NVarChar(500), komentar)
     .query(`
       IF NOT EXISTS (
         SELECT 1 FROM dbo.MstUserFavorit WITH (UPDLOCK, HOLDLOCK)
         WHERE IdUsername = @id AND Tipe = @tipe AND Kode = @kode
       )
-      INSERT INTO dbo.MstUserFavorit (IdUsername, Tipe, Kode, Urutan)
+      INSERT INTO dbo.MstUserFavorit (IdUsername, Tipe, Kode, Urutan, Komentar)
       SELECT @id, @tipe, @kode,
-             ISNULL((SELECT MAX(Urutan) FROM dbo.MstUserFavorit WHERE IdUsername = @id), 0) + 1
+             ISNULL((SELECT MAX(Urutan) FROM dbo.MstUserFavorit WHERE IdUsername = @id), 0) + 1,
+             @komentar
     `);
 };
 

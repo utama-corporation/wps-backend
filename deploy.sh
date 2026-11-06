@@ -12,7 +12,10 @@ CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 echo "[1/3] Git pull..."
 git pull origin "$CURRENT_BRANCH"
 
-echo "[2/3] Build & restart container..."
+echo "[2/3] Backup & verifikasi penyimpanan update sebelum mengganti container..."
+bash ./prepare-update-storage.sh
+
+echo "Build & restart container..."
 docker compose up -d --build
 
 echo "[3/3] Status container:"

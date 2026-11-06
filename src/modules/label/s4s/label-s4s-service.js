@@ -89,7 +89,7 @@ async function getDetail(noS4S) {
  * LIST ALL LABELS (header only, for V2 list form)
  * ==========================================================*/
 
-async function getAllLabels({ search, topRow }) {
+async function getAllLabels({ search, topRow, includeTotal = false }) {
   const pool = await poolPromise;
   const req = pool.request();
   const top = parseInt(topRow, 10) || 100;
@@ -120,9 +120,18 @@ async function getAllLabels({ search, topRow }) {
     LEFT JOIN MstGrade g ON g.IdGrade = h.IdGrade
     LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = h.IdOrgTelly
     ${whereClause}
-    ORDER BY h.NoS4S DESC
+    ORDER BY h.NoS4S DESC;
+    ${includeTotal ? `
+      SELECT COUNT_BIG(*) AS Total
+      FROM ${MASTER_TABLE} h
+      INNER JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+      ${whereClause};
+    ` : ''}
   `);
 
+  if (includeTotal) {
+    return { items: result.recordset, total: Number(result.recordsets[1][0].Total) };
+  }
   return result.recordset;
 }
 

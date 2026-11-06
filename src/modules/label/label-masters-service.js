@@ -7,7 +7,7 @@ const { poolPromise } = require("../../core/config/db");
  */
 async function getMasters(gradeCategory) {
   const pool = await poolPromise;
-  const [jenisKayu, grade, orgTelly, spk, lokasi] = await Promise.all([
+  const [jenisKayu, grade, orgTelly, spk, lokasi, warna] = await Promise.all([
     pool.request().query(`
       SELECT IdJenisKayu, Jenis
       FROM MstJenisKayu
@@ -33,6 +33,9 @@ async function getMasters(gradeCategory) {
       WHERE [Enable] = 1
       ORDER BY IdLokasi
     `),
+    gradeCategory === 'S4S'
+      ? pool.request().query('SELECT IdWarna, NamaWarna FROM MstWarna ORDER BY IdWarna')
+      : Promise.resolve({ recordset: [] }),
   ]);
 
   return {
@@ -41,6 +44,7 @@ async function getMasters(gradeCategory) {
     orgTelly: orgTelly.recordset,
     spk: spk.recordset,
     lokasi: lokasi.recordset,
+    ...(gradeCategory === 'S4S' ? { warna: warna.recordset } : {}),
   };
 }
 

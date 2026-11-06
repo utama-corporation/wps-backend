@@ -1,6 +1,6 @@
 const service = require("./favorit-service");
 
-const TIPE_VALID = new Set(["laporan"]);
+const TIPE_VALID = new Set(["laporan", "menu"]);
 
 const isValid = (tipe, kode) =>
   typeof tipe === "string" &&
@@ -24,12 +24,15 @@ exports.list = async (req, res) => {
 };
 
 exports.add = async (req, res) => {
-  const { tipe, kode } = req.body || {};
+  const { tipe, kode, komentar } = req.body || {};
+  if (komentar != null && (typeof komentar !== "string" || komentar.length > 500)) {
+    return res.status(400).json({ success: false, message: "Komentar maksimal 500 karakter." });
+  }
   if (!isValid(tipe, kode)) {
     return res.status(400).json({ success: false, message: "tipe/kode tidak valid." });
   }
   try {
-    await service.add(req.idUsername, tipe, kode);
+    await service.add(req.idUsername, tipe, kode, komentar?.trim() || null);
     res.status(201).json({ success: true, message: "Favorit ditambahkan." });
   } catch (err) {
     fail(res, err, "add");

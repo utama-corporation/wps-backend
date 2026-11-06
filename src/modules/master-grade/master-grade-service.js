@@ -62,6 +62,7 @@ async function getAll() {
 
 async function create(data, user) {
   const v = validate(data);
+  const categories = Object.prototype.hasOwnProperty.call(data, "categories") ? validateCategories(data) : null;
   return withTx(async (tx) => {
     const m = await new sql.Request(tx).query(
       `SELECT ISNULL(MAX(IdGrade), 0) + 1 AS NextId FROM MstGrade WITH (UPDLOCK, HOLDLOCK)`,
@@ -75,6 +76,7 @@ async function create(data, user) {
       .input("e", sql.Bit, v.enable)
       .query(`INSERT INTO MstGrade (IdGrade, NamaGrade, IsAfkir, IsReproses, [Enable]) VALUES (@id, @n, @a, @r, @e)`);
     await audit(tx, user, `Menyimpan Data Master Grade ${v.nama} (Web)`);
+    if (categories !== null) await applyCategories(tx, id, categories, user);
     return { idGrade: id };
   });
 }
@@ -83,6 +85,7 @@ async function update(idParam, data, user) {
   const id = Number(idParam);
   if (!Number.isInteger(id)) throw httpError(400, "Id grade tidak valid.");
   const v = validate(data);
+  const categories = Object.prototype.hasOwnProperty.call(data, "categories") ? validateCategories(data) : null;
   return withTx(async (tx) => {
     const r = await new sql.Request(tx)
       .input("id", sql.Int, id)
@@ -93,6 +96,7 @@ async function update(idParam, data, user) {
       .query(`UPDATE MstGrade SET NamaGrade = @n, IsAfkir = @a, IsReproses = @r, [Enable] = @e WHERE IdGrade = @id`);
     if (!r.rowsAffected[0]) throw httpError(404, "Grade tidak ditemukan.");
     await audit(tx, user, `Mengubah Data Master Grade ${v.nama} (Web)`);
+    if (categories !== null) await applyCategories(tx, id, categories, user);
     return { idGrade: id };
   });
 }
@@ -149,11 +153,7 @@ function validateCategories(body) {
   });
 }
 
-async function replaceCategories(idParam, body, user) {
-  const id = Number(idParam);
-  if (!Number.isInteger(id)) throw httpError(400, "Id grade tidak valid.");
-  const items = validateCategories(body);
-  return withTx(async (tx) => {
+async function applyCategories(tx, id, items, user) {
     const cur = await new sql.Request(tx)
       .input("id", sql.Int, id)
       .query(`SELECT NamaGrade FROM MstGrade WHERE IdGrade = @id`);
@@ -179,7 +179,14 @@ async function replaceCategories(idParam, body, user) {
     }
     await audit(tx, user, `Menyimpan Category Master Grade ${cur.recordset[0].NamaGrade} (${items.length} baris) (Web)`);
     return { idGrade: id, jumlah: items.length };
-  });
+
+}
+
+async function replaceCategories(idParam, body, user) {
+  const id = Number(idParam);
+  if (!Number.isInteger(id)) throw httpError(400, "Id grade tidak valid.");
+  const items = validateCategories(body);
+  return withTx(tx => applyCategories(tx, id, items, user));
 }
 
 module.exports = { getAll, create, update, remove, getCategories, replaceCategories };

@@ -10,6 +10,7 @@ BEGIN
     Tipe       VARCHAR(20)  NOT NULL,
     Kode       VARCHAR(200) NOT NULL,
     Urutan     INT          NOT NULL,
+    Komentar   NVARCHAR(500) NULL,
     CONSTRAINT PK_MstUserFavorit PRIMARY KEY (IdUsername, Tipe, Kode)
   );
 END

@@ -114,11 +114,14 @@ exports.getAllLabels = async (req, res) => {
   try {
     const search = req.query.search || "";
     const topRow = req.query.top || "100";
-    const data = await labelS4sService.getAllLabels({ search, topRow });
+    const { items: data, total } = await labelS4sService.getAllLabels({
+      search, topRow, includeTotal: true,
+    });
     return res.status(200).json({
       success: true,
       message: "List label S4S berhasil diambil",
       data,
+      total,
     });
   } catch (err) {
     console.error("S4S List Error:", err);

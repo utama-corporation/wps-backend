@@ -69,7 +69,7 @@ async function getDetail(noBJ) {
  * LIST ALL LABELS (header only, for V2 list form)
  * ==========================================================*/
 
-async function getAllLabels({ search, topRow }) {
+async function getAllLabels({ search, topRow, includeTotal = false }) {
   const pool = await poolPromise;
   const req = pool.request();
   const top = parseInt(topRow, 10) || 100;
@@ -85,6 +85,8 @@ async function getAllLabels({ search, topRow }) {
       h.NoBJ,
       h.DateCreate,
       h.Jam,
+      h.IdLokasi,
+      h.HasBeenPrinted,
       h.IsReject,
       h.IsLembur,
       k.Jenis AS JenisKayu,
@@ -96,10 +98,15 @@ async function getAllLabels({ search, topRow }) {
     LEFT JOIN MstBarangJadi g ON g.IdBarangJadi = h.IdBarangJadi
     LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = h.IdOrgTelly
     ${whereClause}
-    ORDER BY h.NoBJ DESC
+    ORDER BY h.NoBJ DESC;
+    ${includeTotal ? `
+      SELECT COUNT_BIG(*) AS Total FROM ${MASTER_TABLE} h
+      INNER JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+      ${whereClause};
+    ` : ''}
   `);
 
-  return result.recordset;
+  return includeTotal ? { items: result.recordset, total: Number(result.recordsets[1][0].Total) } : result.recordset;
 }
 
 /* ============================================================
@@ -108,7 +115,7 @@ async function getAllLabels({ search, topRow }) {
 
 async function getMasters() {
   const pool = await poolPromise;
-  const [jenisKayu, barangJadi, orgTelly, spk] = await Promise.all([
+  const [jenisKayu, barangJadi, orgTelly, spk, lokasi] = await Promise.all([
     pool.request().query(`
       SELECT IdJenisKayu, Jenis
       FROM MstJenisKayu
@@ -127,6 +134,7 @@ async function getMasters() {
     pool.request().query(`
       SELECT NoSPK FROM MstSPK_h WHERE [Enable] = 1 ORDER BY NoSPK
     `),
+    pool.request().query('SELECT CAST(IdLokasi AS VARCHAR(50)) AS IdLokasi FROM MstLokasi WHERE [Enable] = 1 ORDER BY IdLokasi'),
   ]);
 
   return {
@@ -134,6 +142,7 @@ async function getMasters() {
     barangJadi: barangJadi.recordset,
     orgTelly: orgTelly.recordset,
     spk: spk.recordset,
+    lokasi: lokasi.recordset,
   };
 }
 
@@ -171,6 +180,8 @@ async function getHeaderForEdit(noBJ) {
       h.DateCreate,
       h.Jam,
       h.NoSPK,
+      h.NoSPKAsal,
+      h.IdLokasi,
       h.IdJenisKayu,
       h.IdBarangJadi,
       h.IdOrgTelly,
@@ -207,12 +218,20 @@ async function updateLabel(noBJ, data) {
   req.input("isRepair", sql.Bit, data.isRepair ? 1 : 0);
   req.input("jam", sql.VarChar(10), data.jam || null);
 
+  req.input("noSPKAsal", sql.VarChar(20), data.noSPKAsal || null);
+
+  req.input("idLokasi", sql.VarChar(5), data.idLokasi || null);
+
+  req.input('hasSPKAsal', sql.Bit, Object.prototype.hasOwnProperty.call(data, 'noSPKAsal') ? 1 : 0);
+  req.input('hasLokasi', sql.Bit, Object.prototype.hasOwnProperty.call(data, 'idLokasi') ? 1 : 0);
   await req.query(`
     UPDATE ${MASTER_TABLE}
     SET IdJenisKayu = @idJenisKayu,
         IdBarangJadi = @idBarangJadi,
         IdOrgTelly = @idOrgTelly,
         NoSPK = @noSPK,
+        IdLokasi = CASE WHEN @hasLokasi = 1 THEN @idLokasi ELSE IdLokasi END,
+        NoSPKAsal = CASE WHEN @hasSPKAsal = 1 THEN @noSPKAsal ELSE NoSPKAsal END,
         IsReject = @isReject,
         IsLembur = @isLembur,
         IsRepair = @isRepair,
@@ -258,20 +277,31 @@ async function updateDetail(noBJ, details) {
 
 async function deleteLabel(noBJ) {
   const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const link = new sql.Request(transaction);
+    link.input('labelNo', sql.VarChar(50), noBJ);
+    await link.query('DELETE FROM BongkarSusunOutputBarangJadi WHERE NoBJ = @labelNo');
 
-  const outReq = pool.request();
-  outReq.input("noBJ", sql.VarChar(50), noBJ);
-  await outReq.query(`DELETE FROM PackingProduksiOutput WHERE NoBJ = @noBJ`);
+    const outReq = new sql.Request(transaction);
+    outReq.input("noBJ", sql.VarChar(50), noBJ);
+    await outReq.query(`DELETE FROM PackingProduksiOutput WHERE NoBJ = @noBJ`);
 
-  const detReq = pool.request();
-  detReq.input("noBJ", sql.VarChar(50), noBJ);
-  await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noBJ`);
+    const detReq = new sql.Request(transaction);
+    detReq.input("noBJ", sql.VarChar(50), noBJ);
+    await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noBJ`);
 
-  const hdrReq = pool.request();
-  hdrReq.input("noBJ", sql.VarChar(50), noBJ);
-  await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noBJ`);
+    const hdrReq = new sql.Request(transaction);
+    hdrReq.input("noBJ", sql.VarChar(50), noBJ);
+    await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noBJ`);
 
-  return { noBJ };
+    await transaction.commit();
+    return { noBJ };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
 }
 
 /* ============================================================
@@ -348,6 +378,7 @@ async function getLabelData(noBJ) {
   }
 
   return {
+    ...header,
     noBJ: header.NoBJ,
     jenisKayu: header.JenisKayu || "-",
     namaBJ: header.NamaBJ || "-",

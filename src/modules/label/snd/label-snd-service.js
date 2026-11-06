@@ -72,7 +72,7 @@ async function getDetail(noSND) {
  * LIST ALL LABELS (header only, for V2 list form)
  * ==========================================================*/
 
-async function getAllLabels({ search, topRow }) {
+async function getAllLabels({ search, topRow, includeTotal = false }) {
   const pool = await poolPromise;
   const req = pool.request();
   const top = parseInt(topRow, 10) || 100;
@@ -88,6 +88,7 @@ async function getAllLabels({ search, topRow }) {
       h.NoSanding,
       h.DateCreate,
       h.Jam,
+      h.HasBeenPrinted,
       h.IsReject,
       h.IsLembur,
       k.Jenis AS JenisKayu,
@@ -100,10 +101,15 @@ async function getAllLabels({ search, topRow }) {
     LEFT JOIN MstGrade g ON g.IdGrade = h.IdGrade
     LEFT JOIN MstOrgTelly t ON t.IdOrgTelly = h.IdOrgTelly
     ${whereClause}
-    ORDER BY h.NoSanding DESC
+    ORDER BY h.NoSanding DESC;
+    ${includeTotal ? `
+      SELECT COUNT_BIG(*) AS Total FROM ${MASTER_TABLE} h
+      INNER JOIN MstJenisKayu k ON k.IdJenisKayu = h.IdJenisKayu
+      ${whereClause};
+    ` : ''}
   `);
 
-  return result.recordset;
+  return includeTotal ? { items: result.recordset, total: Number(result.recordsets[1][0].Total) } : result.recordset;
 }
 
 /* ============================================================
@@ -180,13 +186,14 @@ async function updateLabel(noSanding, data) {
   req.input("isRepair", sql.Bit, data.isRepair ? 1 : 0);
   req.input("jam", sql.VarChar(10), data.jam || null);
 
+  req.input('hasSPKAsal', sql.Bit, Object.prototype.hasOwnProperty.call(data, 'noSPKAsal') ? 1 : 0);
   await req.query(`
     UPDATE ${MASTER_TABLE}
     SET IdJenisKayu = @idJenisKayu,
         IdGrade = @idGrade,
         IdOrgTelly = @idOrgTelly,
         NoSPK = @noSPK,
-        NoSPKAsal = ISNULL(@noSPKAsal, NoSPKAsal),
+        NoSPKAsal = CASE WHEN @hasSPKAsal = 1 THEN @noSPKAsal ELSE NoSPKAsal END,
         IdLokasi = @idLokasi,
         IsReject = @isReject,
         IsLembur = @isLembur,
@@ -233,20 +240,31 @@ async function updateDetail(noSanding, details) {
 
 async function deleteLabel(noSanding) {
   const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const link = new sql.Request(transaction);
+    link.input('labelNo', sql.VarChar(50), noSanding);
+    await link.query('DELETE FROM BongkarSusunOutputSanding WHERE NoSanding = @labelNo');
 
-  const outReq = pool.request();
-  outReq.input("noSanding", sql.VarChar(50), noSanding);
-  await outReq.query(`DELETE FROM SandingProduksiOutput WHERE NoSanding = @noSanding`);
+    const outReq = new sql.Request(transaction);
+    outReq.input("noSanding", sql.VarChar(50), noSanding);
+    await outReq.query(`DELETE FROM SandingProduksiOutput WHERE NoSanding = @noSanding`);
 
-  const detReq = pool.request();
-  detReq.input("noSanding", sql.VarChar(50), noSanding);
-  await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noSanding`);
+    const detReq = new sql.Request(transaction);
+    detReq.input("noSanding", sql.VarChar(50), noSanding);
+    await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noSanding`);
 
-  const hdrReq = pool.request();
-  hdrReq.input("noSanding", sql.VarChar(50), noSanding);
-  await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noSanding`);
+    const hdrReq = new sql.Request(transaction);
+    hdrReq.input("noSanding", sql.VarChar(50), noSanding);
+    await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noSanding`);
 
-  return { noSanding };
+    await transaction.commit();
+    return { noSanding };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
 }
 
 /* ============================================================
@@ -323,6 +341,7 @@ async function getLabelData(noSND) {
   }
 
   return {
+    ...header,
     noSanding: header.NoSanding,
     jenisKayu: header.JenisKayu || "-",
     grade: header.Grade || "-",

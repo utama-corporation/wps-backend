@@ -5,6 +5,7 @@ const attachPermissions = require("../../../core/middleware/attach-permissions")
 const requirePermission = require("../../../core/middleware/require-permission");
 const { mastersHandler } = require("../label-masters-service");
 const ctrl = require("./label-fj-controller");
+const { getSusunList } = require("../st/label-st-controller");
 
 router.use(express.json());
 router.use(verifyToken, attachPermissions);
@@ -14,6 +15,13 @@ router.get(
   "/label/fj/masters",
   requirePermission("label_fj:read"),
   mastersHandler("FINGERJOIN", "FJ"),
+);
+
+// GET /api/label/fj/susun?date= -> list bongkar susun per tanggal (form Buat Label)
+router.get(
+  "/label/fj/susun",
+  requirePermission("label_fj:create"),
+  getSusunList,
 );
 
 // GET /api/label/fj/list -> list semua label FJ

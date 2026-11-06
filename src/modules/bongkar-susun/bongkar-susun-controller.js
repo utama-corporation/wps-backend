@@ -5,8 +5,8 @@ const fail = (res, err) => res.status(err.status || 500).json({ success: false, 
 /* GET /api/bongkar-susun/list */
 exports.getAll = async (req, res) => {
   try {
-    const { search, top } = req.query;
-    const data = await svc.getAll({ search, topRow: top });
+    const { search, top, date } = req.query;
+    const data = await svc.getAll({ search, topRow: top, date });
     res.json({ success: true, data });
   } catch (err) {
     fail(res, err);

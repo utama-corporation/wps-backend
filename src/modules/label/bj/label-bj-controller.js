@@ -132,11 +132,12 @@ exports.getAllLabels = async (req, res) => {
   try {
     const search = req.query.search || "";
     const topRow = req.query.top || "100";
-    const data = await labelBjService.getAllLabels({ search, topRow });
+    const { items: data, total } = await labelBjService.getAllLabels({ search, topRow, includeTotal: true });
     return res.status(200).json({
       success: true,
       message: "List label BJ berhasil diambil",
       data,
+      total,
     });
   } catch (err) {
     console.error("BJ List Error:", err);

@@ -632,10 +632,12 @@ async function createLabel({
   idJenisKayu, idGrade, noSPKAsal, noSPK, ukuran,
   tebal, lebar, panjang, jmlhBatang, idLokasi,
   isRepair, isReject, isLembur, idWarna, noProduksi,
+  noBongkarSusun, dateCreate, jam,
   idUsername,
 }) {
+  const effectiveDate = dateCreate || new Date();
   const tanggalProduksi = noProduksi ? await getTanggalProduksi(noProduksi) : null;
-  await assertPeriodeTerbuka(tanggalProduksi || new Date());
+  await assertPeriodeTerbuka(tanggalProduksi || effectiveDate);
   const cat = normalizeKategori(kategori);
   const out = OUTPUT_TABLES[cat];
 
@@ -702,7 +704,10 @@ async function createLabel({
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
   req.input("wrn", sql.Int, idWarna ? Number(idWarna) : null);
   // Saat dibuat dari halaman produksi, DateCreate mengikuti tanggal header produksi.
-  req.input("tgl", sql.Date, tanggalProduksi || new Date());
+  req.input("tgl", sql.Date, tanggalProduksi || effectiveDate);
+
+  req.input('bongkar', sql.VarChar(20), noBongkarSusun || null);
+  req.input('formJam', sql.VarChar(10), jam || null);
 
   const dimTuples = rows.map((r, i) => {
     req.input(`t${i}`, sql.VarChar(20), r.tebal);
@@ -716,22 +721,32 @@ async function createLabel({
   // dilanjuti INSERT detail sehingga error aslinya tertutupi FK detail.
   const insertHead = cat === "S4S"
     ? `INSERT INTO S4S_h (NoS4S, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoSTAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair, IdWarna)
-       VALUES (@ns, @jk, @gr, @otel, @tgl, NULL, NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep, @wrn);`
+       VALUES (@ns, @jk, @gr, @otel, @tgl, NULL, NULL, 1, 1, NULLIF(@nospk, ''), COALESCE(@formJam, FORMAT(GETDATE(), 'HH:mm')), @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep, @wrn);`
     : `INSERT INTO CCAkhir_h (NoCCAkhir, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, NoLaminatingAsal, NoFJAsal, IdWarehouse, IdFJProfile, IsLembur, IdFisik, NoSPKAsal, IsRepair, IdLokasi)
-       VALUES (@ns, @jk, @gr, @otel, @tgl, NULL, 1, 1, NULLIF(@nospk, ''), FORMAT(GETDATE(), 'HH:mm'), @isrej, NULL, NULL, 8, NULL, @isleb, NULL, NULLIF(@stasal, ''), @isrep, @lok);`;
+       VALUES (@ns, @jk, @gr, @otel, @tgl, NULL, 1, 1, NULLIF(@nospk, ''), COALESCE(@formJam, FORMAT(GETDATE(), 'HH:mm')), @isrej, NULL, NULL, 8, NULL, @isleb, NULL, NULLIF(@stasal, ''), @isrep, @lok);`;
 
   const result = await req.query(`
+    SET XACT_ABORT ON;
     BEGIN TRY
+      BEGIN TRANSACTION;
+      IF @bongkar IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM BongkarSusun_h WITH (HOLDLOCK)
+        WHERE NoBongkarSusun = @bongkar AND CONVERT(date, Tanggal) = @tgl
+      ) THROW 50001, 'Nomor Bongkar Susun tidak sesuai tanggal label.', 1;
       DECLARE @ns VARCHAR(20);
       SELECT @ns = ISNULL('${out.prefix}.' + FORMAT(RIGHT(MAX(${out.labelCol}), 6) + 1, '000000'), '${out.prefix}.000001')
-      FROM ${out.master};
+      FROM ${out.master} WITH (UPDLOCK, HOLDLOCK);
       ${insertHead}
       INSERT INTO ${out.detail} (${out.labelCol}, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};
+      IF @bongkar IS NOT NULL
+        INSERT INTO ${cat === 'S4S' ? 'BongkarSusunOutputS4S' : 'BongkarSusunOutputCCAkhir'} (NoBongkarSusun, ${out.labelCol}) VALUES (@bongkar, @ns);
+      COMMIT TRANSACTION;
       SELECT @ns AS NoLabel;
     END TRY
     BEGIN CATCH
+      IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
       THROW;
     END CATCH
   `);

@@ -129,17 +129,25 @@ async function audit(transaction, user, aktivitas) {
 /* ============================================================
  * GET ALL — list header (paritas getBongkarSusunData, TOP 50)
  * ==========================================================*/
-async function getAll({ search, topRow }) {
+async function getAll({ search, topRow, date }) {
   const pool = await poolPromise;
   const req = pool.request();
   const top = parseInt(topRow, 10) || 50;
   req.input("top", sql.Int, top);
 
-  let where = "";
+  const filters = [];
   if (search) {
     req.input("search", sql.VarChar(50), `%${search}%`);
-    where = `WHERE NoBongkarSusun LIKE @search OR NoPenerimaanST LIKE @search OR Keterangan LIKE @search`;
+    filters.push('(NoBongkarSusun LIKE @search OR NoPenerimaanST LIKE @search OR Keterangan LIKE @search)');
   }
+  if (date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) {
+      throw httpError(400, 'Tanggal tidak valid (YYYY-MM-DD).');
+    }
+    req.input('date', sql.Date, date);
+    filters.push('Tanggal >= @date AND Tanggal < DATEADD(day, 1, @date)');
+  }
+  const where = filters.length ? 'WHERE ' + filters.join(' AND ') : '';
 
   const result = await req.query(`
     SELECT TOP (@top) NoBongkarSusun, Tanggal, IsPemakaian, NoPenerimaanST, Keterangan

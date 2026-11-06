@@ -4,3 +4,6 @@ npm-debug.log
 .git
 .gitignore
 *.md
+
+# Runtime data belongs on the Docker host, never in an image.
+storage/

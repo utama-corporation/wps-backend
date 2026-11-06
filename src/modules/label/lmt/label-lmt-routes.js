@@ -5,6 +5,7 @@ const attachPermissions = require("../../../core/middleware/attach-permissions")
 const requirePermission = require("../../../core/middleware/require-permission");
 const { mastersHandler } = require("../label-masters-service");
 const ctrl = require("./label-lmt-controller");
+const { getSusunList } = require("../st/label-st-controller");
 
 router.use(express.json());
 // urutan penting: verify → attach → require → controller
@@ -15,6 +16,13 @@ router.get(
   "/label/lmt/masters",
   requirePermission("label_lmt:read"),
   mastersHandler("LAMINATING", "Laminating"),
+);
+
+// GET /api/label/lmt/susun?date= -> list bongkar susun per tanggal (form Buat Label)
+router.get(
+  "/label/lmt/susun",
+  requirePermission("label_lmt:create"),
+  getSusunList,
 );
 
 // GET /api/label/lmt/list -> all labels

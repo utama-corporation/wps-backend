@@ -606,10 +606,12 @@ async function createLabel({
   noWIPAsal, noMouldingAsal, noSandingAsal, idWarehouse, idLokasi,
   ukuran, tebal, lebar, panjang, jmlhBatang,
   isRepair, isReject, isLembur, noProduksi,
+  noBongkarSusun, dateCreate, jam,
   idUsername,
 }) {
+  const effectiveDate = dateCreate || new Date();
   const tanggalProduksi = noProduksi ? await getTanggalProduksi(noProduksi) : null;
-  await assertPeriodeTerbuka(tanggalProduksi || new Date());
+  await assertPeriodeTerbuka(tanggalProduksi || effectiveDate);
 
   const raw = Array.isArray(ukuran) && ukuran.length
     ? ukuran
@@ -684,7 +686,10 @@ async function createLabel({
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
   // Saat dibuat dari halaman produksi, DateCreate mengikuti tanggal header produksi.
-  req.input("tgl", sql.Date, tanggalProduksi || new Date());
+  req.input("tgl", sql.Date, tanggalProduksi || effectiveDate);
+
+  req.input('bongkar', sql.VarChar(20), noBongkarSusun || null);
+  req.input('formJam', sql.VarChar(10), jam || null);
 
   const dimTuples = rows.map((r, i) => {
     req.input(`t${i}`, sql.VarChar(20), r.tebal);
@@ -695,18 +700,28 @@ async function createLabel({
   }).join(",\n      ");
 
   const result = await req.query(`
+    SET XACT_ABORT ON;
     BEGIN TRY
+      BEGIN TRANSACTION;
+      IF @bongkar IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM BongkarSusun_h WITH (HOLDLOCK)
+        WHERE NoBongkarSusun = @bongkar AND CONVERT(date, Tanggal) = @tgl
+      ) THROW 50001, 'Nomor Bongkar Susun tidak sesuai tanggal label.', 1;
       DECLARE @ns VARCHAR(20);
       SELECT @ns = ISNULL('I.' + FORMAT(RIGHT(MAX(NoBJ), 6) + 1, '000000'), 'I.000001')
       FROM BarangJadi_h WITH (UPDLOCK, HOLDLOCK);
       INSERT INTO BarangJadi_h (NoBJ, IdJenisKayu, IdBarangJadi, DateCreate, DateUsage, IdOrgTelly, IdFJProfile, NoSPK, NoSPKAsal, Jam, IsReject, IsRepair, IsSisa, NoWIPAsal, NoMouldingAsal, NoSandingAsal, IdWarehouse, IdLokasi, IsLembur, HasBeenPrinted)
-      VALUES (@ns, @jk, @bj, @tgl, NULL, @otel, @fj, NULLIF(@nospk, ''), NULLIF(@stasal, ''), FORMAT(GETDATE(), 'HH:mm'), @isrej, @isrep, 0, NULLIF(@nwip, ''), NULLIF(@nmou, ''), NULLIF(@nsan, ''), @wh, @lok, @isleb, 0);
+      VALUES (@ns, @jk, @bj, @tgl, NULL, @otel, @fj, NULLIF(@nospk, ''), NULLIF(@stasal, ''), COALESCE(@formJam, FORMAT(GETDATE(), 'HH:mm')), @isrej, @isrep, 0, NULLIF(@nwip, ''), NULLIF(@nmou, ''), NULLIF(@nsan, ''), @wh, @lok, @isleb, 0);
       INSERT INTO BarangJadi_d (NoBJ, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};
+      IF @bongkar IS NOT NULL
+        INSERT INTO BongkarSusunOutputBarangJadi (NoBongkarSusun, NoBJ) VALUES (@bongkar, @ns);
+      COMMIT TRANSACTION;
       SELECT @ns AS NoBJ;
     END TRY
     BEGIN CATCH
+      IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
       THROW;
     END CATCH
   `);

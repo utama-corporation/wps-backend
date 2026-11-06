@@ -5,6 +5,7 @@ const attachPermissions = require("../../../core/middleware/attach-permissions")
 const requirePermission = require("../../../core/middleware/require-permission");
 const { mastersHandler } = require("../label-masters-service");
 const ctrl = require("./label-cca-controller");
+const { getSusunList } = require("../st/label-st-controller");
 
 router.use(express.json());
 // urutan penting: verify → attach → require → controller
@@ -15,6 +16,13 @@ router.get(
   "/label/cca/masters",
   requirePermission("label_cca:read"),
   mastersHandler("CCAKHIR", "CCA"),
+);
+
+// GET /api/label/cca/susun?date= -> list bongkar susun per tanggal (form Buat Label)
+router.get(
+  "/label/cca/susun",
+  requirePermission("label_cca:create"),
+  getSusunList,
 );
 
 // GET /api/label/cca/list -> all labels

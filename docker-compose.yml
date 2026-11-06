@@ -6,6 +6,9 @@ services:
     container_name: wps-backend
     network_mode: host
     env_file: .env
+    environment:
+      # Override Windows paths from .env inside the Linux container.
+      UPDATES_DIR: /app/storage/wps_updates
     volumes:
       - ./storage:/app/storage
     restart: always

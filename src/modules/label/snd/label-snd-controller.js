@@ -111,11 +111,12 @@ exports.getAllLabels = async (req, res) => {
   try {
     const search = req.query.search || "";
     const topRow = req.query.top || "100";
-    const data = await labelSndService.getAllLabels({ search, topRow });
+    const { items: data, total } = await labelSndService.getAllLabels({ search, topRow, includeTotal: true });
     return res.status(200).json({
       success: true,
       message: "List label SND berhasil diambil",
       data,
+      total,
     });
   } catch (err) {
     console.error("SND List Error:", err);
