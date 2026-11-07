@@ -1,4 +1,5 @@
 const { sql, poolPromise } = require("../../core/config/db");
+const { badReq, notFound, conflict } = require("../../core/utils/http-error");
 
 const toInt = (v) => {
   if (v === null || v === undefined || v === "") return null;
@@ -1126,15 +1127,17 @@ exports.selesai = async (no, username) => {
       .input("no", sql.VarChar, no)
       .query(`SELECT NoKayuBulat, TglSawmill FROM STSawmill_h WHERE NoSTSawmill = @no`);
 
+    // Penolakan bisnis dikirim sebagai 4xx (bukan 500) agar tablet
+    // menampilkan pesannya, bukan "Server sedang bermasalah".
     if (headerResult.recordset.length === 0) {
-      throw new Error("Data tidak ditemukan");
+      throw notFound("Data tally tidak ditemukan");
     }
 
     const noKayuBulat = headerResult.recordset[0].NoKayuBulat;
     const tgl = headerResult.recordset[0].TglSawmill;
 
     if (!noKayuBulat) {
-      throw new Error("No Kayu Bulat kosong pada data ini");
+      throw badReq("No Kayu Bulat kosong pada data ini");
     }
 
     // Check if already finished
@@ -1143,7 +1146,19 @@ exports.selesai = async (no, username) => {
       .query(`SELECT NoKayuBulat FROM KayuBulat_h WHERE NoKayuBulat = @noKB AND DateUsage IS NOT NULL`);
 
     if (usedCheck.recordset.length > 0) {
-      throw new Error("No Kayu Bulat sudah dimatikan");
+      throw conflict("No Kayu Bulat sudah dimatikan");
+    }
+
+    // Paritas aplikasi Java: kayu bulat yang sudah punya penerimaan tidak
+    // boleh dibuatkan penerimaan kedua.
+    const existing = await transaction.request()
+      .input("noKB", sql.VarChar, noKayuBulat)
+      .query(`SELECT TOP 1 NoPenerimaanST FROM PenerimaanSTSawmill_h WHERE NoKayuBulat = @noKB`);
+
+    if (existing.recordset.length > 0) {
+      throw conflict(
+        `No Kayu Bulat ${noKayuBulat} sudah punya Penerimaan ST ${existing.recordset[0].NoPenerimaanST}`
+      );
     }
 
     // Check sisa balok
@@ -1175,7 +1190,7 @@ exports.selesai = async (no, username) => {
     }
 
     if (totalSisa !== 0) {
-      throw new Error("Sisa Balok masih ada tersisa " + totalSisa + ", pastikan balok sudah diinput semua");
+      throw badReq("Sisa Balok masih ada tersisa " + totalSisa + ", pastikan balok sudah diinput semua");
     }
 
     // Generate NoPenerimaanST
@@ -1207,11 +1222,11 @@ exports.selesai = async (no, username) => {
       .query(`UPDATE KayuBulat_h SET DateUsage = @tgl WHERE NoKayuBulat = @noKB`);
 
     // History log
-    constKalimat = "Menyimpan No." + noKayuBulat + " Pada Data Penerimaan ST (Telly Sheet)";
+    const kalimat = "Menyimpan No." + noKayuBulat + " Pada Data Penerimaan ST (Telly Sheet)";
     await transaction.request()
       .input("nip", sql.VarChar, username || "")
       .input("tgl", sql.DateTime, new Date())
-      .input("aktivitas", sql.NVarChar, constKalimat)
+      .input("aktivitas", sql.NVarChar, kalimat)
       .query(`INSERT INTO Riwayat ([Nip], [Tgl], [Aktivitas]) VALUES (@nip, @tgl, @aktivitas)`);
 
     await transaction.commit();

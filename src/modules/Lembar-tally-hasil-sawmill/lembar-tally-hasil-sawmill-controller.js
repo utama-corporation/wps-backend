@@ -161,7 +161,8 @@ exports.selesai = async (req, res) => {
     res.json({ success: true, message: "Penerimaan ST Sawmill berhasil disimpan", data: result });
   } catch (err) {
     console.error("Error selesai:", err);
-    res.status(500).json({ success: false, message: err.message });
+    // 4xx = penolakan bisnis (sisa balok, sudah dimatikan, dll.).
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 };
 
