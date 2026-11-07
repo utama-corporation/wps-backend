@@ -682,6 +682,7 @@ async function getMasters() {
         .query(
           `SELECT A.NoSPK, A.NoSPK + ' - ' + B.Buyer AS NoSPKBuyer
            FROM MstSPK_h A INNER JOIN MstBuyer B ON B.IdBuyer = A.IdBuyer
+           WHERE A.[Enable] = 1
            ORDER BY A.NoSPK`
         ),
       pool
