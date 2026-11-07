@@ -236,6 +236,8 @@ function alokasikanStok(totalInput, stok) {
   const alokasi = new Map();
   let sisa = totalInput;
   for (const [key, nilai] of stok) {
+    // Grade yang stoknya sudah habis/minus dilewati (jangan menambah sisa).
+    if (nilai <= 0) continue;
     if (sisa > nilai) {
       alokasi.set(key, nilai);
       sisa -= nilai;
@@ -246,6 +248,92 @@ function alokasikanStok(totalInput, stok) {
     }
   }
   return alokasi;
+}
+
+/**
+ * Tulis ulang balok gantung SATU tally dari BalokTerpakai-nya. Balok gantung
+ * adalah turunan BalokTerpakai (dasar hitung sisa saat Selesai), jadi setiap
+ * kali BalokTerpakai ditulis — buat, simpan detail, maupun Ubah Header —
+ * alokasinya harus ikut ditulis ulang agar tidak basi.
+ */
+async function alokasiUlangTally(transaction, noSTSawmill, noKayuBulat, balokTerpakai, isKG) {
+  await transaction.request().input("no", sql.VarChar, noSTSawmill)
+    .query(`DELETE FROM STSawmill_dBalokGantungKG WHERE NoSTSawmill = @no`);
+  await transaction.request().input("no", sql.VarChar, noSTSawmill)
+    .query(`DELETE FROM STSawmill_dBalokGantung WHERE NoSTSawmill = @no`);
+
+  const total = toInt(balokTerpakai) || 0;
+  if (total <= 0 || !noKayuBulat) return;
+
+  if (isKG) {
+    const alokasi = alokasikanStok(total, await ambilStokKG(transaction, noKayuBulat));
+    for (const [idGrade, jumlah] of alokasi) {
+      if (jumlah <= 0) continue;
+      await transaction.request()
+        .input("NoSTSawmill", sql.VarChar, noSTSawmill)
+        .input("IdGrade", sql.Int, toInt(idGrade))
+        .input("JumlahAlokasi", sql.Int, jumlah)
+        .query(`INSERT INTO STSawmill_dBalokGantungKG (NoSTSawmill, IdGradeKB, Pcs) VALUES (@NoSTSawmill, @IdGrade, @JumlahAlokasi)`);
+    }
+  } else {
+    const alokasi = alokasikanStok(total, await ambilStokTon(transaction, noKayuBulat));
+    for (const [grade, jumlah] of alokasi) {
+      if (jumlah <= 0) continue;
+      await transaction.request()
+        .input("NoSTSawmill", sql.VarChar, noSTSawmill)
+        .input("Grade", sql.VarChar, grade)
+        .input("JumlahAlokasi", sql.Int, jumlah)
+        .query(`INSERT INTO STSawmill_dBalokGantung (NoSTSawmill, Grade, Pcs) VALUES (@NoSTSawmill, @Grade, @JumlahAlokasi)`);
+    }
+  }
+}
+
+/**
+ * Sinkron ulang balok gantung SEMUA tally satu kayu bulat (urut NoSTSawmill)
+ * dari BalokTerpakai masing-masing. Memperbaiki alokasi yang basi (mis. Balok
+ * Terpakai diisi lewat Ubah Header sebelum perbaikan ini). Return isKG.
+ */
+async function sinkronAlokasiKayuBulat(transaction, noKayuBulat) {
+  const isKG = await isTallyKG(transaction, noKayuBulat, null, "");
+  const tallies = await transaction.request()
+    .input("kb", sql.VarChar, noKayuBulat)
+    .query(`SELECT NoSTSawmill, BalokTerpakai FROM STSawmill_h WHERE NoKayuBulat = @kb ORDER BY NoSTSawmill`);
+
+  // Kosongkan dulu semua alokasi kayu bulat ini agar stok dihitung dari awal.
+  await transaction.request().input("kb", sql.VarChar, noKayuBulat).query(`
+    DELETE G FROM STSawmill_dBalokGantungKG G
+    INNER JOIN STSawmill_h H ON H.NoSTSawmill = G.NoSTSawmill
+    WHERE H.NoKayuBulat = @kb`);
+  await transaction.request().input("kb", sql.VarChar, noKayuBulat).query(`
+    DELETE G FROM STSawmill_dBalokGantung G
+    INNER JOIN STSawmill_h H ON H.NoSTSawmill = G.NoSTSawmill
+    WHERE H.NoKayuBulat = @kb`);
+
+  for (const t of tallies.recordset) {
+    await alokasiUlangTally(transaction, t.NoSTSawmill, noKayuBulat, t.BalokTerpakai, isKG);
+  }
+  return isKG;
+}
+
+/**
+ * Sisa balok kayu bulat (paritas aplikasi Java): Rambung/KG memakai
+ * KayuBulatKG_d, jenis lain menghitung baris KayuBulat_d.
+ */
+async function hitungSisaBalok(transaction, noKayuBulat, isKG) {
+  const r = await transaction.request().input("kb", sql.VarChar, noKayuBulat).query(
+    isKG
+      ? `SELECT
+           ISNULL((SELECT SUM(JmlhBatang) FROM KayuBulatKG_D WHERE NoKayuBulat = @kb), 0)
+           - ISNULL((SELECT SUM(ISNULL(G.Pcs, 0)) FROM STSawmill_dBalokGantungKG G
+                     INNER JOIN STSawmill_h H ON H.NoSTSawmill = G.NoSTSawmill
+                     WHERE H.NoKayuBulat = @kb), 0) AS Sisa`
+      : `SELECT
+           (SELECT COUNT(*) FROM KayuBulat_d WHERE NoKayuBulat = @kb)
+           - ISNULL((SELECT SUM(ISNULL(G.Pcs, 0)) FROM STSawmill_dBalokGantung G
+                     INNER JOIN STSawmill_h H ON H.NoSTSawmill = G.NoSTSawmill
+                     WHERE H.NoKayuBulat = @kb), 0) AS Sisa`
+  );
+  return toInt(r.recordset[0]?.Sisa) || 0;
 }
 
 /** Daftar meja aktif + status berjalan hari ini (dipakai getMasters dan halaman Pilih Meja). */
@@ -847,32 +935,13 @@ exports.create = async (data) => {
       }
     }
 
-    const totalInput = toInt(data.balok_terpakai) || 0;
-    if (totalInput > 0) {
-      if (String(data.jenis || "").toUpperCase() === "RAMBUNG") {
-        const stokKG = await ambilStokKG(transaction, noKayuBulat);
-        const alokasi = alokasikanStok(totalInput, stokKG);
-        for (const [idGrade, jumlah] of alokasi) {
-          if (jumlah <= 0) continue;
-          await transaction.request()
-            .input("NoSTSawmill", sql.VarChar, noSTSawmill)
-            .input("IdGrade", sql.Int, toInt(idGrade))
-            .input("JumlahAlokasi", sql.Int, jumlah)
-            .query(`INSERT INTO STSawmill_dBalokGantungKG (NoSTSawmill, IdGradeKB, Pcs) VALUES (@NoSTSawmill, @IdGrade, @JumlahAlokasi)`);
-        }
-      } else {
-        const stokTon = await ambilStokTon(transaction, noKayuBulat);
-        const alokasi = alokasikanStok(totalInput, stokTon);
-        for (const [grade, jumlah] of alokasi) {
-          if (jumlah <= 0) continue;
-          await transaction.request()
-            .input("NoSTSawmill", sql.VarChar, noSTSawmill)
-            .input("Grade", sql.VarChar, grade)
-            .input("JumlahAlokasi", sql.Int, jumlah)
-            .query(`INSERT INTO STSawmill_dBalokGantung (NoSTSawmill, Grade, Pcs) VALUES (@NoSTSawmill, @Grade, @JumlahAlokasi)`);
-        }
-      }
-    }
+    await alokasiUlangTally(
+      transaction,
+      noSTSawmill,
+      noKayuBulat,
+      data.balok_terpakai,
+      await isTallyKG(transaction, noKayuBulat, data.id_pengukuran, data.jenis)
+    );
 
     // Bersihkan Pcs = 0
     await transaction.request().query(`DELETE FROM STSawmill_dBalokGantungKG WHERE Pcs = 0`);
@@ -1009,38 +1078,8 @@ exports.update = async (data) => {
         .query(`INSERT INTO STSawmill_dBalokTim (NoSTSawmill, Berat) VALUES (@no, @Berat)`);
     }
 
-    // Re-alokasi stok
-    const totalInput = toInt(data.balok_terpakai) || 0;
-    await transaction.request().input("no", sql.VarChar, no)
-      .query(`DELETE FROM STSawmill_dBalokGantungKG WHERE NoSTSawmill = @no`);
-    await transaction.request().input("no", sql.VarChar, no)
-      .query(`DELETE FROM STSawmill_dBalokGantung WHERE NoSTSawmill = @no`);
-
-    if ((data.id_pengukuran ? toInt(data.id_pengukuran) : 0) === 5) {
-      if (totalInput > 0) {
-        const stokKG = await ambilStokKG(transaction, noKayuBulat);
-        const alokasi = alokasikanStok(totalInput, stokKG);
-        for (const [idGrade, jumlah] of alokasi) {
-          if (jumlah <= 0) continue;
-          await transaction.request()
-            .input("NoSTSawmill", sql.VarChar, no)
-            .input("IdGrade", sql.Int, toInt(idGrade))
-            .input("JumlahAlokasi", sql.Int, jumlah)
-            .query(`INSERT INTO STSawmill_dBalokGantungKG (NoSTSawmill, IdGradeKB, Pcs) VALUES (@NoSTSawmill, @IdGrade, @JumlahAlokasi)`);
-        }
-      }
-    } else if (totalInput > 0) {
-      const stokTon = await ambilStokTon(transaction, noKayuBulat);
-      const alokasi = alokasikanStok(totalInput, stokTon);
-      for (const [grade, jumlah] of alokasi) {
-        if (jumlah <= 0) continue;
-        await transaction.request()
-          .input("NoSTSawmill", sql.VarChar, no)
-          .input("Grade", sql.VarChar, grade)
-          .input("JumlahAlokasi", sql.Int, jumlah)
-          .query(`INSERT INTO STSawmill_dBalokGantung (NoSTSawmill, Grade, Pcs) VALUES (@NoSTSawmill, @Grade, @JumlahAlokasi)`);
-      }
-    }
+    // Re-alokasi stok (Rambung/KG dikenali sama seperti saat buat tally).
+    await alokasiUlangTally(transaction, no, noKayuBulat, data.balok_terpakai, isKG);
 
     await transaction.request().query(`DELETE FROM STSawmill_dBalokGantungKG WHERE Pcs = 0`);
     await transaction.request().query(`DELETE FROM STSawmill_dBalokGantung WHERE Pcs = 0`);
@@ -1107,6 +1146,21 @@ exports.updateHeader = async (data) => {
       WHERE NoSTSawmill = @no
     `);
 
+    // Balok Terpakai bisa diubah di sini → tulis ulang balok gantung tally
+    // ini. Sebelumnya tidak dilakukan, sehingga sisa balok saat Selesai salah.
+    const kb = await transaction.request().input("no", sql.VarChar, no)
+      .query(`SELECT NoKayuBulat, BalokTerpakai FROM STSawmill_h WHERE NoSTSawmill = @no`);
+    const row = kb.recordset[0];
+    if (row && row.NoKayuBulat) {
+      await alokasiUlangTally(
+        transaction,
+        no,
+        row.NoKayuBulat,
+        row.BalokTerpakai,
+        await isTallyKG(transaction, row.NoKayuBulat, null, "")
+      );
+    }
+
     await transaction.commit();
     return true;
   } catch (err) {
@@ -1161,35 +1215,14 @@ exports.selesai = async (no, username) => {
       );
     }
 
-    // Check sisa balok
-    const sisaResult = await transaction.request()
-      .input("noKB", sql.VarChar, noKayuBulat)
-      .query(`
-        SELECT ISNULL(A.TGA, 0) - ISNULL(B.TG, 0) AS Sisa FROM
-        (SELECT NoKayuBulat, SUM(JmlhBatang) AS TGA FROM KayuBulatKG_D WHERE NoKayuBulat = @noKB GROUP BY NoKayuBulat) A
-        LEFT JOIN
-        (SELECT B.NoKayuBulat, SUM(CASE WHEN Pcs IS NULL THEN 0 ELSE Pcs END) AS TG
-         FROM STSawmill_dBalokGantungKG A
-         INNER JOIN STSawmill_h B ON B.NoSTSawmill = A.NoSTSawmill
-         WHERE B.NoKayuBulat = @noKB GROUP BY B.NoKayuBulat) B ON B.NoKayuBulat = A.NoKayuBulat
+    // Sinkron ulang balok gantung dari Balok Terpakai semua tally kayu bulat
+    // ini (memperbaiki alokasi basi), lalu cek sisa dengan rumus sesuai jenis
+    // kayu. Seperti aplikasi Java, hanya ditolak bila sisa > 0. Bila ditolak,
+    // transaksi di-rollback sehingga sinkron ulang ikut dibatalkan.
+    const isKG = await sinkronAlokasiKayuBulat(transaction, noKayuBulat);
+    const totalSisa = await hitungSisaBalok(transaction, noKayuBulat, isKG);
 
-        UNION
-
-        SELECT ISNULL(A.TGA, 0) - ISNULL(B.TG, 0) AS Sisa FROM
-        (SELECT NoKayuBulat, COUNT(NoKayuBulat) AS TGA FROM KayuBulat_d WHERE NoKayuBulat = @noKB GROUP BY NoKayuBulat) A
-        LEFT JOIN
-        (SELECT B.NoKayuBulat, SUM(Pcs) AS TG
-         FROM STSawmill_dBalokGantung A
-         INNER JOIN STSawmill_h B ON B.NoSTSawmill = A.NoSTSawmill
-         WHERE B.NoKayuBulat = @noKB GROUP BY B.NoKayuBulat) B ON B.NoKayuBulat = A.NoKayuBulat
-      `);
-
-    let totalSisa = 0;
-    for (const row of sisaResult.recordset) {
-      totalSisa += parseInt(row.Sisa) || 0;
-    }
-
-    if (totalSisa !== 0) {
+    if (totalSisa > 0) {
       throw badReq("Sisa Balok masih ada tersisa " + totalSisa + ", pastikan balok sudah diinput semua");
     }
 
@@ -1314,3 +1347,5 @@ exports.remove = async (no) => {
     throw err;
   }
 };
+// Untuk pengujian (skrip verifikasi dalam transaksi yang di-rollback).
+exports._internal = { alokasiUlangTally, sinkronAlokasiKayuBulat, hitungSisaBalok, alokasikanStok };
