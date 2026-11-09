@@ -9,6 +9,7 @@ const { getBrowser } = require("./browser");
  * @param {string} options.width  - lebar halaman (default: '80mm')
  * @param {string} options.height - tinggi halaman fix (mis. '40mm'). Jika di-set,
  *                                  ukuran halaman dikunci dan tinggi konten TIDAK diukur dinamis.
+ * @param {number} options.qrMargin - bingkai putih QR dalam modul (default: 4)
  * @returns {Buffer} PDF buffer
  */
 const MM_TO_PX = 96 / 25.4; // 1mm @ 96dpi
@@ -26,7 +27,7 @@ async function generateLabelPdf(data, templateFn, options = {}) {
   const qrValue = data.noLabel || data.kode || "NO-CODE";
   const qrBase64 = await QRCode.toDataURL(qrValue, {
     width: 400,
-    margin: 4,
+    margin: options.qrMargin ?? 4,
     errorCorrectionLevel: "Q",
   });
 

@@ -19,8 +19,7 @@
       .label {
         position: relative;
         width: 105mm;
-        padding: 3mm 4mm;
-        border: 1.2px solid #000;
+        padding: 2mm 1.8mm;
       }
 
       /* Header: LABEL ST | NO : xxx */
@@ -28,14 +27,12 @@
         display: flex;
         justify-content: space-between;
         align-items: baseline;
-        border-bottom: 1.5px solid #000;
-        padding-bottom: 1.2mm;
         margin-bottom: 1.6mm;
       }
 
       .label-header .title,
       .label-header .no-label {
-        font-size: 12pt;
+        font-size: 14pt;
         font-weight: bold;
         text-decoration: underline;
       }
@@ -53,8 +50,8 @@
 
       .info-row {
         display: flex;
-        font-size: 8pt;
-        line-height: 1.5;
+        font-size: 11pt;
+        line-height: 1.2;
         color: #111;
       }
 
@@ -70,13 +67,11 @@
 
       .info-row .v {
         flex: 1;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        overflow-wrap: anywhere;
       }
 
       .kb-row {
-        font-size: 9pt;
+        font-size: 11pt;
         margin-bottom: 1.4mm;
       }
 
@@ -91,7 +86,7 @@
       table.detail td {
         border: 0.8px solid #000;
         text-align: center;
-        font-size: 9pt;
+        font-size: 13pt;
         padding: 1mm 0.5mm;
       }
 
@@ -100,14 +95,13 @@
       }
 
       table.detail td {
-        font-size: 12pt;
         font-weight: bold;
       }
 
       /* Ringkasan kanan */
       .summary {
         text-align: right;
-        font-size: 10pt;
+        font-size: 14pt;
         line-height: 1.5;
         margin-bottom: 1.6mm;
       }
@@ -128,13 +122,13 @@
       }
 
       .qr-box img {
-        width: 33mm;
-        height: 33mm;
+        width: 40.6mm;
+        height: 40.6mm;
         background: #fff;
       }
 
       .qr-box .qr-caption {
-        font-size: 9pt;
+        font-size: 12pt;
         font-weight: bold;
         text-align: center;
         margin-top: 0.6mm;
@@ -146,21 +140,22 @@
       }
 
       .right-block .mmyy {
-        font-size: 34pt;
+        font-size: 50pt;
         font-weight: bold;
         line-height: 1.1;
       }
 
-      .right-block .big-no {
-        font-size: 16pt;
+      .big-no {
+        flex: 1;
+        text-align: center;
+        font-size: 25pt;
         font-weight: bold;
         line-height: 1.2;
-        margin-top: 1.4mm;
       }
 
       .slp {
         text-align: right;
-        font-size: 20pt;
+        font-size: 25pt;
         font-weight: bold;
         line-height: 1.1;
         margin-top: 1mm;
@@ -168,7 +163,7 @@
 
       .remark {
         text-align: center;
-        font-size: 9pt;
+        font-size: 12pt;
         margin-top: 1.6mm;
       }
 
@@ -180,13 +175,13 @@
       .bottom-right {
         display: flex;
         justify-content: flex-end;
-        align-items: flex-end;
+        align-items: center;
         margin-top: 1.6mm;
       }
 
       .bottom-right img {
-        width: 33mm;
-        height: 33mm;
+        width: 40.6mm;
+        height: 40.6mm;
         background: #fff;
       }
 
@@ -275,6 +270,7 @@
       <div class="dashed"></div>
 
       <div class="bottom-right">
+        <div class="big-no">{{noST}}</div>
         <img src="{{qrBase64}}" alt="QR" />
       </div>
     </div>
