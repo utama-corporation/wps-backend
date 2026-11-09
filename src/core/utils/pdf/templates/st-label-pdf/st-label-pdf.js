@@ -58,6 +58,7 @@ function buildStLabelHtml(data) {
   return html
     .replace(/{{noST}}/g, esc(data.noST))
     .replace("{{jenisKayu}}", esc(data.jenisKayu))
+    .replace("{{jenisKayuRow}}", esc(data.jenisKayu))
     .replace("{{platTruk}}", esc(data.platTruk))
     .replace("{{noSPK}}", esc(data.noSPK))
     .replace("{{tanggal}}", esc(data.tanggal))

@@ -137,12 +137,41 @@
       .right-block {
         flex: 1;
         text-align: right;
+        align-self: stretch;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+      }
+
+      /* Watermark COPY (jika sudah pernah dicetak) - kanan barcode, bawah total */
+      .watermark {
+        text-align: right;
+        font-size: 44pt;
+        font-weight: 900;
+        color: rgba(0, 0, 0, 0.16);
+        letter-spacing: 6px;
+        white-space: nowrap;
+        line-height: 1;
+        position: relative;
+        z-index: 1;
+      }
+
+      .right-block .jenis-row {
+        font-size: 20pt;
+        font-weight: bold;
+        text-align: right;
+        line-height: 1.2;
+        margin-top: auto;
+        position: relative;
+        z-index: 2;
       }
 
       .right-block .mmyy {
         font-size: 50pt;
         font-weight: bold;
         line-height: 1.1;
+        position: relative;
+        z-index: 2;
       }
 
       .big-no {
@@ -185,22 +214,6 @@
         background: #fff;
       }
 
-      /* Watermark COPY (jika sudah pernah dicetak) */
-      .watermark {
-        position: absolute;
-        top: 16mm;
-        left: 0;
-        right: 0;
-        text-align: center;
-        font-size: 44pt;
-        font-weight: 900;
-        color: rgba(0, 0, 0, 0.16);
-        letter-spacing: 6px;
-        white-space: nowrap;
-        pointer-events: none;
-        z-index: 1;
-      }
-
       .bottom,
       .bottom-right,
       .slp,
@@ -213,8 +226,6 @@
   </head>
   <body>
     <div class="label">
-      <div class="watermark">{{watermarkText}}</div>
-
       <div class="label-header">
         <span class="title">LABEL ST</span>
         <span class="no-label">NO : {{noST}}</span>
@@ -261,6 +272,8 @@
           <div class="qr-caption">{{noST}}</div>
         </div>
         <div class="right-block">
+          <div class="watermark">{{watermarkText}}</div>
+          <div class="jenis-row">{{jenisKayuRow}}</div>
           <div class="mmyy">{{mmYY}}</div>
         </div>
       </div>
