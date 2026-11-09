@@ -94,6 +94,17 @@ const TIPE_CONFIG = {
 };
 
 const TIPE_URUT = ["st", "s4s", "fj", "moulding", "laminating", "ccAkhir", "sanding", "packing"];
+// Tabel label hasil (output) Bongkar Susun per tipe.
+const OUTPUT_TABLE = {
+  st: "BongkarSusunOutputST",
+  s4s: "BongkarSusunOutputS4S",
+  fj: "BongkarSusunOutputFJ",
+  moulding: "BongkarSusunOutputMoulding",
+  laminating: "BongkarSusunOutputLaminating",
+  ccAkhir: "BongkarSusunOutputCCAkhir",
+  sanding: "BongkarSusunOutputSanding",
+  packing: "BongkarSusunOutputBarangJadi",
+};
 const cfgByTipe = {};
 for (const cfg of Object.values(TIPE_CONFIG)) cfgByTipe[cfg.tipe] = cfg;
 
@@ -159,19 +170,22 @@ async function getAll({ search, topRow, date }) {
 }
 
 /* ============================================================
- * GET DETAIL — label per 8 tipe untuk satu NoBongkarSusun
+ * GET DETAIL — label input per 8 tipe untuk satu NoBongkarSusun,
+ * plus label hasilnya di `output` (kunci tipe yang sama).
  * ==========================================================*/
 async function getDetail(noBongkarSusun) {
   const pool = await poolPromise;
-  const out = {};
+  const out = { output: {} };
   for (const tipe of TIPE_URUT) {
     const cfg = cfgByTipe[tipe];
     const req = pool.request();
     req.input("no", sql.VarChar(50), noBongkarSusun);
     const r = await req.query(`
-      SELECT ${cfg.col} AS label FROM ${cfg.input} WHERE NoBongkarSusun = @no ORDER BY ${cfg.col}
+      SELECT ${cfg.col} AS label FROM ${cfg.input} WHERE NoBongkarSusun = @no ORDER BY ${cfg.col};
+      SELECT ${cfg.col} AS label FROM ${OUTPUT_TABLE[tipe]} WHERE NoBongkarSusun = @no ORDER BY ${cfg.col};
     `);
-    out[tipe] = r.recordset.map((x) => x.label);
+    out[tipe] = r.recordsets[0].map((x) => x.label);
+    out.output[tipe] = r.recordsets[1].map((x) => x.label);
   }
   return out;
 }
