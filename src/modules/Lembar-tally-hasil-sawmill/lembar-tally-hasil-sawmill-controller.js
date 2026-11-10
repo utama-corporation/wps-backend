@@ -149,7 +149,8 @@ exports.updateHeader = async (req, res) => {
     res.json({ success: true, message: "Header berhasil diubah" });
   } catch (err) {
     console.error("Error update header:", err);
-    res.status(500).json({ success: false, message: err.message });
+    // 4xx = penolakan bisnis (kayu bulat tidak valid / sudah dimatikan).
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 };
 

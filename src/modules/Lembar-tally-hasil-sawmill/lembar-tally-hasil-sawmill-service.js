@@ -1110,6 +1110,34 @@ exports.updateHeader = async (data) => {
     const no = data.no;
     if (!no) throw new Error("No tidak valid");
 
+    // No. Kayu Bulat bisa diganti lewat Ubah Header. Kayu bulat lama yang
+    // sudah dimatikan (penerimaan sudah dibuat) tidak boleh dilepas, dan kayu
+    // bulat baru harus ada, belum dimatikan, dan sejenis.
+    const lama = await transaction.request().input("no", sql.VarChar, no)
+      .query(`SELECT NoKayuBulat FROM STSawmill_h WHERE NoSTSawmill = @no`);
+    if (lama.recordset.length === 0) throw notFound("Data tally tidak ditemukan");
+    const kbLama = (lama.recordset[0].NoKayuBulat || "").trim();
+    const kbBaru = (data.no_kayu_bulat || "").trim();
+    if (kbBaru && kbBaru !== kbLama) {
+      const cek = await transaction.request()
+        .input("lama", sql.VarChar, kbLama)
+        .input("baru", sql.VarChar, kbBaru)
+        .query(`
+          SELECT NoKayuBulat, IdJenisKayu, DateUsage
+          FROM KayuBulat_h WHERE NoKayuBulat IN (@lama, @baru)
+        `);
+      const rowLama = cek.recordset.find((r) => r.NoKayuBulat.trim() === kbLama);
+      const rowBaru = cek.recordset.find((r) => r.NoKayuBulat.trim() === kbBaru);
+      if (rowLama && rowLama.DateUsage) {
+        throw conflict(`No Kayu Bulat ${kbLama} sudah dimatikan, tidak bisa diganti`);
+      }
+      if (!rowBaru) throw badReq(`No Kayu Bulat ${kbBaru} tidak ditemukan`);
+      if (rowBaru.DateUsage) throw conflict(`No Kayu Bulat ${kbBaru} sudah dimatikan`);
+      if (rowLama && rowLama.IdJenisKayu !== rowBaru.IdJenisKayu) {
+        throw badReq("Jenis kayu No Kayu Bulat baru berbeda dengan yang lama");
+      }
+    }
+
     const req = transaction.request();
     req.input("no", sql.VarChar, no);
     req.input("tgl", sql.Date, data.tgl || null);
