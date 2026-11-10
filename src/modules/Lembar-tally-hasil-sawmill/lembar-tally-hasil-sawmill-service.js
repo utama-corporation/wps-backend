@@ -417,6 +417,7 @@ exports.getRiwayat = async ({ noMeja = "", top = 40, search = "" } = {}) => {
       A.NoSTSawmill AS no,
       CONVERT(varchar(10), A.TglSawmill, 120) AS tgl,
       A.NoKayuBulat AS no_kayu_bulat,
+      ISNULL(B.NoTruk, '-') AS no_truk,
       A.NoMeja AS no_meja,
       A.[Shift] AS shift,
       ISNULL(G.NamaMeja, '-') AS nama_meja,
