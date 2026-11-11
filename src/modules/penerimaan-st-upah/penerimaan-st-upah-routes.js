@@ -14,6 +14,7 @@ const auth = [verifyToken, attachPermissions];
 router.get(BASE, ...auth, requirePermission("label_st:read"), ctrl.getAll);
 router.get(`${BASE}/masters`, ...auth, requirePermission("label_st:read"), ctrl.getMasters);
 router.get(`${BASE}/:no/labels`, ...auth, requirePermission("label_st:read"), ctrl.getLabels);
+router.get(`${BASE}/:no/pdf`, ...auth, requirePermission("label_st:read"), ctrl.generatePdf);
 router.get(`${BASE}/:no`, ...auth, requirePermission("label_st:read"), ctrl.getByNo);
 router.post(BASE, ...auth, requirePermission("label_st:create"), ctrl.create);
 router.put(`${BASE}/:no`, ...auth, requirePermission("label_st:update"), ctrl.update);
