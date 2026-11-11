@@ -10,7 +10,7 @@ const penjualanStService = require("../penjualan/st/penjualan-st-service");
  * ==========================================================*/
 const TIPE_CONFIG = {
   E: {
-    tipe: "st", label: "ST", input: "BongkarSusunInputST", col: "NoST", h: "ST_h", d: "ST_d",
+    tipe: "st", label: "ST", input: "BongkarSusunInputST", output: "BongkarSusunOutputST", col: "NoST", h: "ST_h", d: "ST_d",
     usedBy: [
       { table: "S4SProduksiInputST", col: "NoProduksi", nama: "Proses Produksi S4S" },
       { table: "AdjustmentInputST", col: "NoAdjustment", nama: "Adjustment ST" },
@@ -18,7 +18,7 @@ const TIPE_CONFIG = {
     ],
   },
   R: {
-    tipe: "s4s", label: "S4S", input: "BongkarSusunInputS4S", col: "NoS4S", h: "S4S_h", d: "S4S_d",
+    tipe: "s4s", label: "S4S", input: "BongkarSusunInputS4S", output: "BongkarSusunOutputS4S", col: "NoS4S", h: "S4S_h", d: "S4S_d",
     usedBy: [
       { table: "S4SProduksiInputS4S", col: "NoProduksi", nama: "Proses Produksi S4S" },
       { table: "FJProduksiInputS4S", col: "NoProduksi", nama: "Proses Produksi FJ" },
@@ -28,7 +28,7 @@ const TIPE_CONFIG = {
     ],
   },
   S: {
-    tipe: "fj", label: "FJ", input: "BongkarSusunInputFJ", col: "NoFJ", h: "FJ_h", d: "FJ_d",
+    tipe: "fj", label: "FJ", input: "BongkarSusunInputFJ", output: "BongkarSusunOutputFJ", col: "NoFJ", h: "FJ_h", d: "FJ_d",
     usedBy: [
       { table: "SandingProduksiInputFJ", col: "NoProduksi", nama: "Proses Produksi Sanding" },
       { table: "S4SProduksiInputFJ", col: "NoProduksi", nama: "Proses Produksi S4S" },
@@ -39,7 +39,7 @@ const TIPE_CONFIG = {
     ],
   },
   T: {
-    tipe: "moulding", label: "Moulding", input: "BongkarSusunInputMoulding", col: "NoMoulding", h: "Moulding_h", d: "Moulding_d",
+    tipe: "moulding", label: "Moulding", input: "BongkarSusunInputMoulding", output: "BongkarSusunOutputMoulding", col: "NoMoulding", h: "Moulding_h", d: "Moulding_d",
     usedBy: [
       { table: "S4SProduksiInputMoulding", col: "NoProduksi", nama: "Proses Produksi S4S" },
       { table: "SandingProduksiInputMoulding", col: "NoProduksi", nama: "Proses Produksi Sanding" },
@@ -52,7 +52,7 @@ const TIPE_CONFIG = {
     ],
   },
   U: {
-    tipe: "laminating", label: "Laminating", input: "BongkarSusunInputLaminating", col: "NoLaminating", h: "Laminating_h", d: "Laminating_d",
+    tipe: "laminating", label: "Laminating", input: "BongkarSusunInputLaminating", output: "BongkarSusunOutputLaminating", col: "NoLaminating", h: "Laminating_h", d: "Laminating_d",
     usedBy: [
       { table: "CCAkhirProduksiInputLaminating", col: "NoProduksi", nama: "Proses Produksi CC Akhir" },
       { table: "MouldingProduksiInputLaminating", col: "NoProduksi", nama: "Proses Produksi Laminating" },
@@ -61,7 +61,7 @@ const TIPE_CONFIG = {
     ],
   },
   V: {
-    tipe: "ccAkhir", label: "CrossCut", input: "BongkarSusunInputCCAkhir", col: "NoCCAkhir", h: "CCAkhir_h", d: "CCAkhir_d",
+    tipe: "ccAkhir", label: "CrossCut", input: "BongkarSusunInputCCAkhir", output: "BongkarSusunOutputCCAkhir", col: "NoCCAkhir", h: "CCAkhir_h", d: "CCAkhir_d",
     usedBy: [
       { table: "SandingProduksiInputCCAkhir", col: "NoProduksi", nama: "Proses Produksi Sanding" },
       { table: "S4SProduksiInputCCAkhir", col: "NoProduksi", nama: "Proses Produksi S4S" },
@@ -73,7 +73,7 @@ const TIPE_CONFIG = {
     ],
   },
   W: {
-    tipe: "sanding", label: "Sanding", input: "BongkarSusunInputSanding", col: "NoSanding", h: "Sanding_h", d: "Sanding_d",
+    tipe: "sanding", label: "Sanding", input: "BongkarSusunInputSanding", output: "BongkarSusunOutputSanding", col: "NoSanding", h: "Sanding_h", d: "Sanding_d",
     usedBy: [
       { table: "LaminatingProduksiInputSanding", col: "NoProduksi", nama: "Proses Produksi Laminating" },
       { table: "PackingProduksiInputSanding", col: "NoProduksi", nama: "Proses Produksi Sanding" },
@@ -82,7 +82,7 @@ const TIPE_CONFIG = {
     ],
   },
   I: {
-    tipe: "packing", label: "Packing", input: "BongkarSusunInputBarangJadi", col: "NoBJ", h: "BarangJadi_h", d: "BarangJadi_d",
+    tipe: "packing", label: "Packing", input: "BongkarSusunInputBarangJadi", output: "BongkarSusunOutputBarangJadi", col: "NoBJ", h: "BarangJadi_h", d: "BarangJadi_d",
     usedBy: [
       { table: "CCAkhirProduksiInputBarangJadi", col: "NoProduksi", nama: "Proses Produksi Cross Cut" },
       { table: "PackingProduksiInputBarangJadi", col: "NoProduksi", nama: "Proses Packing" },
@@ -94,17 +94,6 @@ const TIPE_CONFIG = {
 };
 
 const TIPE_URUT = ["st", "s4s", "fj", "moulding", "laminating", "ccAkhir", "sanding", "packing"];
-// Tabel label hasil (output) Bongkar Susun per tipe.
-const OUTPUT_TABLE = {
-  st: "BongkarSusunOutputST",
-  s4s: "BongkarSusunOutputS4S",
-  fj: "BongkarSusunOutputFJ",
-  moulding: "BongkarSusunOutputMoulding",
-  laminating: "BongkarSusunOutputLaminating",
-  ccAkhir: "BongkarSusunOutputCCAkhir",
-  sanding: "BongkarSusunOutputSanding",
-  packing: "BongkarSusunOutputBarangJadi",
-};
 const cfgByTipe = {};
 for (const cfg of Object.values(TIPE_CONFIG)) cfgByTipe[cfg.tipe] = cfg;
 
@@ -129,6 +118,9 @@ const clip = (v, max) => {
   const s = v == null || v === "" ? null : String(v).trim();
   return s == null || s === "" ? null : s.slice(0, max);
 };
+
+/** Pembulatan 4 desimal (paritas String.format("%.4f") — floor, bukan round). */
+const floor4 = (v) => Math.floor(v * 10000) / 10000;
 
 async function audit(transaction, user, aktivitas) {
   const r = new sql.Request(transaction);
@@ -170,24 +162,71 @@ async function getAll({ search, topRow, date }) {
 }
 
 /* ============================================================
- * GET DETAIL — label input per 8 tipe untuk satu NoBongkarSusun,
- * plus label hasilnya di `output` (kunci tipe yang sama).
+ * GET DETAIL — label input + label output per 8 tipe untuk satu
+ * NoBongkarSusun, beserta total berat per arah (m³; Ton untuk ST
+ * mengikuti formula penjualan-st: UOM lebar = mm → 304.8/1e9/1.416,
+ * selain itu /7200.8; pembulatan floor4 per baris ukuran).
  * ==========================================================*/
 async function getDetail(noBongkarSusun) {
   const pool = await poolPromise;
-  const out = { output: {} };
+  const out = {};
   for (const tipe of TIPE_URUT) {
     const cfg = cfgByTipe[tipe];
-    const req = pool.request();
-    req.input("no", sql.VarChar(50), noBongkarSusun);
-    const r = await req.query(`
-      SELECT ${cfg.col} AS label FROM ${cfg.input} WHERE NoBongkarSusun = @no ORDER BY ${cfg.col};
-      SELECT ${cfg.col} AS label FROM ${OUTPUT_TABLE[tipe]} WHERE NoBongkarSusun = @no ORDER BY ${cfg.col};
-    `);
-    out[tipe] = r.recordsets[0].map((x) => x.label);
-    out.output[tipe] = r.recordsets[1].map((x) => x.label);
+    const input = await fetchLabels(pool, noBongkarSusun, cfg, cfg.input);
+    const output = await fetchLabels(pool, noBongkarSusun, cfg, cfg.output);
+    out[tipe] = {
+      input: input.labels,
+      output: output.labels,
+      inputTotal: input.total,
+      outputTotal: output.total,
+    };
   }
   return out;
+}
+
+/** Daftar label satu arah (tabel input/output) + total berat dari X_d. */
+async function fetchLabels(pool, no, cfg, table) {
+  const req = pool.request();
+  req.input("no", sql.VarChar(50), no);
+  const r = cfg.tipe === "st"
+    ? await req.query(`
+        SELECT x.${cfg.col} AS label,
+          ISNULL(SUM(FLOOR(CASE WHEN h.IdUOMTblLebar = 1
+            THEN (d.Tebal * d.Lebar * d.Panjang * d.JmlhBatang) * 304.8 / 1000000000.0 / 1.416
+            ELSE (d.Tebal * d.Lebar * d.Panjang * d.JmlhBatang) / 7200.8
+          END * 10000) / 10000), 0) AS ton,
+          ISNULL(SUM(FLOOR(CASE WHEN h.IdUOMTblLebar = 1
+            THEN (d.Tebal * d.Lebar * d.Panjang * d.JmlhBatang) * 304.8 / 1000000000.0
+            ELSE (d.Tebal * d.Lebar * d.Panjang * d.JmlhBatang) * 1.416 / 7200.8
+          END * 10000) / 10000), 0) AS m3
+        FROM ${table} x
+        LEFT JOIN ${cfg.d} d ON d.${cfg.col} = x.${cfg.col}
+        LEFT JOIN ${cfg.h} h ON h.${cfg.col} = x.${cfg.col}
+        WHERE x.NoBongkarSusun = @no
+        GROUP BY x.${cfg.col}
+        ORDER BY x.${cfg.col}
+      `)
+    : await req.query(`
+        SELECT x.${cfg.col} AS label,
+          ISNULL(SUM(FLOOR((d.Tebal * d.Lebar * d.Panjang * d.JmlhBatang) / 1000000000.0 * 10000) / 10000), 0) AS m3
+        FROM ${table} x
+        LEFT JOIN ${cfg.d} d ON d.${cfg.col} = x.${cfg.col}
+        WHERE x.NoBongkarSusun = @no
+        GROUP BY x.${cfg.col}
+        ORDER BY x.${cfg.col}
+      `);
+
+  const labels = r.recordset.map((x) => x.label);
+  let m3 = 0;
+  let ton = 0;
+  for (const row of r.recordset) {
+    m3 += Number(row.m3) || 0;
+    ton += Number(row.ton) || 0;
+  }
+  return {
+    labels,
+    total: { count: labels.length, m3: floor4(m3), ton: floor4(ton) },
+  };
 }
 
 async function getHeaderRow(transaction, no) {
@@ -491,7 +530,6 @@ async function getHistory(no) {
  * LABEL INFO — 7 tipe awal didelegasikan ke Penjualan ST; Packing (BJ) di sini.
  * ==========================================================*/
 const BULAN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const floor4 = (v) => Math.floor(v * 10000) / 10000;
 
 async function getLabelInfo(rawLabel) {
   const label = String(rawLabel || "").trim().toUpperCase();

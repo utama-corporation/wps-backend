@@ -428,6 +428,7 @@ exports.getRiwayat = async ({ noMeja = "", top = 40, search = "" } = {}) => {
         ELSE ISNULL(A.Operator, '-') END AS operator,
       ISNULL(J.Jenis, '-') AS jenis,
       ISNULL(S.NmSupplier, '-') AS supplier,
+      B.NoTruk AS no_truk,
       A.BalokTerpakai AS balok_terpakai,
       A.BeratBalok AS berat_balok
     FROM STSawmill_h A
@@ -1141,9 +1142,7 @@ exports.updateHeader = async (data) => {
 
     const req = transaction.request();
     req.input("no", sql.VarChar, no);
-    req.input("tgl", sql.Date, data.tgl || null);
     req.input("shift", sql.Int, toInt(data.shift));
-    req.input("no_kayu_bulat", sql.VarChar, data.no_kayu_bulat || null);
     req.input("id_sawmill_special_condition", sql.Int, toInt(data.id_sawmill_special_condition));
     req.input("balok_terpakai", sql.Int, toInt(data.balok_terpakai));
     req.input("jlh_batang_rajang", sql.Int, toInt(data.jlh_batang_rajang));
@@ -1156,11 +1155,10 @@ exports.updateHeader = async (data) => {
     req.input("is_borongan", sql.Bit, data.is_borongan ? 1 : 0);
     req.input("remark", sql.NVarChar(500), data.remark || null);
 
+    // TglSawmill & NoKayuBulat sengaja TIDAK diupdate (tidak boleh diubah dari Ubah Header).
     await req.query(`
       UPDATE STSawmill_h SET
-        TglSawmill = @tgl,
         Shift = @shift,
-        NoKayuBulat = @no_kayu_bulat,
         IdSawmillSpecialCondition = @id_sawmill_special_condition,
         BalokTerpakai = @balok_terpakai,
         JlhBatangRajang = @jlh_batang_rajang,

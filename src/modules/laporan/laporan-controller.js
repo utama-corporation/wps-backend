@@ -76,6 +76,11 @@ const PDF_REPORTS = {
     path: "/kayu-bulat/timeline-kayu-bulat-bulanan/pdf",
     params: ["start_date", "end_date"],
   },
+  // Laporan terbatas (security code) — lihat PERMISSION_KHUSUS di bawah.
+  "timeline-kb-bulanan-mgnt": {
+    path: "/management/timeline-kb-bulanan-mgnt/pdf",
+    params: ["start_date", "end_date"],
+  },
   "timeline-kb-harian": {
     path: "/kayu-bulat/timeline-kayu-bulat-harian/pdf",
     params: ["start_date", "end_date"],
@@ -590,6 +595,12 @@ const PDF_REPORTS = {
 
 const KATEGORI_KODE = require("./kategori-map");
 
+// Laporan yang butuh permission khusus ("security code"). Hanya permission ini
+// (atau '*') yang lolos — laporan:read / laporan:<slug>:read TIDAK cukup.
+const PERMISSION_KHUSUS = {
+  "timeline-kb-bulanan-mgnt": "laporan:kb:timeline-kb-bulanan-mgnt:read",
+};
+
 exports.getPdf = async (req, res) => {
   try {
     const spec = PDF_REPORTS[req.params.kode];
@@ -600,15 +611,17 @@ exports.getPdf = async (req, res) => {
     // Permission per kategori: laporan:read (semua) ATAU laporan:<slug>:read.
     const slug = KATEGORI_KODE[req.params.kode];
     const perms = req.userPermissions;
-    const boleh =
-      perms.has("*") ||
-      perms.has("laporan:read") ||
-      (!!slug && perms.has(`laporan:${slug}:read`));
+    const khusus = PERMISSION_KHUSUS[req.params.kode];
+    const boleh = khusus
+      ? perms.has("*") || perms.has(khusus)
+      : perms.has("*") ||
+        perms.has("laporan:read") ||
+        (!!slug && perms.has(`laporan:${slug}:read`));
     if (!boleh) {
       return res.status(403).json({
         success: false,
         message: "Forbidden: insufficient permission",
-        required: slug ? `laporan:${slug}:read` : "laporan:read",
+        required: khusus || (slug ? `laporan:${slug}:read` : "laporan:read"),
       });
     }
 

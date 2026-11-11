@@ -131,6 +131,7 @@ module.exports = {
   "target-masuk-bb-bulanan": "kb",
   "timeline-kb-bulanan": "kb",
   "timeline-kb-bulanan-kg": "kg",
+  "timeline-kb-bulanan-mgnt": "kb",
   "timeline-kb-harian": "kb",
   "timeline-kb-harian-kg": "kg",
   "umur-bj": "bj",

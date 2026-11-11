@@ -190,6 +190,8 @@ app.use("/api/mst-user", mstUserRoutes);
 app.use("/api/master-permission-group", masterPermissionGroupRoutes);
 app.use("/api/mesin-sawmill", mesinSawmill);
 app.use("/api/sawmill", stSawmill);
+// Alias untuk web (wps_web) — tablet memakai /api/sawmill, web memanggil /api/st-sawmill.
+app.use("/api/st-sawmill", stSawmill);
 app.use("/api/update", updateRoutes);
 app.use("/api/proses/finger-join", fingerJoinRoutes);
 app.use("/api/proses/s4s", s4sRoutes);
