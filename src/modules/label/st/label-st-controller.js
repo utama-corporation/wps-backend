@@ -257,12 +257,7 @@ exports.lookupNoKB = async (req, res) => {
 exports.createLabel = async (req, res) => {
   try {
     const data = req.body;
-    if (!data.noST) {
-      return res
-        .status(400)
-        .json({ success: false, message: "noST wajib diisi" });
-    }
-
+    // Tanpa noST, nomor dialokasikan di dalam transaksi (bukan MAX+1 bacaan).
     const result = await labelStService.createLabel(data);
     return res.status(201).json({
       success: true,

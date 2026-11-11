@@ -537,8 +537,17 @@ async function createLabel(data) {
   console.log("ST CREATE payload:", JSON.stringify(data));
 
   try {
+    // Nomor dialokasikan di dalam transaksi: baris MAX di-lock sampai
+    // commit, jadi dua request tidak dapat nomor yang sama.
+    let noST = String(data.noST ?? "").trim();
+    if (!noST) {
+      const num = await new sql.Request(transaction).query(`
+        SELECT 'E.' + FORMAT(RIGHT(MAX(NoST), 6) + 1, '000000') AS NoST
+        FROM ${MASTER_TABLE} WITH (UPDLOCK, HOLDLOCK)`);
+      noST = num.recordset[0]?.NoST || "E.000001";
+    }
     const req = new sql.Request(transaction);
-    req.input("noST", sql.VarChar(50), data.noST);
+    req.input("noST", sql.VarChar(50), noST);
     req.input("idJenisKayu", sql.Int, data.idJenisKayu || null);
     req.input("dateCreate", sql.Date, data.dateCreate || null);
     req.input("vacuumDate", sql.Date, data.vacuumDate || null);
@@ -573,7 +582,7 @@ async function createLabel(data) {
       for (let i = 0; i < data.details.length; i++) {
         const d = data.details[i];
         const detReq = new sql.Request(transaction);
-        detReq.input("noST", sql.VarChar(50), data.noST);
+        detReq.input("noST", sql.VarChar(50), noST);
         detReq.input("noUrut", sql.Int, i + 1);
         detReq.input("tebal", sql.Decimal(18, 2), d.tebal || 0);
         detReq.input("lebar", sql.Decimal(18, 2), d.lebar || 0);
@@ -591,7 +600,7 @@ async function createLabel(data) {
     if (data.sticks && Array.isArray(data.sticks) && data.sticks.length > 0) {
       for (const s of dedupeSticks(data.sticks)) {
         const stickReq = new sql.Request(transaction);
-        stickReq.input("noST", sql.VarChar(50), data.noST);
+        stickReq.input("noST", sql.VarChar(50), noST);
         stickReq.input("idGradeStick", sql.Int, s.idGradeStick || 0);
         stickReq.input("jumlahStick", sql.VarChar(50), String(s.jumlahStick ?? 0));
         await stickReq.query(`
@@ -604,7 +613,7 @@ async function createLabel(data) {
     // Link bongkar susun (paritas tablet)
     if (data.noBongkarSusun) {
       const bsReq = new sql.Request(transaction);
-      bsReq.input("noST", sql.VarChar(50), data.noST);
+      bsReq.input("noST", sql.VarChar(50), noST);
       bsReq.input("noBongkarSusun", sql.VarChar(50), data.noBongkarSusun);
       await bsReq.query(`
         INSERT INTO BongkarSusunOutputST (NoST, NoBongkarSusun)
@@ -615,7 +624,7 @@ async function createLabel(data) {
     // Link penerimaan ST pembelian (paritas tablet labelVersion 1)
     if (data.noPenerimaanSTPembelian) {
       const penReq = new sql.Request(transaction);
-      penReq.input("noST", sql.VarChar(50), data.noST);
+      penReq.input("noST", sql.VarChar(50), noST);
       penReq.input("noPen", sql.VarChar(50), data.noPenerimaanSTPembelian);
       await penReq.query(`
         INSERT INTO PenerimaanSTPembelian_d (NoPenerimaanST, NoST)
@@ -626,7 +635,7 @@ async function createLabel(data) {
     // Link penerimaan ST upah (paritas tablet labelVersion 2)
     if (data.noPenerimaanSTUpah) {
       const upahReq = new sql.Request(transaction);
-      upahReq.input("noST", sql.VarChar(50), data.noST);
+      upahReq.input("noST", sql.VarChar(50), noST);
       upahReq.input("noPen", sql.VarChar(50), data.noPenerimaanSTUpah);
       await upahReq.query(`
         INSERT INTO PenerimaanSTUpah_d (NoPenerimaanST, NoST)
@@ -635,7 +644,7 @@ async function createLabel(data) {
     }
 
     await transaction.commit();
-    return { noST: data.noST };
+    return { noST, noBongkarSusun: data.noBongkarSusun || null };
   } catch (err) {
     console.error("ST Create Error:", err.message, err.originalError ? err.originalError.message : "");
     await transaction.rollback();
