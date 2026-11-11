@@ -15,6 +15,7 @@ router.get('/meta-ascend', requirePermission('stock_opname:read'), ctrl.ascendMe
 router.get('/family', requirePermission('stock_opname:read'), ctrl.ascendFamilyByCategory);
 router.get('/headers', requirePermission('stock_opname:read'), ctrl.headers);
 router.get('/lokasi', requirePermission('stock_opname:read'), ctrl.lokasi);
+router.get('/size/:nolabel', requirePermission('stock_opname:read'), ctrl.labelSize);
 router.get('/:noso/laporan', requirePermission('stock_opname:read'), ctrl.laporanKayu);
 router.get('/:noso/laporan-ascend', requirePermission('stock_opname:read'), ctrl.laporanAscend);
 router.get('/:noso/crystal/:key', requirePermission('stock_opname:read'), ctrl.crystalPdf);

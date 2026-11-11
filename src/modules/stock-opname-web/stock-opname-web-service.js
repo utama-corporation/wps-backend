@@ -238,6 +238,91 @@ async function removeHasil(noso, label) {
   return { NoLabel: no };
 }
 
+// Ukuran label dari tabel detail per jenis; kolomnya sama di semua modul
+// (NoUrut, Tebal, Lebar, Panjang, JmlhBatang). ST juga mengembalikan ton.
+const SIZE_TABLE = {
+  ST: 'ST_d',
+  S4S: 'S4S_d',
+  FJ: 'FJ_d',
+  MLD: 'Moulding_d',
+  LMT: 'Laminating_d',
+  CC: 'CCAkhir_d',
+  SND: 'Sanding_d',
+  BJ: 'BarangJadi_d',
+};
+
+const floor4 = (x) => Math.floor(x * 10000) / 10000;
+
+async function labelSize(nolabel) {
+  const no = clean(nolabel);
+  const k = PREFIX[no.charAt(0).toUpperCase()];
+  if (!k) throw badReq('No label tidak valid.');
+  const j = JENIS[k];
+  const pool = await poolPromise;
+  const r = await pool
+    .request()
+    .input('NoLabel', sql.VarChar, no)
+    .query(
+      `SELECT NoUrut, Tebal, Lebar, Panjang, JmlhBatang
+       FROM [dbo].[${SIZE_TABLE[k]}]
+       WHERE [${j.col}] = @NoLabel
+       ORDER BY NoUrut`,
+    );
+  const rows = r.recordset || [];
+  let uom = 3;
+  if (k === 'ST') {
+    const h = await pool
+      .request()
+      .input('NoLabel', sql.VarChar, no)
+      .query('SELECT IdUOMTblLebar FROM [dbo].[ST_h] WHERE NoST = @NoLabel');
+    uom = toInt(h.recordset?.[0]?.IdUOMTblLebar, 3);
+  }
+  let jumlah = 0,
+    m3 = 0,
+    ton = 0;
+  const details = rows.map((row) => {
+    const pcs = toInt(row.JmlhBatang);
+    const tebal = Number(row.Tebal) || 0;
+    const lebar = Number(row.Lebar) || 0;
+    const panjang = Number(row.Panjang) || 0;
+    const detail = {
+      NoUrut: toInt(row.NoUrut),
+      Tebal: tebal,
+      Lebar: lebar,
+      Panjang: panjang,
+      JmlhBatang: pcs,
+    };
+    if (k === 'ST') {
+      let rowTon =
+        uom === 1
+          ? (tebal * lebar * panjang * pcs * 304.8) / 1e9 / 1.416
+          : (tebal * lebar * panjang * pcs) / 7200.8;
+      rowTon = floor4(rowTon);
+      const rowM3 = floor4(rowTon * 1.416);
+      ton += rowTon;
+      m3 += rowM3;
+      detail.RowM3 = rowM3;
+      detail.RowTON = rowTon;
+    } else {
+      const rowM3 = floor4((tebal * lebar * panjang * pcs) / 1e9);
+      m3 += rowM3;
+      detail.RowM3 = rowM3;
+    }
+    jumlah += pcs;
+    return detail;
+  });
+  return {
+    Jenis: k,
+    JenisNama: j.nama,
+    details,
+    total: {
+      jumlah,
+      m3: Number(m3.toFixed(4)),
+      ...(k === 'ST' ? { ton: Number(ton.toFixed(4)) } : {}),
+    },
+  };
+}
+
 // ---------- Ascend (spare part) ----------
 
 async function ascendFamilies(noso) {
@@ -411,6 +496,7 @@ module.exports = {
   listUsers,
   summary,
   removeHasil,
+  labelSize,
   ascendFamilies,
   ascendItems,
   ascendUsage,

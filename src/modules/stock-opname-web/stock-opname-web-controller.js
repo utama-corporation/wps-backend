@@ -28,6 +28,9 @@ exports.summary = handle('summary', async (req) => ({ data: await svc.summary(re
 exports.users = handle('listing users', async (req) => ({ data: await svc.listUsers(req.params.noso) }));
 exports.stok = handle('listing stok', (req) => svc.listStok(req.params.noso, req.query));
 exports.hasil = handle('listing hasil', (req) => svc.listHasil(req.params.noso, req.query));
+exports.labelSize = handle('label size', async (req) => ({
+  data: await svc.labelSize(req.params.nolabel),
+}));
 exports.removeHasil = handle('deleting hasil', async (req) => ({
   message: 'Hasil scan berhasil dihapus',
   data: await svc.removeHasil(req.params.noso, req.query.label),
