@@ -1,7 +1,8 @@
 const service = require("./penerimaan-st-upah-service");
 
 // Cetak memakai service laporan (open-api-report). Autentikasi: token JWT user diteruskan apa adanya.
-// Override via REPORT_API_ST_UPAH_URL.
+// Pola sama dengan proxy lain ke service ini: GET dengan query (?NoUpah=<no>).
+// Override host via REPORT_API_ST_UPAH_URL.
 const REPORT_URL =
   process.env.REPORT_API_ST_UPAH_URL ||
   "http://192.168.10.100:5006/api/reports/sawn-timber/penerimaan-st-upah/pdf";
@@ -94,15 +95,15 @@ exports.generatePdf = async (req, res) => {
       return res.status(404).json({ success: false, message: "Penerimaan ST tidak ditemukan" });
     }
 
-    const upstream = await fetch(REPORT_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/pdf",
-        Authorization: req.header("Authorization") || "",
+    const upstream = await fetch(
+      `${REPORT_URL}?NoUpah=${encodeURIComponent(no)}`,
+      {
+        headers: {
+          Accept: "application/pdf",
+          Authorization: req.header("Authorization") || "",
+        },
       },
-      body: JSON.stringify({ NoPenerimaanST: no }),
-    });
+    );
     if (!upstream.ok) {
       let message = `Gagal membuat laporan (${upstream.status})`;
       try {
