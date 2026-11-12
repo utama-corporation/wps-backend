@@ -1,5 +1,6 @@
 const svc = require('./stock-opname-web-service');
 const create = require('./stock-opname-web-create-service');
+const ascendReport = require('./stock-opname-ascend-report');
 
 function fail(res, error, ctx) {
   const statusCode = error.statusCode || 500;
@@ -80,6 +81,29 @@ exports.laporanAscend = handle('laporan ascend', async (req) => {
   const header = await svc.getHeader(req.params.noso);
   return { data: await create.laporanAscend(String(header.NoSO).trim()) };
 });
+
+// PDF laporan Ascend (tanpa Crystal — HTML → puppeteer, tampilan laporan legacy).
+exports.laporanAscendPdf = async (req, res) => {
+  try {
+    const header = await svc.getHeader(req.params.noso);
+    const noso = String(header.NoSO).trim();
+    const rows = await create.laporanAscend(noso);
+    const pdf = await ascendReport.generate({
+      noSO: noso,
+      tanggal: header.Tgl,
+      rows,
+      printedBy: req.username || '-',
+    });
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="StockOpnameAscend_${noso}.pdf"`,
+      'Content-Length': pdf.length,
+    });
+    return res.end(pdf);
+  } catch (error) {
+    return fail(res, error, 'laporan ascend pdf');
+  }
+};
 
 // Laporan Crystal Report (service .NET: E:/JOB/API/wps-crystal). Hanya kategori yang sudah diuji render-nya.
 const CRYSTAL_URL = (process.env.CRYSTAL_SO_URL || "http://127.0.0.1:5199").replace(/\/+$/, "");
