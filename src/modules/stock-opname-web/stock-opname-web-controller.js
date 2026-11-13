@@ -107,7 +107,7 @@ exports.laporanAscendPdf = async (req, res) => {
 
 // Laporan Crystal Report (service .NET: E:/JOB/API/wps-crystal). Hanya kategori yang sudah diuji render-nya.
 const CRYSTAL_URL = (process.env.CRYSTAL_SO_URL || "http://127.0.0.1:5199").replace(/\/+$/, "");
-const CRYSTAL_KEYS = ["s4s", "fj", "moulding", "laminating", "ccakhir", "sanding", "bj"];
+const CRYSTAL_KEYS = ["s4s", "fj", "moulding", "laminating", "ccakhir", "sanding", "bj", "stall"];
 
 exports.crystalPdf = async (req, res) => {
   try {
