@@ -43,6 +43,9 @@ async function withTx(fn) {
 }
 
 const isFk = (err) => err?.number === 547 || err?.originalError?.info?.number === 547;
+const isUniqueViolation = (err) =>
+  [2601, 2627].includes(err?.number) ||
+  [2601, 2627].includes(err?.originalError?.info?.number);
 const bit = (v) => (v === true || v === 1 || v === "1" || v === "true" ? 1 : 0);
 const str = (v) => (v === null || v === undefined ? "" : String(v).trim());
 
@@ -263,15 +266,20 @@ async function remove(key, idParam, user) {
 }
 
 /* ============================================================
- * Mapping ID Lokasi — PK gabungan (IdBagian, IdJenisKayu, IdGrade)
+ * Mapping ID Lokasi — kunci unik (IdBagian, IdJenisKayu, IdGrade, IdLokasi).
+ * IdJenisKayu/IdGrade = 0 (bukan NULL) berarti Berlaku Global untuk semua
+ * jenis/grade; kolom NOT NULL sehingga sentinel 0, bukan NULL.
+ * Satu kombinasi boleh punya beberapa lokasi; Warna tetap atribut.
  * ==========================================================*/
 const MAP_TABLE = "MstBagianJenisKayuGradeWarnaToIDLocation";
 
 async function mappingList() {
   const pool = await poolPromise;
   const rs = await pool.request().query(`
-    SELECT A.IdBagian, A.IdJenisKayu, A.IdGrade,
-           B.NamaBagian, C.Jenis, D.NamaGrade,
+    SELECT A.IdBagian, NULLIF(A.IdJenisKayu, 0) AS IdJenisKayu, NULLIF(A.IdGrade, 0) AS IdGrade,
+           B.NamaBagian,
+           ISNULL(C.Jenis, 'Semua') AS Jenis,
+           ISNULL(D.NamaGrade, 'Semua') AS NamaGrade,
            CAST(ISNULL(A.Warna, 0) AS bit) AS Warna, A.IdLokasi, E.Description AS NamaLokasi
     FROM ${MAP_TABLE} A
     LEFT JOIN MstBagian B ON B.IdBagian = A.IdBagian
@@ -294,14 +302,28 @@ async function mappingLookups() {
   return { bagian: bagian.recordset, jenis: jenis.recordset, grade: grade.recordset, lokasi: lokasi.recordset };
 }
 
+// IdJenisKayu / IdGrade bernilai 0 berarti "Semua" (global). Kolom tabel
+// NOT NULL, jadi jangan diubah menjadi NULL.
+function mappingPart(value, title) {
+  if (value === null || value === undefined || value === "") return 0;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0) throw httpError(400, `${title} harus berupa bilangan bulat (>= 0) atau kosong.`);
+  return n;
+}
+
 function mappingKey(src) {
   const k = {
     bagian: Number(src?.IdBagian ?? src?.bagian),
-    jenis: Number(src?.IdJenisKayu ?? src?.jenis),
-    grade: Number(src?.IdGrade ?? src?.grade),
+    jenis: mappingPart(src?.IdJenisKayu ?? src?.jenis, "Jenis Kayu"),
+    grade: mappingPart(src?.IdGrade ?? src?.grade, "Grade"),
+    lokasi: str(src?.IdLokasi ?? src?.lokasi).toUpperCase(),
   };
-  if (![k.bagian, k.jenis, k.grade].every(Number.isInteger)) throw httpError(400, "Bagian, Jenis, dan Grade wajib dipilih.");
+  if (!Number.isInteger(k.bagian) || k.bagian <= 0) throw httpError(400, "Bagian wajib dipilih.");
   return k;
+}
+
+function mappingKeyText(k) {
+  return [k.bagian, k.jenis || "Semua", k.grade || "Semua", k.lokasi || "?"].join("/");
 }
 
 async function mappingLokasi(tx, idLokasi) {
@@ -318,7 +340,8 @@ async function mappingExists(tx, k) {
     .input("b", sql.Int, k.bagian)
     .input("j", sql.Int, k.jenis)
     .input("g", sql.Int, k.grade)
-    .query(`SELECT TOP 1 1 AS x FROM ${MAP_TABLE} WITH (UPDLOCK, HOLDLOCK) WHERE IdBagian = @b AND IdJenisKayu = @j AND IdGrade = @g`);
+    .input("l", sql.VarChar(5), k.lokasi)
+    .query(`SELECT TOP 1 1 AS x FROM ${MAP_TABLE} WITH (UPDLOCK, HOLDLOCK) WHERE IdBagian = @b AND IdJenisKayu = @j AND IdGrade = @g AND IdLokasi = @l`);
   return r.recordset.length > 0;
 }
 
@@ -326,16 +349,26 @@ async function mappingCreate(body, user) {
   const k = mappingKey(body);
   return withTx(async (tx) => {
     const lok = await mappingLokasi(tx, body?.IdLokasi);
-    if (await mappingExists(tx, k)) throw httpError(409, "Mapping untuk Bagian, Jenis, dan Grade tersebut sudah ada.");
-    await new sql.Request(tx)
-      .input("b", sql.Int, k.bagian)
-      .input("j", sql.Int, k.jenis)
-      .input("g", sql.Int, k.grade)
-      .input("w", sql.Bit, bit(body?.Warna))
-      .input("l", sql.VarChar(5), lok)
-      .query(`INSERT INTO ${MAP_TABLE} (IdBagian, IdJenisKayu, IdGrade, Warna, IdLokasi) VALUES (@b, @j, @g, @w, @l)`);
-    await audit(tx, user, `Menyimpan Data Master Mapping ID Lokasi ${k.bagian}/${k.jenis}/${k.grade} -> ${lok} (Web)`);
-    return { IdBagian: k.bagian, IdJenisKayu: k.jenis, IdGrade: k.grade };
+    k.lokasi = lok;
+    if (await mappingExists(tx, k)) {
+      throw httpError(409, "Mapping untuk Bagian, Jenis, Grade, dan Lokasi tersebut sudah ada.");
+    }
+    try {
+      await new sql.Request(tx)
+        .input("b", sql.Int, k.bagian)
+        .input("j", sql.Int, k.jenis)
+        .input("g", sql.Int, k.grade)
+        .input("w", sql.Bit, bit(body?.Warna))
+        .input("l", sql.VarChar(5), lok)
+        .query(`INSERT INTO ${MAP_TABLE} (IdBagian, IdJenisKayu, IdGrade, Warna, IdLokasi) VALUES (@b, @j, @g, @w, @l)`);
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw httpError(409, "Mapping untuk Bagian, Jenis, Grade, dan Lokasi tersebut sudah ada.");
+      }
+      throw err;
+    }
+    await audit(tx, user, `Menyimpan Data Master Mapping ID Lokasi ${mappingKeyText(k)} (Web)`);
+    return { IdBagian: k.bagian, IdJenisKayu: k.jenis, IdGrade: k.grade, IdLokasi: k.lokasi };
   });
 }
 
@@ -344,15 +377,23 @@ async function mappingUpdate(params, body, user) {
   return withTx(async (tx) => {
     const lok = await mappingLokasi(tx, body?.IdLokasi);
     if (!(await mappingExists(tx, k))) throw httpError(404, "Data mapping tidak ditemukan.");
-    await new sql.Request(tx)
-      .input("b", sql.Int, k.bagian)
-      .input("j", sql.Int, k.jenis)
-      .input("g", sql.Int, k.grade)
-      .input("w", sql.Bit, bit(body?.Warna))
-      .input("l", sql.VarChar(5), lok)
-      .query(`UPDATE ${MAP_TABLE} SET Warna = @w, IdLokasi = @l WHERE IdBagian = @b AND IdJenisKayu = @j AND IdGrade = @g`);
-    await audit(tx, user, `Mengubah Data Master Mapping ID Lokasi ${k.bagian}/${k.jenis}/${k.grade} -> ${lok} (Web)`);
-    return { IdBagian: k.bagian, IdJenisKayu: k.jenis, IdGrade: k.grade };
+    try {
+      await new sql.Request(tx)
+        .input("b", sql.Int, k.bagian)
+        .input("j", sql.Int, k.jenis)
+        .input("g", sql.Int, k.grade)
+        .input("old", sql.VarChar(5), k.lokasi)
+        .input("w", sql.Bit, bit(body?.Warna))
+        .input("l", sql.VarChar(5), lok)
+        .query(`UPDATE ${MAP_TABLE} SET Warna = @w, IdLokasi = @l WHERE IdBagian = @b AND IdJenisKayu = @j AND IdGrade = @g AND IdLokasi = @old`);
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw httpError(409, "Mapping untuk Bagian, Jenis, Grade, dan Lokasi tersebut sudah ada.");
+      }
+      throw err;
+    }
+    await audit(tx, user, `Mengubah Data Master Mapping ID Lokasi ${mappingKeyText(k)} -> ${lok} (Web)`);
+    return { IdBagian: k.bagian, IdJenisKayu: k.jenis, IdGrade: k.grade, IdLokasi: lok };
   });
 }
 
@@ -365,9 +406,10 @@ async function mappingRemove(params, user) {
         .input("b", sql.Int, k.bagian)
         .input("j", sql.Int, k.jenis)
         .input("g", sql.Int, k.grade)
-        .query(`DELETE FROM ${MAP_TABLE} WHERE IdBagian = @b AND IdJenisKayu = @j AND IdGrade = @g`);
-      await audit(tx, user, `Menghapus Data Master Mapping ID Lokasi ${k.bagian}/${k.jenis}/${k.grade} (Web)`);
-      return { IdBagian: k.bagian, IdJenisKayu: k.jenis, IdGrade: k.grade };
+        .input("l", sql.VarChar(5), k.lokasi)
+        .query(`DELETE FROM ${MAP_TABLE} WHERE IdBagian = @b AND IdJenisKayu = @j AND IdGrade = @g AND IdLokasi = @l`);
+      await audit(tx, user, `Menghapus Data Master Mapping ID Lokasi ${mappingKeyText(k)} (Web)`);
+      return { IdBagian: k.bagian, IdJenisKayu: k.jenis, IdGrade: k.grade, IdLokasi: k.lokasi };
     });
   } catch (err) {
     if (isFk(err)) throw httpError(409, "Mapping masih dipakai pada data lain dan tidak dapat dihapus.");

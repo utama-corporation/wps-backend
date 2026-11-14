@@ -22,8 +22,8 @@ const MAPPING = "datamaster_mappingidlokasi";
 router.get("/mapping-id-lokasi", requirePermission(`${MAPPING}:read`), ctrl.mappingList);
 router.get("/mapping-id-lokasi/lookups", requirePermission(`${MAPPING}:read`), ctrl.mappingLookups);
 router.post("/mapping-id-lokasi", requirePermission(`${MAPPING}:create`), ctrl.mappingCreate);
-router.put("/mapping-id-lokasi/:IdBagian/:IdJenisKayu/:IdGrade", requirePermission(`${MAPPING}:update`), ctrl.mappingUpdate);
-router.delete("/mapping-id-lokasi/:IdBagian/:IdJenisKayu/:IdGrade", requirePermission(`${MAPPING}:delete`), ctrl.mappingRemove);
+router.put("/mapping-id-lokasi/:IdBagian/:IdJenisKayu/:IdGrade/:IdLokasi", requirePermission(`${MAPPING}:update`), ctrl.mappingUpdate);
+router.delete("/mapping-id-lokasi/:IdBagian/:IdJenisKayu/:IdGrade/:IdLokasi", requirePermission(`${MAPPING}:delete`), ctrl.mappingRemove);
 
 for (const [master, perm] of Object.entries(PERM)) {
   router.get(`/${master}`, requirePermission(`${perm}:read`), (req, _res, next) => {

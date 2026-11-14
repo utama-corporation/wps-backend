@@ -992,4 +992,52 @@ router.get("/mapping/lokasi-labels", verifyToken, async (req, res) => {
   }
 });
 
+// GET /mapping/lokasi-for?bagian=<IdBagian>&idJenisKayu=<int>&idGrade=<int>
+// Lokasi hasil Mapping ID Lokasi untuk satu kombinasi bagian/jenis/grade.
+// jenis/grade 0 atau kosong pada baris mapping berarti Berlaku Global.
+router.get("/mapping/lokasi-for", verifyToken, async (req, res) => {
+  const toInt = (value) => {
+    const n = Number(value);
+    return Number.isInteger(n) && n >= 0 ? n : null;
+  };
+  const bagian = toInt(req.query?.bagian);
+  const jenis = toInt(req.query?.idJenisKayu);
+  const grade = toInt(req.query?.idGrade);
+  if (bagian === null || bagian <= 0 || jenis === null || grade === null) {
+    return res.status(400).json({
+      success: false,
+      message: "Bagian, jenis kayu, dan grade wajib berupa bilangan bulat.",
+    });
+  }
+  try {
+    const pool = await poolPromise;
+    const rs = await pool
+      .request()
+      .input("b", sql.Int, bagian)
+      .input("j", sql.Int, jenis)
+      .input("g", sql.Int, grade)
+      .query(`
+        SELECT A.IdLokasi, E.Description AS NamaLokasi,
+          CASE WHEN A.IdJenisKayu = @j AND A.IdGrade = @g THEN 0
+               WHEN A.IdJenisKayu = @j THEN 1
+               WHEN A.IdGrade = @g THEN 2
+               ELSE 3 END AS Specificity
+        FROM MstBagianJenisKayuGradeWarnaToIDLocation A
+        LEFT JOIN MstLokasi E ON E.IdLokasi = A.IdLokasi
+        WHERE A.IdBagian = @b
+          AND (A.IdJenisKayu = @j OR A.IdJenisKayu = 0)
+          AND (A.IdGrade = @g OR A.IdGrade = 0)
+        ORDER BY Specificity, A.IdLokasi
+      `);
+    return res.json({ success: true, data: rs.recordset });
+  } catch (error) {
+    console.error("Error fetching lokasi-for:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+});
+
 module.exports = router;
