@@ -18,6 +18,7 @@ router.get('/lokasi', requirePermission('stock_opname:read'), ctrl.lokasi);
 router.get('/size/:nolabel', requirePermission('stock_opname:read'), ctrl.labelSize);
 router.get('/:noso/laporan', requirePermission('stock_opname:read'), ctrl.laporanKayu);
 router.get('/:noso/laporan-ascend', requirePermission('stock_opname:read'), ctrl.laporanAscend);
+router.get('/:noso/laporan-ascend/pdf', requirePermission('stock_opname:read'), ctrl.laporanAscendPdf);
 router.get('/:noso/crystal/:key', requirePermission('stock_opname:read'), ctrl.crystalPdf);
 router.get('/:noso/summary', requirePermission('stock_opname:read'), ctrl.summary);
 router.get('/:noso/users', requirePermission('stock_opname:read'), ctrl.users);

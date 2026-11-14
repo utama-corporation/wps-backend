@@ -35,15 +35,21 @@ function optId(v, label) {
 function validate(data) {
   const nama = String(data.namaMeja ?? "").trim();
   if (!nama) throw httpError(400, "Nama meja harus diisi.");
-  const idGroup = Number(data.idGroup);
-  if (!Number.isInteger(idGroup) || idGroup <= 0) throw httpError(400, "Keterangan (group mesin sawmill) harus dipilih.");
+  if (nama.length > 20) throw httpError(400, "Nama meja maksimal 20 karakter.");
+  // IdGroupMesinSawmill = 0 valid (group BANSAW), jadi hanya tolak kosong / bukan bilangan bulat / negatif.
+  const rawGroup = data.idGroup;
+  const idGroup = rawGroup === null || rawGroup === undefined || rawGroup === "" ? NaN : Number(rawGroup);
+  if (!Number.isInteger(idGroup) || idGroup < 0) throw httpError(400, "Keterangan (group mesin sawmill) harus dipilih.");
   const idOp1 = optId(data.idOperator1, "Operator 1");
   const idOp2 = optId(data.idOperator2, "Operator 2");
   if (idOp1 !== null && idOp1 === idOp2) throw httpError(400, "Operator 1 dan operator 2 tidak boleh sama.");
+  // Kolom [Type] bertipe int di DB.
+  const typeStr = String(data.type ?? "").trim();
+  if (typeStr !== "" && !/^-?\d+$/.test(typeStr)) throw httpError(400, "Type harus berupa angka.");
   return {
-    nama: nama.slice(0, 100),
+    nama,
     idGroup,
-    type: String(data.type ?? "").trim().slice(0, 50),
+    type: typeStr === "" ? null : Number(typeStr),
     idOp1,
     idOp2,
     enable: bit(data.enable),
@@ -51,9 +57,9 @@ function validate(data) {
 }
 
 function bindFields(req, v) {
-  req.input("nama", sql.VarChar(100), v.nama);
+  req.input("nama", sql.VarChar(20), v.nama);
   req.input("idGroup", sql.Int, v.idGroup);
-  req.input("type", sql.VarChar(50), v.type);
+  req.input("type", sql.Int, v.type);
   req.input("idOp1", sql.Int, v.idOp1);
   req.input("idOp2", sql.Int, v.idOp2);
   req.input("enable", sql.Bit, v.enable);
