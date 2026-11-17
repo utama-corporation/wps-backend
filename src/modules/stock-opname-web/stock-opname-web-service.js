@@ -1,6 +1,7 @@
 const sql = require('mssql');
 const { poolPromise } = require('../../core/config/db');
 const { badReq, notFound } = require('../../core/utils/http-error');
+const { assertPeriodeTerbuka } = require('../../core/utils/periode-lock');
 
 // Konfigurasi jenis label stock opname (paritas WPS-tablet StockOpnameApi).
 const JENIS = {
@@ -55,13 +56,29 @@ async function getHeader(noso) {
 async function listHeaders(ascend) {
   const pool = await poolPromise;
   const r = await pool.request().query(`
-    SELECT NoSO, Tgl
+    SELECT NoSO, Tgl, IsAscend, IsKB, IsST, IsS4S, IsFJ, IsMoulding, IsLaminating, IsCCAkhir, IsSanding, IsBJ
     FROM [dbo].[StockOpname_h]
     WHERE Tgl > (SELECT MAX(PeriodHarian) FROM [dbo].[MstTutupTransaksiHarian])
       AND ${ascend ? 'IsAscend = 1' : 'ISNULL(IsAscend, 0) <> 1'}
     ORDER BY NoSO DESC;
   `);
-  return (r.recordset || []).map((x) => ({ NoSO: clean(x.NoSO), Tgl: x.Tgl }));
+  const flag = (v) => v === true || v === 1;
+  return (r.recordset || []).map((x) => ({
+    NoSO: clean(x.NoSO),
+    Tgl: x.Tgl,
+    IsAscend: flag(x.IsAscend),
+    IsKB: flag(x.IsKB),
+    HasLabels: [
+      x.IsST,
+      x.IsS4S,
+      x.IsFJ,
+      x.IsMoulding,
+      x.IsLaminating,
+      x.IsCCAkhir,
+      x.IsSanding,
+      x.IsBJ,
+    ].some(flag),
+  }));
 }
 
 async function getLokasi() {
@@ -486,6 +503,176 @@ async function ascendRemove(noso, itemId) {
   return { ItemID: id };
 }
 
+// Daftar log kayu bulat milik SO ini; baseline (Pcs, BlkTepakai) dibekukan saat SO dibuat.
+async function kbItems(noso, q) {
+  const header = await getHeader(noso);
+  const { page, pageSize, offset } = paging(q);
+  const pool = await poolPromise;
+  const request = pool.request().input('NoSO', sql.VarChar, clean(header.NoSO));
+  let search = '';
+  const s = clean(q.q);
+  if (s) {
+    request.input('Kw', sql.VarChar, `%${s}%`);
+    search =
+      " AND (s.NoKayuBulat LIKE @Kw OR ISNULL(C.NmSupplier, '') LIKE @Kw OR ISNULL(BJ.Jenis, '') LIKE @Kw)";
+  }
+  const base = `
+    FROM [dbo].[StockOpnameKayuBulat] s
+    INNER JOIN [dbo].[KayuBulat_h] A ON A.NoKayuBulat = s.NoKayuBulat
+    LEFT JOIN [dbo].[MstJenisKayu] BJ ON BJ.IdJenisKayu = A.IdJenisKayu
+    LEFT JOIN [dbo].[MstSupplier] C ON C.IdSupplier = A.IdSupplier
+    LEFT JOIN [dbo].[StockOpname_Hasil_d_KayuBulat] sh
+      ON sh.NoSO = s.NoSO AND sh.NoKayuBulat = s.NoKayuBulat
+    WHERE s.NoSO = @NoSO${search}`;
+
+  const total = await request.query(`SELECT COUNT(*) AS total ${base}`);
+  const rows = await request
+    .input('Offset', sql.Int, offset)
+    .input('Limit', sql.Int, pageSize)
+    .query(`
+      SELECT s.NoKayuBulat, A.DateCreate, C.NmSupplier, A.NoTruk, BJ.Jenis,
+             s.Pcs, s.BlkTepakai, sh.QtyFisik, sh.Remark, sh.UserID, sh.DateTimeScan
+      ${base}
+      ORDER BY A.DateCreate ASC, A.NoTruk ASC, s.NoKayuBulat ASC
+      OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY`);
+
+  const num = (v) => (v === null || v === undefined ? null : Number(v));
+  return pageResult(
+    rows.recordset,
+    (r) => ({
+      NoKayuBulat: clean(r.NoKayuBulat),
+      Tanggal: r.DateCreate,
+      Supplier: clean(r.NmSupplier),
+      NoTruk: clean(r.NoTruk),
+      Jenis: clean(r.Jenis),
+      Pcs: toInt(r.Pcs),
+      BlkTepakai: toInt(r.BlkTepakai),
+      Fisik: Math.max(toInt(r.Pcs) - toInt(r.BlkTepakai), 0),
+      QtyFisik: num(r.QtyFisik),
+      Remark: clean(r.Remark),
+      UserID: clean(r.UserID),
+      DateTimeScan: r.DateTimeScan,
+    }),
+    toInt(total.recordset[0]?.total),
+    page,
+    pageSize,
+  );
+}
+
+// Hasil opname kayu bulat per log; satu transaksi, validasi ikut snapshot SO.
+async function kbSave(noso, items, username) {
+  const header = await getHeader(noso);
+  await assertPeriodeTerbuka(new Date(header.Tgl));
+  const list = (Array.isArray(items) ? items : []).filter((i) => clean(i?.noKayuBulat));
+  if (!list.length) throw badReq('Tidak ada data yang diisi.');
+  for (const i of list) {
+    const n = Number(i.qtyFisik);
+    if (
+      i.qtyFisik === null ||
+      i.qtyFisik === undefined ||
+      i.qtyFisik === '' ||
+      !Number.isFinite(n) ||
+      n < 0
+    ) {
+      throw badReq(`Stok sekarang log ${clean(i.noKayuBulat)} tidak valid.`);
+    }
+  }
+  const pool = await poolPromise;
+  const snap = await pool
+    .request()
+    .input('NoSO', sql.VarChar, clean(header.NoSO))
+    .query('SELECT NoKayuBulat FROM [dbo].[StockOpnameKayuBulat] WHERE NoSO = @NoSO');
+  const allowed = new Set((snap.recordset || []).map((r) => clean(r.NoKayuBulat)));
+  for (const i of list) {
+    if (!allowed.has(clean(i.noKayuBulat))) {
+      throw badReq(`Log ${clean(i.noKayuBulat)} tidak termasuk stock opname ini.`);
+    }
+  }
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    for (const i of list) {
+      await tx
+        .request()
+        .input('NoSO', sql.VarChar, clean(header.NoSO))
+        .input('NoKB', sql.VarChar, clean(i.noKayuBulat))
+        .input('QtyFisik', sql.Decimal(18, 3), Number(i.qtyFisik))
+        .input('Remark', sql.VarChar, clean(i.remark).slice(0, 255))
+        .input('UserID', sql.VarChar, clean(username))
+        .query(`
+          MERGE [dbo].[StockOpname_Hasil_d_KayuBulat] AS t
+          USING (SELECT @NoSO AS NoSO, @NoKB AS NoKayuBulat) AS s
+            ON t.NoSO = s.NoSO AND t.NoKayuBulat = s.NoKayuBulat
+          WHEN MATCHED THEN
+            UPDATE SET QtyFisik = @QtyFisik, Remark = @Remark, UserID = @UserID, DateTimeScan = GETDATE()
+          WHEN NOT MATCHED THEN
+            INSERT (NoSO, NoKayuBulat, QtyFisik, Remark, UserID, DateTimeScan)
+            VALUES (@NoSO, @NoKB, @QtyFisik, @Remark, @UserID, GETDATE());`);
+    }
+    await tx.commit();
+    return { saved: list.length };
+  } catch (error) {
+    try {
+      await tx.rollback();
+    } catch {
+      // transaksi mungkin sudah gagal ditutup driver
+    }
+    throw error;
+  }
+}
+
+async function kbRemove(noso, noKb) {
+  const header = await getHeader(noso);
+  await assertPeriodeTerbuka(new Date(header.Tgl));
+  const no = clean(noKb);
+  if (!no) throw badReq('No. Kayu Bulat wajib diisi.');
+  const pool = await poolPromise;
+  const r = await pool
+    .request()
+    .input('NoSO', sql.VarChar, clean(header.NoSO))
+    .input('NoKB', sql.VarChar, no)
+    .query(
+      'DELETE FROM [dbo].[StockOpname_Hasil_d_KayuBulat] WHERE NoSO = @NoSO AND NoKayuBulat = @NoKB',
+    );
+  if (!r.rowsAffected[0]) throw notFound('Hasil opname tidak ditemukan');
+  return { NoKayuBulat: no };
+}
+
+// Selisih opname kayu bulat: baseline beku vs hasil fisik (untuk cetak).
+async function laporanKayuBulat(noso) {
+  const header = await getHeader(noso);
+  const pool = await poolPromise;
+  const r = await pool.request().input('NoSO', sql.VarChar, clean(header.NoSO)).query(`
+    SELECT s.NoKayuBulat, A.DateCreate, C.NmSupplier, A.NoTruk, BJ.Jenis,
+           s.Pcs, s.BlkTepakai, sh.QtyFisik, sh.Remark
+    FROM [dbo].[StockOpnameKayuBulat] s
+    INNER JOIN [dbo].[KayuBulat_h] A ON A.NoKayuBulat = s.NoKayuBulat
+    LEFT JOIN [dbo].[MstJenisKayu] BJ ON BJ.IdJenisKayu = A.IdJenisKayu
+    LEFT JOIN [dbo].[MstSupplier] C ON C.IdSupplier = A.IdSupplier
+    LEFT JOIN [dbo].[StockOpname_Hasil_d_KayuBulat] sh
+      ON sh.NoSO = s.NoSO AND sh.NoKayuBulat = s.NoKayuBulat
+    WHERE s.NoSO = @NoSO
+    ORDER BY A.DateCreate ASC, A.NoTruk ASC, s.NoKayuBulat ASC`);
+  const num = (v) => (v === null || v === undefined ? null : Number(v));
+  return (r.recordset || []).map((x) => {
+    const fisikSistem = Math.max(toInt(x.Pcs) - toInt(x.BlkTepakai), 0);
+    const qtyFisik = num(x.QtyFisik);
+    return {
+      NoKayuBulat: clean(x.NoKayuBulat),
+      Tanggal: x.DateCreate,
+      Supplier: clean(x.NmSupplier),
+      NoTruk: clean(x.NoTruk),
+      Jenis: clean(x.Jenis),
+      Pcs: toInt(x.Pcs),
+      BlkTepakai: toInt(x.BlkTepakai),
+      Fisik: fisikSistem,
+      QtyFisik: qtyFisik,
+      Selisih: qtyFisik === null ? null : qtyFisik - fisikSistem,
+      Remark: clean(x.Remark),
+    };
+  });
+}
+
 module.exports = {
   JENIS,
   getHeader,
@@ -502,4 +689,8 @@ module.exports = {
   ascendUsage,
   ascendSave,
   ascendRemove,
+  kbItems,
+  kbSave,
+  kbRemove,
+  laporanKayuBulat,
 };

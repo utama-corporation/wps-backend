@@ -14,6 +14,7 @@ const HEADER_FLAG = {
   CC: 'IsCCAkhir',
   SND: 'IsSanding',
   BJ: 'IsBJ',
+  KB: 'IsKB',
 };
 
 function clean(v) {
@@ -179,6 +180,30 @@ const ASCEND_INSERT = `
   WHERE (ISNULL(Z.QtyPrcIn,0) - ISNULL(Z.QtyUsg,0) + ISNULL(Z.QtyUbb,0) - ISNULL(Z.QtySls,0)
         - ISNULL(Z.QtyPR,0) + ISNULL(Z.QtyRTR,0) + ISNULL(Z.QtyTRIN,0) - ISNULL(Z.QtyTROUT,0)) <> 0;`;
 
+// Stok awal kayu bulat: log dengan sisa fisik > 0 per tanggal SO.
+// Angka sistem (Pcs, BalokTerpakai) dibekukan ke snapshot; Fisik dihitung saat disajikan.
+async function snapshotKayuBulat(tx, noSO, tgl) {
+  await tx
+    .request()
+    .input('NoSO', sql.VarChar, noSO)
+    .input('Tgl', sql.VarChar, tgl)
+    .query(`
+      INSERT INTO [dbo].[StockOpnameKayuBulat] (NoSO, NoKayuBulat, IdLokasi, Pcs, BlkTepakai)
+      SELECT @NoSO, A.NoKayuBulat, NULL,
+             ISNULL(P.Pcs, 0),
+             ISNULL(P.Terpakai, 0)
+      FROM [dbo].[KayuBulat_h] A
+      CROSS APPLY (
+        SELECT
+          (ISNULL((SELECT COUNT(*) FROM [dbo].[KayuBulat_d] D WHERE D.NoKayuBulat = A.NoKayuBulat), 0)
+           + ISNULL((SELECT SUM(KG.JmlhBatang) FROM [dbo].[KayuBulatKG_d] KG WHERE KG.NoKayuBulat = A.NoKayuBulat), 0)) AS Pcs,
+          ISNULL((SELECT SUM(S.BalokTerpakai) FROM [dbo].[STSawmill_h] S
+                  WHERE S.NoKayuBulat = A.NoKayuBulat AND S.TglSawmill <= CAST(@Tgl AS date)), 0) AS Terpakai
+      ) P
+      WHERE A.DateCreate <= CAST(@Tgl AS date)
+        AND P.Pcs - P.Terpakai > 0`);
+}
+
 async function create(body, username) {
   const { tgl, jenis, asc } = parseInput(body);
   await assertPeriodeTerbuka(new Date(`${tgl}T00:00:00`));
@@ -208,17 +233,22 @@ async function create(body, username) {
       .input('IsCCAkhir', sql.Bit, flags.IsCCAkhir)
       .input('IsSanding', sql.Bit, flags.IsSanding)
       .input('IsBJ', sql.Bit, flags.IsBJ)
+      .input('IsKB', sql.Bit, flags.IsKB)
       .input('IsAscend', sql.Bit, asc ? 1 : 0)
       .query(`
         INSERT INTO StockOpname_h
           (NoSO, Tgl, IsKB, IsSTBasah, IsSTKering, IsS4S, IsFJ, IsMoulding, IsLaminating, IsCCAkhir,
            IsSanding, IsReproses, IsWIP, IsBJ, IsST, IsAscend)
         VALUES
-          (@NoSO, CAST(@Tgl AS datetime), 0, 0, 0, @IsS4S, @IsFJ, @IsMoulding, @IsLaminating, @IsCCAkhir,
+          (@NoSO, CAST(@Tgl AS datetime), @IsKB, 0, 0, @IsS4S, @IsFJ, @IsMoulding, @IsLaminating, @IsCCAkhir,
            @IsSanding, 0, 0, @IsBJ, @IsST, @IsAscend)`);
 
     // Stok awal per jenis label: dibuat sebelum tanggal SO dan belum terpakai pada tanggal SO.
     for (const k of jenis) {
+      if (k === 'KB') {
+        await snapshotKayuBulat(tx, noSO, tgl);
+        continue;
+      }
       const j = JENIS[k];
       await tx
         .request()

@@ -32,4 +32,10 @@ router.get('/:noso/ascend/usage', requirePermission('stock_opname:read'), ctrl.a
 router.put('/:noso/ascend/hasil', requirePermission('stock_opname:update'), ctrl.ascendSave);
 router.delete('/:noso/ascend/hasil', requirePermission('stock_opname:delete'), ctrl.ascendRemove);
 
+router.get('/:noso/kb/items', requirePermission('stock_opname:read'), ctrl.kbItems);
+router.put('/:noso/kb/hasil', requirePermission('stock_opname:update'), ctrl.kbSave);
+router.delete('/:noso/kb/hasil', requirePermission('stock_opname:delete'), ctrl.kbRemove);
+router.get('/:noso/kb/laporan', requirePermission('stock_opname:read'), ctrl.kbLaporan);
+router.get('/:noso/kb/laporan/pdf', requirePermission('stock_opname:read'), ctrl.kbLaporanPdf);
+
 module.exports = router;

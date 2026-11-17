@@ -1,6 +1,7 @@
 const svc = require('./stock-opname-web-service');
 const create = require('./stock-opname-web-create-service');
 const ascendReport = require('./stock-opname-ascend-report');
+const kbReport = require('./stock-opname-kb-report');
 
 function fail(res, error, ctx) {
   const statusCode = error.statusCode || 500;
@@ -54,6 +55,40 @@ exports.ascendRemove = handle('ascend delete', async (req) => ({
   message: 'Hasil opname item berhasil dihapus',
   data: await svc.ascendRemove(req.params.noso, req.query.itemId),
 }));
+
+exports.kbItems = handle('kb items', (req) => svc.kbItems(req.params.noso, req.query));
+exports.kbSave = handle('kb save', async (req) => ({
+  message: 'Hasil opname kayu bulat berhasil disimpan',
+  data: await svc.kbSave(req.params.noso, req.body?.items, req.username),
+}));
+exports.kbRemove = handle('kb delete', async (req) => ({
+  message: 'Hasil opname kayu bulat berhasil dihapus',
+  data: await svc.kbRemove(req.params.noso, req.query.noKayuBulat),
+}));
+exports.kbLaporan = handle('kb laporan', async (req) => ({
+  data: await svc.laporanKayuBulat(req.params.noso),
+}));
+exports.kbLaporanPdf = async (req, res) => {
+  try {
+    const header = await svc.getHeader(req.params.noso);
+    const noso = String(header.NoSO).trim();
+    const rows = await svc.laporanKayuBulat(noso);
+    const pdf = await kbReport.generate({
+      noSO: noso,
+      tanggal: header.Tgl,
+      rows,
+      printedBy: req.username || '-',
+    });
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="StockOpnameKB_${noso}.pdf"`,
+      'Content-Length': pdf.length,
+    });
+    return res.end(pdf);
+  } catch (error) {
+    return fail(res, error, 'laporan kb pdf');
+  }
+};
 
 exports.ascendMeta = handle('ascend meta', async () => ({ data: await create.ascendMeta() }));
 exports.ascendFamilyByCategory = handle('ascend family', async (req) => ({
