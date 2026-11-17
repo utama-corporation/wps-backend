@@ -92,6 +92,7 @@ exports.getAll = async ({ cari = "", status = "" }) => {
       D.Jenis AS jenis,
       C.NmSupplier AS supplier,
       GP.GolPengukuran AS gol_pengukuran,
+      A.IdPengukuran AS id_pengukuran,
       A.NoTruk AS no_truk,
       A.NoPlat AS no_plat,
       A.Suket AS suket,
@@ -114,6 +115,7 @@ exports.getAll = async ({ cari = "", status = "" }) => {
     jenis: r.jenis,
     supplier: r.supplier,
     gol_pengukuran: r.gol_pengukuran,
+    id_pengukuran: r.id_pengukuran,
     no_truk: r.no_truk,
     no_plat: r.no_plat,
     suket: r.suket,
@@ -205,19 +207,40 @@ exports.getDetail = async ({ no, mode = "TON" }) => {
     .input("NoKayuBulat", sql.VarChar, no)
     .query(`
       SELECT
-        NoLog AS no_log,
-        Tebal AS tebal,
-        Lebar AS lebar,
-        Panjang AS panjang,
-        Round((Tebal * Lebar * Panjang / 7200.8 * 10000) / 10000, 4, 1) AS ton,
-        IsAfkir AS is_afkir,
-        IsMC AS is_mc,
-        IsMCMata AS is_mcmata,
-        IsBangkang AS is_bangkang,
-        Keterangan AS keterangan
-      FROM KayuBulat_d
-      WHERE NoKayuBulat = @NoKayuBulat
-      ORDER BY NoLog ASC
+        A.NoLog AS no_log,
+        A.Tebal AS tebal,
+        A.Lebar AS lebar,
+        A.Panjang AS panjang,
+        Round((A.Tebal * A.Lebar * A.Panjang / 7200.8 * 10000) / 10000, 4, 1) AS ton,
+        A.IsAfkir AS is_afkir,
+        A.IsMC AS is_mc,
+        A.IsMCMata AS is_mcmata,
+        A.IsBangkang AS is_bangkang,
+        (
+          CASE
+            WHEN B.IdPengukuran = 2 THEN
+              CASE
+                WHEN A.IsAfkir = 0 AND A.IsMC = 0 AND A.IsMCMata = 0 AND A.IsBangkang = 1 THEN 'STD-BKG'
+                WHEN A.IsAfkir = 0 AND A.IsMC = 1 AND A.IsMCMata = 0 AND A.IsBangkang = 1 THEN 'MC-BKG'
+                WHEN A.IsAfkir = 0 AND A.IsMC = 0 AND A.IsMCMata = 1 AND A.IsBangkang = 0 THEN 'MC-MATA'
+                WHEN A.IsAfkir = 0 AND A.IsMC = 1 AND A.IsMCMata = 0 AND A.IsBangkang = 0 THEN 'MC'
+                WHEN A.IsAfkir = 1 AND A.IsMC = 0 AND A.IsMCMata = 0 AND A.IsBangkang = 0 THEN 'AFKIR'
+                ELSE CASE WHEN A.Tebal * A.Lebar >= 9 THEN 'STD' ELSE 'AFKIR' END
+              END
+            WHEN B.IdPengukuran = 11 THEN
+              CASE
+                WHEN A.IsAfkir = 0 AND A.IsMC = 0 AND A.IsMCMata = 1 AND A.IsBangkang = 0 THEN 'MC-MATA'
+                WHEN A.IsAfkir = 0 AND A.IsMC = 1 AND A.IsMCMata = 0 AND A.IsBangkang = 0 THEN 'MC'
+                WHEN A.IsAfkir = 0 AND A.IsMC = 0 AND A.IsMCMata = 0 AND A.IsBangkang = 1 THEN 'BKG'
+                WHEN A.IsAfkir = 1 AND A.IsMC = 0 AND A.IsMCMata = 0 AND A.IsBangkang = 0 THEN 'AFKIR'
+                ELSE CASE WHEN A.Tebal * A.Lebar >= 16 THEN 'STD' ELSE 'AFKIR' END
+              END
+          END
+        ) AS keterangan
+      FROM KayuBulat_d A
+      INNER JOIN KayuBulat_h B ON B.NoKayuBulat = A.NoKayuBulat
+      WHERE A.NoKayuBulat = @NoKayuBulat
+      ORDER BY A.NoLog ASC
     `);
 
   return result.recordset.map(r => ({
