@@ -560,11 +560,30 @@ async function kbItems(noso, q) {
 }
 
 // Hasil opname kayu bulat per log; satu transaksi, validasi ikut snapshot SO.
+// Log balance 0 (Fisik sistem) dipaksa Stok Sekarang = 0 dan tidak bisa diubah.
 async function kbSave(noso, items, username) {
   const header = await getHeader(noso);
   await assertPeriodeTerbuka(new Date(header.Tgl));
   const list = (Array.isArray(items) ? items : []).filter((i) => clean(i?.noKayuBulat));
   if (!list.length) throw badReq('Tidak ada data yang diisi.');
+  const pool = await poolPromise;
+  const snap = await pool
+    .request()
+    .input('NoSO', sql.VarChar, clean(header.NoSO))
+    .query('SELECT NoKayuBulat, Pcs, BlkTepakai FROM [dbo].[StockOpnameKayuBulat] WHERE NoSO = @NoSO');
+  const fisikOf = new Map(
+    (snap.recordset || []).map((r) => [
+      clean(r.NoKayuBulat),
+      Math.max(toInt(r.Pcs) - toInt(r.BlkTepakai), 0),
+    ]),
+  );
+  for (const i of list) {
+    const fisik = fisikOf.get(clean(i.noKayuBulat));
+    if (fisik === undefined) {
+      throw badReq(`Log ${clean(i.noKayuBulat)} tidak termasuk stock opname ini.`);
+    }
+    if (fisik === 0) i.qtyFisik = 0;
+  }
   for (const i of list) {
     const n = Number(i.qtyFisik);
     if (
@@ -575,17 +594,6 @@ async function kbSave(noso, items, username) {
       n < 0
     ) {
       throw badReq(`Stok sekarang log ${clean(i.noKayuBulat)} tidak valid.`);
-    }
-  }
-  const pool = await poolPromise;
-  const snap = await pool
-    .request()
-    .input('NoSO', sql.VarChar, clean(header.NoSO))
-    .query('SELECT NoKayuBulat FROM [dbo].[StockOpnameKayuBulat] WHERE NoSO = @NoSO');
-  const allowed = new Set((snap.recordset || []).map((r) => clean(r.NoKayuBulat)));
-  for (const i of list) {
-    if (!allowed.has(clean(i.noKayuBulat))) {
-      throw badReq(`Log ${clean(i.noKayuBulat)} tidak termasuk stock opname ini.`);
     }
   }
   const tx = new sql.Transaction(pool);
@@ -608,6 +616,24 @@ async function kbSave(noso, items, username) {
           WHEN NOT MATCHED THEN
             INSERT (NoSO, NoKayuBulat, QtyFisik, Remark, UserID, DateTimeScan)
             VALUES (@NoSO, @NoKB, @QtyFisik, @Remark, @UserID, GETDATE());`);
+    }
+    // Balance 0: pastikan Stok Sekarang tersimpan 0 meski barisnya tidak dikirim.
+    for (const [noKB, fisik] of fisikOf) {
+      if (fisik !== 0) continue;
+      await tx
+        .request()
+        .input('NoSO', sql.VarChar, clean(header.NoSO))
+        .input('NoKB', sql.VarChar, noKB)
+        .input('UserID', sql.VarChar, clean(username))
+        .query(`
+          MERGE [dbo].[StockOpname_Hasil_d_KayuBulat] AS t
+          USING (SELECT @NoSO AS NoSO, @NoKB AS NoKayuBulat) AS s
+            ON t.NoSO = s.NoSO AND t.NoKayuBulat = s.NoKayuBulat
+          WHEN MATCHED THEN
+            UPDATE SET QtyFisik = 0, UserID = @UserID, DateTimeScan = GETDATE()
+          WHEN NOT MATCHED THEN
+            INSERT (NoSO, NoKayuBulat, QtyFisik, Remark, UserID, DateTimeScan)
+            VALUES (@NoSO, @NoKB, 0, N'', @UserID, GETDATE());`);
     }
     await tx.commit();
     return { saved: list.length };

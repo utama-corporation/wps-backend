@@ -180,8 +180,9 @@ const ASCEND_INSERT = `
   WHERE (ISNULL(Z.QtyPrcIn,0) - ISNULL(Z.QtyUsg,0) + ISNULL(Z.QtyUbb,0) - ISNULL(Z.QtySls,0)
         - ISNULL(Z.QtyPR,0) + ISNULL(Z.QtyRTR,0) + ISNULL(Z.QtyTRIN,0) - ISNULL(Z.QtyTROUT,0)) <> 0;`;
 
-// Stok awal kayu bulat: log dengan sisa fisik > 0 per tanggal SO.
-// Angka sistem (Pcs, BalokTerpakai) dibekukan ke snapshot; Fisik dihitung saat disajikan.
+// Stok awal kayu bulat: semua log yang dibuat 1 bulan terakhir sampai tanggal
+// SO (batang balok masuk); balance 0 ikut dibekukan. Angka sistem (Pcs,
+// BalokTerpakai) dibekukan ke snapshot; Fisik dihitung saat disajikan.
 async function snapshotKayuBulat(tx, noSO, tgl) {
   await tx
     .request()
@@ -200,8 +201,8 @@ async function snapshotKayuBulat(tx, noSO, tgl) {
           ISNULL((SELECT SUM(S.BalokTerpakai) FROM [dbo].[STSawmill_h] S
                   WHERE S.NoKayuBulat = A.NoKayuBulat AND S.TglSawmill <= CAST(@Tgl AS date)), 0) AS Terpakai
       ) P
-      WHERE A.DateCreate <= CAST(@Tgl AS date)
-        AND P.Pcs - P.Terpakai > 0`);
+      WHERE A.DateCreate >= DATEADD(month, -1, CAST(@Tgl AS date))
+        AND A.DateCreate <= CAST(@Tgl AS date)`);
 }
 
 async function create(body, username) {
