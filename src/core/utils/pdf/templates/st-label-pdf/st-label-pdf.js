@@ -54,8 +54,10 @@ function buildStLabelHtml(data) {
   const slpRow = data.isSLP ? `<div class="slp">SLP</div>` : "";
   const watermarkText = data.hasBeenPrinted > 0 ? "COPY" : "";
   const kbRow = `No. KB : ${esc(data.noKB)} - ${esc(data.supplier)} - ${esc(data.noTruk)}`;
+  const labelTitle = data.noPenerimaanSTPembelian ? "LABEL ST (BELI)" : "LABEL ST";
 
   return html
+    .replace("{{labelTitle}}", esc(labelTitle))
     .replace(/{{noST}}/g, esc(data.noST))
     .replace("{{jenisKayu}}", esc(data.jenisKayu))
     .replace("{{jenisKayuRow}}", esc(data.jenisKayu))

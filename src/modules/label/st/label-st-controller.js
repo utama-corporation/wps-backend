@@ -489,6 +489,7 @@ exports.generatePdf = async (req, res) => {
         remark: header.Remark || "",
         isSLP: header.IsSLP ? 1 : 0,
         hasBeenPrinted: parseInt(header.HasBeenPrinted, 10) || 0,
+        noPenerimaanSTPembelian: header.NoPenerimaanSTPembelian || null,
       },
       buildStLabelHtml,
       // Dicetak ke dot matrix: QR nyaris tanpa bingkai agar sebesar label Java.
