@@ -181,14 +181,18 @@ const ASCEND_INSERT = `
   WHERE (ISNULL(Z.QtyPrcIn,0) - ISNULL(Z.QtyUsg,0) + ISNULL(Z.QtyUbb,0) - ISNULL(Z.QtySls,0)
         - ISNULL(Z.QtyPR,0) + ISNULL(Z.QtyRTR,0) + ISNULL(Z.QtyTRIN,0) - ISNULL(Z.QtyTROUT,0)) <> 0;`;
 
-// Baseline racipan detail as-of tanggal SO: port balance Akhir dari
-// SPWps_LapMutasiRacipanDetail dengan @TglAwal = 2024-07-01 (floor sistem) dan
-// @TglAkhir = tanggal SO. Baris dengan seluruh nilai 0 di-skip; kolom Sawal1
-// (duplikat nilai Sawal di SP asli) tidak ikut dibekukan.
+// Baseline racipan detail as-of tanggal SO: port saldo awal dari
+// SPWps_LapMutasiRacipanDetail dengan periode TglAwal = TglAkhir = tanggal SO,
+// sama seperti kolom "Saldo Awal" pada laporan yang dipakai user. Baris dengan
+// saldo 0 (m3 dan batang) tidak dibekukan; kolom Sawal1 (duplikat nilai Sawal
+// di SP asli) tidak dipakai sebagai angka utama.
 const SNAPSHOT_RACIPAN = `
-  DECLARE @TglAwal DATE = '2024-07-01';
+  DECLARE @TglAwal DATE;
   DECLARE @TglAkhir DATE;
   SET @TglAkhir = CAST(@Tgl AS date);
+  -- Saldo awal tanggal SO, persis seperti laporan Mutasi Racipan Detail
+  -- (periode TglAwal = TglAkhir = tanggal SO, kolom Saldo Awal).
+  SET @TglAwal = @TglAkhir;
   DECLARE @TglStMulai As Date
   DECLARE @TglSaldoAwal As Date
   Set @TglStMulai = (Select max(TglMulaiSTKeluar) from Offset)
@@ -202,7 +206,9 @@ const SNAPSHOT_RACIPAN = `
          Keluar, KeluarJlhBtg, AdjusmentInput, AdjInJlhBtg, Akhir, AkhirJlhBtg
   FROM (
     SELECT
-    z.Jenis, Z.Tebal, Z.Lebar, Z.Panjang, Z2.Sawal, Z2.SawalJlhBtg,
+    z.Jenis, Z.Tebal, Z.Lebar, Z.Panjang,
+    (CASE WHEN Z2.Sawal IS NULL THEN 0 ELSE Z2.Sawal END) AS Sawal,
+    (CASE WHEN Z2.SawalJlhBtg IS NULL THEN 0 ELSE Z2.SawalJlhBtg END) AS SawalJlhBtg,
 
     (CASE WHEN Z3.Masuk IS NULL THEN 0 ELSE Z3.Masuk END) AS Masuk,
     (CASE WHEN Z3.JlhBtg IS NULL THEN 0 ELSE Z3.JlhBtg END) AS MskJlhBtg,
@@ -213,20 +219,8 @@ const SNAPSHOT_RACIPAN = `
     (CASE WHEN Z6.AdjusmentOutput IS NULL THEN 0 ELSE Z6.AdjusmentOutput END) as AdjusmentOutput,
     (CASE WHEN Z6.JmlhBatang IS NULL THEN 0 ELSE Z6.JmlhBatang END) as AdjOutJlhBtg,
 
-    (
-    ((CASE WHEN Z2.Sawal1 IS NULL THEN 0 ELSE Z2.Sawal1 END)) +
-    ((CASE WHEN Z3.Masuk IS NULL THEN 0 ELSE Z3.Masuk END)) -
-    ((CASE WHEN Z4.Keluar IS NULL THEN 0 ELSE Z4.Keluar END)) -
-    ((CASE WHEN Z5.AdjusmentInput IS NULL THEN 0 ELSE Z5.AdjusmentInput END)) +
-    ((CASE WHEN Z6.AdjusmentOutput IS NULL THEN 0 ELSE Z6.AdjusmentOutput END))
-    ) as Akhir,
-    (
-    (CASE WHEN Z2.SawalJlhBtg IS NULL THEN 0 ELSE Z2.SawalJlhBtg END) +
-    (CASE WHEN Z3.JlhBtg IS NULL THEN 0 ELSE Z3.JlhBtg END) -
-    (CASE WHEN Z4.JlhBtg IS NULL THEN 0 ELSE Z4.JlhBtg END) -
-    (CASE WHEN Z5.JmlhBatang IS NULL THEN 0 ELSE Z5.JmlhBatang END) +
-    (CASE WHEN Z6.JmlhBatang IS NULL THEN 0 ELSE Z6.JmlhBatang END)
-    ) as AkhirJlhBtg
+    (CASE WHEN Z2.Sawal1 IS NULL THEN 0 ELSE Z2.Sawal1 END) as Akhir,
+    (CASE WHEN Z2.SawalJlhBtg IS NULL THEN 0 ELSE Z2.SawalJlhBtg END) as AkhirJlhBtg
 
     FROM (
       SELECT CASE WHEN Jenis2 LIKE '%KAYU LAT JABON%' THEN 'RACIP KAYU LAT JABON' ELSE Jenis2 END AS Jenis, Tebal, Lebar, Panjang FROM (
@@ -345,6 +339,7 @@ const SNAPSHOT_RACIPAN = `
       INNER JOIN ST_d B ON B.NoST = A.NoST
       INNER JOIN MstJenisKayu C ON C.IdJenisKayu = A.IdJenisKayu
       WHERE (A.DateCreate >= @TglAwal AND A.DateCreate <= @TglAkhir)
+      AND A.IsUpah<>1
       GROUP BY Jenis, Tebal, Lebar, Panjang
       ) GG
 
@@ -535,9 +530,8 @@ const SNAPSHOT_RACIPAN = `
       ) Z6 ON Z6.Jenis = Z.Jenis AND Z6.Tebal = Z.Tebal AND Z6.Lebar = Z.Lebar AND Z6.Panjang = Z.Panjang
 
   ) x
-  WHERE x.Sawal <> 0 OR x.SawalJlhBtg <> 0 OR x.Masuk <> 0 OR x.MskJlhBtg <> 0
-     OR x.Keluar <> 0 OR x.KeluarJlhBtg <> 0 OR x.AdjusmentInput <> 0 OR x.AdjInJlhBtg <> 0
-     OR x.AdjusmentOutput <> 0 OR x.AdjOutJlhBtg <> 0 OR x.Akhir <> 0 OR x.AkhirJlhBtg <> 0
+  -- Saldo 0 (m3 dan batang) tidak dibekukan; mutasi tanpa saldo juga dilewati.
+  WHERE ABS(x.Akhir) >= 0.0001 OR x.AkhirJlhBtg <> 0
 `;
 
 // Saldo awal racipan: semua kombinasi Jenis/Tebal/Lebar/Panjang yang pernah
