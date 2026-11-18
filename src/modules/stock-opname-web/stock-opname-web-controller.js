@@ -2,6 +2,7 @@ const svc = require('./stock-opname-web-service');
 const create = require('./stock-opname-web-create-service');
 const ascendReport = require('./stock-opname-ascend-report');
 const kbReport = require('./stock-opname-kb-report');
+const racipanReport = require('./stock-opname-racipan-report');
 
 function fail(res, error, ctx) {
   const statusCode = error.statusCode || 500;
@@ -68,6 +69,44 @@ exports.kbRemove = handle('kb delete', async (req) => ({
 exports.kbLaporan = handle('kb laporan', async (req) => ({
   data: await svc.laporanKayuBulat(req.params.noso),
 }));
+exports.racipanItems = handle('racipan items', (req) => svc.racipanItems(req.params.noso, req.query));
+exports.racipanSave = handle('racipan save', async (req) => ({
+  message: 'Hasil opname racipan berhasil disimpan',
+  data: await svc.racipanSave(req.params.noso, req.body?.items, req.username),
+}));
+exports.racipanRemove = handle('racipan delete', async (req) => ({
+  message: 'Hasil opname racipan berhasil dihapus',
+  data: await svc.racipanRemove(req.params.noso, {
+    jenis: req.query.jenis,
+    tebal: req.query.tebal,
+    lebar: req.query.lebar,
+    panjang: req.query.panjang,
+  }),
+}));
+exports.racipanLaporan = handle('racipan laporan', async (req) => ({
+  data: await svc.racipanLaporan(req.params.noso),
+}));
+exports.racipanLaporanPdf = async (req, res) => {
+  try {
+    const header = await svc.getHeader(req.params.noso);
+    const noso = String(header.NoSO).trim();
+    const rows = await svc.racipanLaporan(noso);
+    const pdf = await racipanReport.generate({
+      noSO: noso,
+      tanggal: header.Tgl,
+      rows,
+      printedBy: req.username || '-',
+    });
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="StockOpnameRacipan_${noso}.pdf"`,
+      'Content-Length': pdf.length,
+    });
+    return res.end(pdf);
+  } catch (error) {
+    return fail(res, error, 'laporan racipan pdf');
+  }
+};
 exports.kbLaporanPdf = async (req, res) => {
   try {
     const header = await svc.getHeader(req.params.noso);

@@ -56,7 +56,7 @@ async function getHeader(noso) {
 async function listHeaders(ascend) {
   const pool = await poolPromise;
   const r = await pool.request().query(`
-    SELECT NoSO, Tgl, IsAscend, IsKB, IsST, IsS4S, IsFJ, IsMoulding, IsLaminating, IsCCAkhir, IsSanding, IsBJ
+    SELECT NoSO, Tgl, IsAscend, IsKB, IsST, IsS4S, IsFJ, IsMoulding, IsLaminating, IsCCAkhir, IsSanding, IsBJ, IsRacipan
     FROM [dbo].[StockOpname_h]
     WHERE Tgl > (SELECT MAX(PeriodHarian) FROM [dbo].[MstTutupTransaksiHarian])
       AND ${ascend ? 'IsAscend = 1' : 'ISNULL(IsAscend, 0) <> 1'}
@@ -68,6 +68,7 @@ async function listHeaders(ascend) {
     Tgl: x.Tgl,
     IsAscend: flag(x.IsAscend),
     IsKB: flag(x.IsKB),
+    IsRacipan: flag(x.IsRacipan),
     HasLabels: [
       x.IsST,
       x.IsS4S,
@@ -664,6 +665,209 @@ async function kbRemove(noso, noKb) {
   return { NoKayuBulat: no };
 }
 
+// Kunci komposit baris racipan dalam SO (Jenis + Tebal + Lebar + Panjang).
+const racipanKey = (jenis, tebal, lebar, panjang) =>
+  `${clean(jenis)}|${Number(tebal)}|${Number(lebar)}|${Number(panjang)}`;
+
+// Daftar baris racipan milik SO ini; baseline (Akhir m3 + AkhirJlhBtg batang) dibekukan saat SO dibuat.
+async function racipanItems(noso, q) {
+  const header = await getHeader(noso);
+  const { page, pageSize, offset } = paging(q);
+  const pool = await poolPromise;
+  const request = pool.request().input('NoSO', sql.VarChar, clean(header.NoSO));
+  let search = '';
+  const s = clean(q.q);
+  if (s) {
+    request.input('Kw', sql.VarChar, `%${s}%`);
+    search =
+      " AND (s.Jenis LIKE @Kw OR CAST(s.Tebal AS varchar(20)) LIKE @Kw OR CAST(s.Lebar AS varchar(20)) LIKE @Kw OR CAST(s.Panjang AS varchar(20)) LIKE @Kw)";
+  }
+  const base = `
+    FROM [dbo].[StockOpnameRacipan] s
+    LEFT JOIN [dbo].[StockOpname_Hasil_d_Racipan] sh
+      ON sh.NoSO = s.NoSO AND sh.Jenis = s.Jenis AND sh.Tebal = s.Tebal AND sh.Lebar = s.Lebar AND sh.Panjang = s.Panjang
+    WHERE s.NoSO = @NoSO${search}`;
+
+  const total = await request.query(`SELECT COUNT(*) AS total ${base}`);
+  const rows = await request
+    .input('Offset', sql.Int, offset)
+    .input('Limit', sql.Int, pageSize)
+    .query(`
+      SELECT s.Jenis, s.Tebal, s.Lebar, s.Panjang,
+             s.Akhir, s.AkhirJlhBtg, sh.QtyFisik, sh.Remark, sh.UserID, sh.DateTimeScan
+      ${base}
+      ORDER BY s.Jenis ASC, s.Tebal ASC, s.Lebar ASC, s.Panjang ASC
+      OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY`);
+
+  const num = (v) => (v === null || v === undefined ? null : Number(v));
+  return pageResult(
+    rows.recordset,
+    (r) => ({
+      Jenis: clean(r.Jenis),
+      Tebal: Number(r.Tebal) || 0,
+      Lebar: Number(r.Lebar) || 0,
+      Panjang: Number(r.Panjang) || 0,
+      Akhir: Number(r.Akhir) || 0,
+      AkhirJlhBtg: toInt(r.AkhirJlhBtg),
+      QtyFisik: num(r.QtyFisik) === null ? null : Math.trunc(Number(r.QtyFisik)),
+      Remark: clean(r.Remark),
+      UserID: clean(r.UserID),
+      DateTimeScan: r.DateTimeScan,
+    }),
+    toInt(total.recordset[0]?.total),
+    page,
+    pageSize,
+  );
+}
+
+// Hasil opname racipan per baris dimensi; satu transaksi, validasi ikut snapshot SO.
+// Baris dengan saldo sistem (AkhirJlhBtg) = 0 dipaksa Stok Sekarang = 0 dan tidak bisa diubah.
+async function racipanSave(noso, items, username) {
+  const header = await getHeader(noso);
+  await assertPeriodeTerbuka(new Date(header.Tgl));
+  const list = (Array.isArray(items) ? items : []).filter((i) => clean(i?.jenis));
+  if (!list.length) throw badReq('Tidak ada data yang diisi.');
+  const pool = await poolPromise;
+  const snap = await pool.request()
+    .input('NoSO', sql.VarChar, clean(header.NoSO))
+    .query('SELECT Jenis, Tebal, Lebar, Panjang, AkhirJlhBtg FROM [dbo].[StockOpnameRacipan] WHERE NoSO = @NoSO');
+  const snapMap = new Map(
+    (snap.recordset || []).map((r) => [racipanKey(r.Jenis, r.Tebal, r.Lebar, r.Panjang), toInt(r.AkhirJlhBtg)]),
+  );
+  for (const i of list) {
+    const key = racipanKey(i.jenis, i.tebal, i.lebar, i.panjang);
+    const akhir = snapMap.get(key);
+    if (akhir === undefined) {
+      throw badReq(`Baris ${clean(i.jenis)} ${i.tebal} × ${i.lebar} × ${i.panjang} tidak termasuk stock opname ini.`);
+    }
+    if (akhir === 0) i.qtyFisik = 0;
+  }
+  for (const i of list) {
+    const n = Number(i.qtyFisik);
+    if (
+      i.qtyFisik === null ||
+      i.qtyFisik === undefined ||
+      i.qtyFisik === '' ||
+      !Number.isFinite(n) ||
+      !Number.isInteger(n) ||
+      n < 0
+    ) {
+      throw badReq(`Stok sekarang (batang) baris ${clean(i.jenis)} tidak valid — harus bilangan bulat ≥ 0.`);
+    }
+  }
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    for (const i of list) {
+      await tx
+        .request()
+        .input('NoSO', sql.VarChar, clean(header.NoSO))
+        .input('Jenis', sql.VarChar, clean(i.jenis).slice(0, 100))
+        .input('Tebal', sql.Float, Number(i.tebal))
+        .input('Lebar', sql.Float, Number(i.lebar))
+        .input('Panjang', sql.Float, Number(i.panjang))
+        .input('QtyFisik', sql.Int, Math.trunc(Number(i.qtyFisik)))
+        .input('Remark', sql.VarChar, clean(i.remark).slice(0, 255))
+        .input('UserID', sql.VarChar, clean(username))
+        .query(`
+          MERGE [dbo].[StockOpname_Hasil_d_Racipan] AS t
+          USING (SELECT @NoSO AS NoSO, @Jenis AS Jenis, @Tebal AS Tebal, @Lebar AS Lebar, @Panjang AS Panjang) AS s
+            ON t.NoSO = s.NoSO AND t.Jenis = s.Jenis AND t.Tebal = s.Tebal AND t.Lebar = s.Lebar AND t.Panjang = s.Panjang
+          WHEN MATCHED THEN
+            UPDATE SET QtyFisik = @QtyFisik, Remark = @Remark, UserID = @UserID, DateTimeScan = GETDATE()
+          WHEN NOT MATCHED THEN
+            INSERT (NoSO, Jenis, Tebal, Lebar, Panjang, QtyFisik, Remark, UserID, DateTimeScan)
+            VALUES (@NoSO, @Jenis, @Tebal, @Lebar, @Panjang, @QtyFisik, @Remark, @UserID, GETDATE());`);
+    }
+    // Saldo 0: pastikan Stok Sekarang tersimpan 0 meski barisnya tidak dikirim.
+    for (const [key, akhir] of snapMap) {
+      if (akhir !== 0) continue;
+      const [jenis, t, l, p] = key.split('|');
+      await tx
+        .request()
+        .input('NoSO', sql.VarChar, clean(header.NoSO))
+        .input('Jenis', sql.VarChar, jenis.slice(0, 100))
+        .input('Tebal', sql.Float, Number(t))
+        .input('Lebar', sql.Float, Number(l))
+        .input('Panjang', sql.Float, Number(p))
+        .input('UserID', sql.VarChar, clean(username))
+        .query(`
+          MERGE [dbo].[StockOpname_Hasil_d_Racipan] AS t
+          USING (SELECT @NoSO AS NoSO, @Jenis AS Jenis, @Tebal AS Tebal, @Lebar AS Lebar, @Panjang AS Panjang) AS s
+            ON t.NoSO = s.NoSO AND t.Jenis = s.Jenis AND t.Tebal = s.Tebal AND t.Lebar = s.Lebar AND t.Panjang = s.Panjang
+          WHEN MATCHED THEN
+            UPDATE SET QtyFisik = 0, UserID = @UserID, DateTimeScan = GETDATE()
+          WHEN NOT MATCHED THEN
+            INSERT (NoSO, Jenis, Tebal, Lebar, Panjang, QtyFisik, Remark, UserID, DateTimeScan)
+            VALUES (@NoSO, @Jenis, @Tebal, @Lebar, @Panjang, 0, N'', @UserID, GETDATE());`);
+    }
+    await tx.commit();
+    return { saved: list.length };
+  } catch (error) {
+    try {
+      await tx.rollback();
+    } catch {
+      // transaksi mungkin sudah gagal ditutup driver
+    }
+    throw error;
+  }
+}
+
+async function racipanRemove(noso, key) {
+  const header = await getHeader(noso);
+  await assertPeriodeTerbuka(new Date(header.Tgl));
+  const { jenis, tebal, lebar, panjang } = key || {};
+  const j = clean(jenis);
+  const t = Number(tebal);
+  const l = Number(lebar);
+  const p = Number(panjang);
+  if (!j || !Number.isFinite(t) || !Number.isFinite(l) || !Number.isFinite(p)) {
+    throw badReq('Baris racipan wajib diisi (jenis, tebal, lebar, panjang).');
+  }
+  const pool = await poolPromise;
+  const r = await pool
+    .request()
+    .input('NoSO', sql.VarChar, clean(header.NoSO))
+    .input('Jenis', sql.VarChar, j)
+    .input('Tebal', sql.Float, t)
+    .input('Lebar', sql.Float, l)
+    .input('Panjang', sql.Float, p)
+    .query(
+      'DELETE FROM [dbo].[StockOpname_Hasil_d_Racipan] WHERE NoSO = @NoSO AND Jenis = @Jenis AND Tebal = @Tebal AND Lebar = @Lebar AND Panjang = @Panjang',
+    );
+  if (!r.rowsAffected[0]) throw notFound('Hasil opname tidak ditemukan');
+  return { Jenis: j, Tebal: t, Lebar: l, Panjang: p };
+}
+
+// Selisih opname racipan: baseline beku vs hasil fisik (untuk cetak).
+async function racipanLaporan(noso) {
+  const header = await getHeader(noso);
+  const pool = await poolPromise;
+  const r = await pool.request().input('NoSO', sql.VarChar, clean(header.NoSO)).query(`
+    SELECT s.Jenis, s.Tebal, s.Lebar, s.Panjang, s.Akhir, s.AkhirJlhBtg, sh.QtyFisik, sh.Remark
+    FROM [dbo].[StockOpnameRacipan] s
+    LEFT JOIN [dbo].[StockOpname_Hasil_d_Racipan] sh
+      ON sh.NoSO = s.NoSO AND sh.Jenis = s.Jenis AND sh.Tebal = s.Tebal AND sh.Lebar = s.Lebar AND sh.Panjang = s.Panjang
+    WHERE s.NoSO = @NoSO
+    ORDER BY s.Jenis ASC, s.Tebal ASC, s.Lebar ASC, s.Panjang ASC`);
+  const num = (v) => (v === null || v === undefined ? null : Number(v));
+  return (r.recordset || []).map((x) => {
+    const akhirBtg = toInt(x.AkhirJlhBtg);
+    const qtyFisik = num(x.QtyFisik) === null ? null : Math.trunc(Number(x.QtyFisik));
+    return {
+      Jenis: clean(x.Jenis),
+      Tebal: Number(x.Tebal) || 0,
+      Lebar: Number(x.Lebar) || 0,
+      Panjang: Number(x.Panjang) || 0,
+      Akhir: Number(x.Akhir) || 0,
+      AkhirJlhBtg: akhirBtg,
+      QtyFisik: qtyFisik,
+      Selisih: qtyFisik === null ? null : qtyFisik - akhirBtg,
+      Remark: clean(x.Remark),
+    };
+  });
+}
+
 // Selisih opname kayu bulat: baseline beku vs hasil fisik (untuk cetak).
 async function laporanKayuBulat(noso) {
   const header = await getHeader(noso);
@@ -719,4 +923,8 @@ module.exports = {
   kbSave,
   kbRemove,
   laporanKayuBulat,
+  racipanItems,
+  racipanSave,
+  racipanRemove,
+  racipanLaporan,
 };

@@ -38,4 +38,10 @@ router.delete('/:noso/kb/hasil', requirePermission('stock_opname:delete'), ctrl.
 router.get('/:noso/kb/laporan', requirePermission('stock_opname:read'), ctrl.kbLaporan);
 router.get('/:noso/kb/laporan/pdf', requirePermission('stock_opname:read'), ctrl.kbLaporanPdf);
 
+router.get('/:noso/racipan/items', requirePermission('stock_opname:read'), ctrl.racipanItems);
+router.put('/:noso/racipan/hasil', requirePermission('stock_opname:update'), ctrl.racipanSave);
+router.delete('/:noso/racipan/hasil', requirePermission('stock_opname:delete'), ctrl.racipanRemove);
+router.get('/:noso/racipan/laporan', requirePermission('stock_opname:read'), ctrl.racipanLaporan);
+router.get('/:noso/racipan/laporan/pdf', requirePermission('stock_opname:read'), ctrl.racipanLaporanPdf);
+
 module.exports = router;

@@ -15,6 +15,7 @@ const HEADER_FLAG = {
   SND: 'IsSanding',
   BJ: 'IsBJ',
   KB: 'IsKB',
+  RC: 'IsRacipan',
 };
 
 function clean(v) {
@@ -180,6 +181,375 @@ const ASCEND_INSERT = `
   WHERE (ISNULL(Z.QtyPrcIn,0) - ISNULL(Z.QtyUsg,0) + ISNULL(Z.QtyUbb,0) - ISNULL(Z.QtySls,0)
         - ISNULL(Z.QtyPR,0) + ISNULL(Z.QtyRTR,0) + ISNULL(Z.QtyTRIN,0) - ISNULL(Z.QtyTROUT,0)) <> 0;`;
 
+// Baseline racipan detail as-of tanggal SO: port balance Akhir dari
+// SPWps_LapMutasiRacipanDetail dengan @TglAwal = 2024-07-01 (floor sistem) dan
+// @TglAkhir = tanggal SO. Baris dengan seluruh nilai 0 di-skip; kolom Sawal1
+// (duplikat nilai Sawal di SP asli) tidak ikut dibekukan.
+const SNAPSHOT_RACIPAN = `
+  DECLARE @TglAwal DATE = '2024-07-01';
+  DECLARE @TglAkhir DATE;
+  SET @TglAkhir = CAST(@Tgl AS date);
+  DECLARE @TglStMulai As Date
+  DECLARE @TglSaldoAwal As Date
+  Set @TglStMulai = (Select max(TglMulaiSTKeluar) from Offset)
+  Set @TglSaldoAwal = (Select max(Tanggal) from Offset)
+  INSERT INTO [dbo].[StockOpnameRacipan]
+    (NoSO, Jenis, Tebal, Lebar, Panjang,
+     Sawal, SawalJlhBtg, Masuk, MskJlhBtg, AdjusmentOutput, AdjOutJlhBtg,
+     Keluar, KeluarJlhBtg, AdjusmentInput, AdjInJlhBtg, Akhir, AkhirJlhBtg)
+  SELECT @NoSO, Jenis, Tebal, Lebar, Panjang,
+         Sawal, SawalJlhBtg, Masuk, MskJlhBtg, AdjusmentOutput, AdjOutJlhBtg,
+         Keluar, KeluarJlhBtg, AdjusmentInput, AdjInJlhBtg, Akhir, AkhirJlhBtg
+  FROM (
+    SELECT
+    z.Jenis, Z.Tebal, Z.Lebar, Z.Panjang, Z2.Sawal, Z2.SawalJlhBtg,
+
+    (CASE WHEN Z3.Masuk IS NULL THEN 0 ELSE Z3.Masuk END) AS Masuk,
+    (CASE WHEN Z3.JlhBtg IS NULL THEN 0 ELSE Z3.JlhBtg END) AS MskJlhBtg,
+    (CASE WHEN Z4.Keluar IS NULL THEN 0 ELSE Z4.Keluar END) AS Keluar,
+    (CASE WHEN Z4.JlhBtg IS NULL THEN 0 ELSE Z4.JlhBtg END) AS KeluarJlhBtg,
+    (CASE WHEN Z5.AdjusmentInput IS NULL THEN 0 ELSE Z5.AdjusmentInput END) as AdjusmentInput,
+    (CASE WHEN Z5.JmlhBatang IS NULL THEN 0 ELSE Z5.JmlhBatang END) as AdjInJlhBtg,
+    (CASE WHEN Z6.AdjusmentOutput IS NULL THEN 0 ELSE Z6.AdjusmentOutput END) as AdjusmentOutput,
+    (CASE WHEN Z6.JmlhBatang IS NULL THEN 0 ELSE Z6.JmlhBatang END) as AdjOutJlhBtg,
+
+    (
+    ((CASE WHEN Z2.Sawal1 IS NULL THEN 0 ELSE Z2.Sawal1 END)) +
+    ((CASE WHEN Z3.Masuk IS NULL THEN 0 ELSE Z3.Masuk END)) -
+    ((CASE WHEN Z4.Keluar IS NULL THEN 0 ELSE Z4.Keluar END)) -
+    ((CASE WHEN Z5.AdjusmentInput IS NULL THEN 0 ELSE Z5.AdjusmentInput END)) +
+    ((CASE WHEN Z6.AdjusmentOutput IS NULL THEN 0 ELSE Z6.AdjusmentOutput END))
+    ) as Akhir,
+    (
+    (CASE WHEN Z2.SawalJlhBtg IS NULL THEN 0 ELSE Z2.SawalJlhBtg END) +
+    (CASE WHEN Z3.JlhBtg IS NULL THEN 0 ELSE Z3.JlhBtg END) -
+    (CASE WHEN Z4.JlhBtg IS NULL THEN 0 ELSE Z4.JlhBtg END) -
+    (CASE WHEN Z5.JmlhBatang IS NULL THEN 0 ELSE Z5.JmlhBatang END) +
+    (CASE WHEN Z6.JmlhBatang IS NULL THEN 0 ELSE Z6.JmlhBatang END)
+    ) as AkhirJlhBtg
+
+    FROM (
+      SELECT CASE WHEN Jenis2 LIKE '%KAYU LAT JABON%' THEN 'RACIP KAYU LAT JABON' ELSE Jenis2 END AS Jenis, Tebal, Lebar, Panjang FROM (
+      SELECT Jenis, GAB, HASIL, (CASE WHEN HASIL IS NULL THEN 'ST RACIP '+Jenis ELSE HASIL END) AS Jenis2, Tebal, Lebar, Panjang  FROM (
+      SELECT Jenis, GAB, (CASE WHEN GAB LIKE '%KAYU LAT%' THEN 'RACIP KAYU LAT ' +Jenis
+      ELSE 'ST RACIP ' +Jenis+' - '+GAB END) AS HASIL, Tebal, Lebar, Panjang  FROM(
+      Select F.Jenis, Tebal, Lebar, Panjang,
+      (CASE WHEN IsLocal = 1 AND IdPengukuran <> 5 THEN 'KAYU LAT' ELSE NamaGrade END) AS GAB
+      From STSawmill_h A
+      LEFT Join STSawmill_d B On B.NoSTSawmill = A.NoSTSawmill
+      LEFT Join STSawmillKG_d C On B.NoSTSawmill = C.NoSTSawmill And B.NoUrut = C.NoUrut
+      LEFT Join MstGradeKB D On D.IdGradeKB = C.IdGradeKB
+      LEFT Join KayuBulat_h E ON E.NoKayuBulat = A.NoKayuBulat
+      INNER JOIN MstJenisKayu F ON F.IdJenisKayu = E.IdJenisKayu
+      WHERE (A.TglSawmill < @TglAwal
+      AND A.TglSawmill >='2024-07-01')
+      OR A.TglSawmill >= @TglAwal AND A.TglSawmill <= @TglAkhir
+      ) A
+      ) B
+      ) C
+      GROUP by Jenis2, Tebal, Lebar, Panjang
+
+      UNION
+
+      SELECT CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END AS Jenis, Tebal, Lebar, Panjang
+      FROM ST_h A
+      INNER JOIN ST_d B ON B.NoST = A.NoST
+      INNER JOIN MstJenisKayu C ON C.IdJenisKayu = A.IdJenisKayu
+      LEFT JOIN AdjustmentOutputST D ON D.NoST = A.NoST
+      LEFT JOIN BongkarSusunOutputST E ON E.NoST = A.NoST
+      LEFT JOIN PenerimaanSTPembelian_d F ON F.NoST = A.NoST
+      LEFT JOIN PenerimaanSTUpah_d G ON G.NoST = A.NoST
+      WHERE (
+      A.DateCreate >= @TglAwal AND A.DateCreate <= @TglAkhir)
+      AND D.NoST IS NULL
+      AND E.NoST IS NULL
+      AND F.NoST IS NULL
+      AND G.NoST IS NULL
+      GROUP BY Jenis, Tebal, Lebar, Panjang
+
+      UNION
+
+      SELECT CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END AS Jenis, Tebal, Lebar, Panjang
+      FROM AdjusmentRacipanInput A
+      INNER JOIN AdjusmentRacipan_h B ON B.NoAdjusmentRacipan = A.NoAdjusmentRacipan
+      INNER JOIN MstJenisKayu C ON C.IdJenisKayu = A.IdJenisKayu
+      WHERE Tanggal >= @TglAwal AND Tanggal <= @TglAkhir
+      GROUP BY (CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END), Tebal, Lebar, Panjang
+
+      UNION
+
+      SELECT CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END AS Jenis, Tebal, Lebar, Panjang
+      FROM AdjusmentRacipanOutput A
+      INNER JOIN AdjusmentRacipan_h B ON B.NoAdjusmentRacipan = A.NoAdjusmentRacipan
+      INNER JOIN MstJenisKayu C ON C.IdJenisKayu = A.IdJenisKayu
+      WHERE Tanggal >= @TglAwal AND Tanggal <= @TglAkhir
+      GROUP BY (CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END), Tebal, Lebar, Panjang
+      ) Z
+
+      LEFT JOIN
+      (
+      select GG.Jenis, GG.Tebal, GG.Lebar, GG.Panjang, Z3.Masuk, Z3.JlhBtg as MasukJlhBtg, Z4.Keluar, z4.JmlBtg as KeluarJlhBtg,
+      (
+       ((CASE WHEN Z1.Sawal IS NULL THEN 0 ELSE Z1.Sawal END)) +
+       ((CASE WHEN Z3.Masuk IS NULL THEN 0 ELSE Z3.Masuk END)) -
+       ((CASE WHEN Z4.Keluar IS NULL THEN 0 ELSE Z4.Keluar END)) -
+       ((CASE WHEN Z5.AdjusmentInput IS NULL THEN 0 ELSE Z5.AdjusmentInput END)) +
+       ((CASE WHEN Z6.AdjusmentOutput IS NULL THEN 0 ELSE Z6.AdjusmentOutput END))
+      ) AS Sawal,
+
+      (
+       ((CASE WHEN Z1.Sawal IS NULL THEN 0 ELSE Z1.Sawal END)) +
+       ((CASE WHEN Z3.Masuk IS NULL THEN 0 ELSE Z3.Masuk END)) -
+       ((CASE WHEN Z4.Keluar IS NULL THEN 0 ELSE Z4.Keluar END)) -
+       ((CASE WHEN Z5.AdjusmentInput IS NULL THEN 0 ELSE Z5.AdjusmentInput END)) +
+       ((CASE WHEN Z6.AdjusmentOutput IS NULL THEN 0 ELSE Z6.AdjusmentOutput END))
+      ) AS Sawal1,
+
+      (
+      CASE WHEN Z1.JlhBtg IS NULL THEN 0 ELSE Z1.JlhBtg END
+      +
+      CASE WHEN Z3.JlhBtg IS NULL THEN 0 ELSE Z3.JlhBtg END
+      -
+      CASE WHEN Z4.JmlBtg IS NULL THEN 0 ELSE Z4.JmlBtg END
+      -
+      CASE WHEN Z5.JmlhBatang IS NULL THEN 0 ELSE Z5.JmlhBatang END
+      +
+      CASE WHEN Z6.JmlhBatang IS NULL THEN 0 ELSE Z6.JmlhBatang END
+      ) AS SawalJlhBtg
+      from
+      (
+      SELECT CASE WHEN Jenis2 LIKE '%KAYU LAT JABON%' THEN 'RACIP KAYU LAT JABON' ELSE Jenis2 END AS Jenis, Tebal, Lebar, Panjang FROM (
+      SELECT Jenis, GAB, HASIL, (CASE WHEN HASIL IS NULL THEN 'ST RACIP '+Jenis ELSE HASIL END) AS Jenis2, Tebal, Lebar, Panjang  FROM (
+      SELECT Jenis, GAB, (CASE WHEN GAB LIKE '%KAYU LAT%' THEN 'RACIP KAYU LAT ' +Jenis
+      ELSE 'ST RACIP ' +Jenis+' - '+GAB END) AS HASIL, Tebal, Lebar, Panjang  FROM(
+      Select F.Jenis,
+      (CASE WHEN IsLocal = 1 AND IdPengukuran <> 5 THEN 'KAYU LAT' ELSE NamaGrade END) AS GAB, Tebal, Lebar, Panjang
+      From STSawmill_h A
+      LEFT Join STSawmill_d B On B.NoSTSawmill = A.NoSTSawmill
+      LEFT Join STSawmillKG_d C On B.NoSTSawmill = C.NoSTSawmill And B.NoUrut = C.NoUrut
+      LEFT Join MstGradeKB D On D.IdGradeKB = C.IdGradeKB
+      LEFT Join KayuBulat_h E ON E.NoKayuBulat = A.NoKayuBulat
+      INNER JOIN MstJenisKayu F ON F.IdJenisKayu = E.IdJenisKayu
+      WHERE (A.TglSawmill < @TglAwal
+      AND A.TglSawmill >='2024-07-01')
+      OR A.TglSawmill >= @TglAwal AND A.TglSawmill <= @TglAkhir
+      ) A
+      ) B
+      ) C
+      GROUP by Jenis2, Tebal, Lebar, Panjang
+
+      UNION
+
+      SELECT CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END AS Jenis, Tebal, Lebar, Panjang
+      FROM ST_h A
+      INNER JOIN ST_d B ON B.NoST = A.NoST
+      INNER JOIN MstJenisKayu C ON C.IdJenisKayu = A.IdJenisKayu
+      WHERE (A.DateCreate >= @TglAwal AND A.DateCreate <= @TglAkhir)
+      GROUP BY Jenis, Tebal, Lebar, Panjang
+      ) GG
+
+      LEFT JOIN
+
+      (
+      SELECT (CASE WHEN Z.Jenis LIKE '%KAYU LAT%' THEN 'RACIP ' + Z.Jenis
+      ELSE 'ST RACIP ' +Z.Jenis END) AS Jenis, Hasil as Sawal, Tebal, Lebar, Panjang, JlhBtg  FROM(
+      SELECT B.Jenis,
+      sum(round((Tebal * Lebar * Panjang)*304.8/1000000000/1.416,4)*JmlhBatang) as Hasil, Tebal, Lebar, Panjang,
+      sum(JmlhBatang) as JlhBtg
+      FROM OffSet A
+      INNER JOIN MstJenisKayu B ON B.IdJenisKayu = A.IdJenisKayu
+      WHERE Tanggal >=@TglSaldoAwal
+      AND Tanggal <=@TglAkhir
+      group by Jenis, Tebal, Lebar, Panjang
+      ) z
+      ) Z1 ON Z1.Jenis = GG.Jenis AND Z1.Tebal = GG.Tebal AND Z1.Lebar = GG.Lebar AND Z1.Panjang = GG.Panjang
+
+      LEFT JOIN
+
+      (
+      SELECT CASE WHEN Jenis2 LIKE '%KAYU LAT JABON%' THEN 'RACIP KAYU LAT JABON' ELSE Jenis2 END AS Jenis, sum(Masuk) AS Masuk, Tebal, Lebar, Panjang, sum(JmlhBatang) as JlhBtg FROM(
+      SELECT Jenis, GAB, HASIL, (CASE WHEN HASIL IS NULL THEN 'ST RACIP '+Jenis ELSE HASIL END) AS Jenis2, Masuk, Tebal, Lebar, Panjang, JmlhBatang  FROM (
+      SELECT Jenis, GAB, (CASE WHEN GAB LIKE '%KAYU LAT%' THEN 'RACIP KAYU LAT ' +Jenis
+      ELSE 'ST RACIP ' +Jenis+' - '+GAB END) AS HASIL, Masuk, Tebal, Lebar, Panjang, JmlhBatang  FROM(
+      Select Jenis, (CASE WHEN IsLocal = 1 AND IdPengukuran <> 5 THEN 'KAYU LAT' ELSE NamaGrade END) AS GAB,
+      (Case When IdUOMTblLebar = 1 And IdUOMPanjang = 4 Then
+        				round((Tebal * Lebar * Panjang)*304.8/1000000000/1.416,4)*JmlhBatang
+      			When IdUOMTblLebar = 3 And IdUOMPanjang = 4 Then
+      				Floor(Tebal * Lebar * Panjang * JmlhBatang/7200.8*10000) / 10000
+      			End)
+      AS Masuk, Tebal, Lebar, Panjang, JmlhBatang
+      From STSawmill_h A
+      LEFT Join STSawmill_d B On B.NoSTSawmill = A.NoSTSawmill
+      LEFT Join STSawmillKG_d C On B.NoSTSawmill = C.NoSTSawmill And B.NoUrut = C.NoUrut
+      LEFT Join MstGradeKB D On D.IdGradeKB = C.IdGradeKB
+      LEFT Join KayuBulat_h E ON E.NoKayuBulat = A.NoKayuBulat
+      INNER JOIN MstJenisKayu F ON F.IdJenisKayu = E.IdJenisKayu
+      WHERE A.TglSawmill>=@TglSaldoAwal AND A.TglSawmill < @TglAwal
+      ) A
+      ) A
+      ) A
+      GROUP BY (CASE WHEN Jenis2 LIKE '%KAYU LAT JABON%' THEN 'RACIP KAYU LAT JABON' ELSE Jenis2 END), Tebal, Lebar, Panjang
+      ) Z3 ON Z3.Jenis = GG.Jenis AND Z3.Tebal = GG.Tebal AND Z3.Lebar = GG.Lebar AND Z3.Panjang = GG.Panjang
+
+      LEFT JOIN
+      (
+      SELECT * FROM(
+      SELECT Jenis, SUM(Keluar) AS Keluar, Tebal, Lebar, Panjang, SUM(JmlhBatang) JmlBtg FROM(
+      SELECT Jenis, CASE WHEN A.DateCreate < @TglStMulai THEN 0 ELSE Keluar END AS Keluar, Tebal, Lebar, Panjang,
+      CASE WHEN A.DateCreate < @TglStMulai THEN 0 ELSE JmlhBatang END AS JmlhBatang FROM (
+      SELECT CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END AS Jenis,
+      A.DateCreate,
+      (Case When IdUOMTblLebar = 1 And IdUOMPanjang = 4 Then
+      				round((Tebal * Lebar * Panjang)*304.8/1000000000/1.416,4)*JmlhBatang
+      			When IdUOMTblLebar = 3 And IdUOMPanjang = 4 Then
+      				Floor(Tebal * Lebar * Panjang * JmlhBatang/7200.8*10000) / 10000
+      			End)
+      as Keluar, Tebal, Lebar, Panjang, JmlhBatang
+      FROM ST_h A
+      INNER JOIN ST_d B ON B.NoST = A.NoST
+      INNER JOIN MstJenisKayu C ON C.IdJenisKayu = A.IdJenisKayu
+      LEFT JOIN AdjustmentOutputST D ON D.NoST = A.NoST
+      LEFT JOIN BongkarSusunOutputST E ON E.NoST = A.NoST
+      LEFT JOIN PenerimaanSTPembelian_d F ON F.NoST = A.NoST
+      LEFT JOIN PenerimaanSTUpah_d G ON G.NoST = A.NoST
+      WHERE (
+      A.DateCreate < @TglAwal)
+      AND D.NoST IS NULL
+      AND E.NoST IS NULL
+      AND F.NoST IS NULL
+      AND G.NoST IS NULL
+      ) A
+      )A2
+      GROUP BY Jenis, Tebal, Lebar, Panjang
+      )A
+      ) Z4 ON Z4.Jenis = GG.Jenis AND Z4.Tebal = GG.Tebal AND Z4.Lebar = GG.Lebar AND Z4.Panjang = GG.Panjang
+
+      LEFT JOIN
+
+      (
+      SELECT CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END AS Jenis, Tebal, Lebar, Panjang, SUM(JmlhBatang) AS JmlhBatang,
+      SUM(round((Tebal * Lebar * Panjang)*304.8/1000000000/1.416,4)*JmlhBatang) as AdjusmentInput
+      FROM AdjusmentRacipanInput A
+      INNER JOIN AdjusmentRacipan_h B ON B.NoAdjusmentRacipan = A.NoAdjusmentRacipan
+      INNER JOIN MstJenisKayu C ON C.IdJenisKayu = A.IdJenisKayu
+      WHERE Tanggal <  @TglAwal
+      GROUP BY (CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END), Tebal, Lebar, Panjang
+      ) Z5 ON Z5.Jenis = GG.Jenis AND Z5.Tebal = GG.Tebal AND Z5.Lebar = GG.Lebar AND Z5.Panjang = GG.Panjang
+
+      LEFT JOIN
+
+      (
+      SELECT CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END AS Jenis, Tebal, Lebar, Panjang, SUM(JmlhBatang) AS JmlhBatang,
+      SUM(round((Tebal * Lebar * Panjang)*304.8/1000000000/1.416,4)*JmlhBatang) as AdjusmentOutput
+      FROM AdjusmentRacipanOutput A
+      INNER JOIN AdjusmentRacipan_h B ON B.NoAdjusmentRacipan = A.NoAdjusmentRacipan
+      INNER JOIN MstJenisKayu C ON C.IdJenisKayu = A.IdJenisKayu
+      WHERE Tanggal <  @TglAwal
+      GROUP BY (CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END), Tebal, Lebar, Panjang
+      ) Z6 ON Z6.Jenis = GG.Jenis AND Z6.Tebal = GG.Tebal AND Z6.Lebar = GG.Lebar AND Z6.Panjang = GG.Panjang
+
+      ) Z2 ON Z2.Jenis = Z.Jenis AND Z2.Tebal = Z.Tebal AND Z2.Lebar = Z.Lebar AND Z2.Panjang = Z.Panjang
+
+      LEFT JOIN
+
+      (
+      SELECT Jenis, SUM (Masuk) AS Masuk, Tebal, Lebar, Panjang, sum(JlhBtg) as JlhBtg  FROM(
+      SELECT CASE WHEN Jenis2 LIKE '%KAYU LAT JABON%' THEN 'RACIP KAYU LAT JABON' ELSE Jenis2 END AS Jenis, sum(Masuk) AS Masuk, Tebal, Lebar, Panjang, sum(JmlhBatang) as JlhBtg FROM(
+      SELECT Jenis, GAB, HASIL, (CASE WHEN HASIL IS NULL THEN 'ST RACIP '+Jenis ELSE HASIL END) AS Jenis2, Masuk, Tebal, Lebar, Panjang, JmlhBatang  FROM (
+      SELECT Jenis, GAB, (CASE WHEN GAB LIKE '%KAYU LAT%' THEN 'RACIP KAYU LAT ' +Jenis
+      ELSE 'ST RACIP ' +Jenis+' - '+GAB END) AS HASIL, Masuk, Tebal, Lebar, Panjang, JmlhBatang  FROM(
+      Select Jenis, (CASE WHEN IsLocal = 1 AND IdPengukuran <> 5 THEN 'KAYU LAT' ELSE NamaGrade END) AS GAB,
+      (Case When IdUOMTblLebar = 1 And IdUOMPanjang = 4 Then
+        				round((Tebal * Lebar * Panjang)*304.8/1000000000/1.416,4)*JmlhBatang
+      			When IdUOMTblLebar = 3 And IdUOMPanjang = 4 Then
+      				Floor(Tebal * Lebar * Panjang * JmlhBatang/7200.8*10000) / 10000
+      			End)
+      AS Masuk, Tebal, Lebar, Panjang, JmlhBatang
+      From STSawmill_h A
+      LEFT Join STSawmill_d B On B.NoSTSawmill = A.NoSTSawmill
+      LEFT Join STSawmillKG_d C On B.NoSTSawmill = C.NoSTSawmill And B.NoUrut = C.NoUrut
+      LEFT Join MstGradeKB D On D.IdGradeKB = C.IdGradeKB
+      LEFT Join KayuBulat_h E ON E.NoKayuBulat = A.NoKayuBulat
+      INNER JOIN MstJenisKayu F ON F.IdJenisKayu = E.IdJenisKayu
+      WHERE A.TglSawmill >= @TglAwal AND A.TglSawmill <= @TglAkhir
+      ) A
+      ) A
+      ) A
+      GROUP BY CASE WHEN Jenis2 LIKE '%KAYU LAT JABON%' THEN 'RACIP KAYU LAT JABON' ELSE Jenis2 END, Tebal, Lebar, Panjang
+      ) GH
+      GROUP BY Jenis, Tebal, Lebar, Panjang
+      ) Z3 ON Z3.Jenis = Z.Jenis AND Z3.Tebal = Z.Tebal AND Z3.Lebar = Z.Lebar AND Z3.Panjang = Z.Panjang
+      LEFT JOIN
+
+      (
+      SELECT Jenis, SUM(Keluar) AS Keluar, Tebal, Lebar, Panjang, sum(JmlhBatang) JlhBtg FROM(
+      SELECT Jenis, CASE WHEN A.DateCreate < @TglStMulai THEN 0 ELSE Keluar END AS Keluar, Tebal, Lebar, Panjang,
+      CASE WHEN A.DateCreate < @TglStMulai THEN 0 ELSE JmlhBatang END AS JmlhBatang FROM (
+      SELECT CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END AS Jenis,
+      A.DateCreate,
+      (Case When IdUOMTblLebar = 1 And IdUOMPanjang = 4 Then
+      				round((Tebal * Lebar * Panjang)*304.8/1000000000/1.416,4)*JmlhBatang
+      			When IdUOMTblLebar = 3 And IdUOMPanjang = 4 Then
+      				Floor(Tebal * Lebar * Panjang * JmlhBatang/7200.8*10000) / 10000
+      			End)
+      as Keluar , Tebal, Lebar, Panjang, JmlhBatang
+      FROM ST_h A
+      INNER JOIN ST_d B ON B.NoST = A.NoST
+      INNER JOIN MstJenisKayu C ON C.IdJenisKayu = A.IdJenisKayu
+      LEFT JOIN AdjustmentOutputST D ON D.NoST = A.NoST
+      LEFT JOIN BongkarSusunOutputST E ON E.NoST = A.NoST
+      LEFT JOIN PenerimaanSTPembelian_d F ON F.NoST = A.NoST
+      LEFT JOIN PenerimaanSTUpah_d G ON G.NoST = A.NoST
+      WHERE (A.DateCreate >= @TglAwal AND A.DateCreate <= @TglAkhir)
+      AND D.NoST IS NULL
+      AND E.NoST IS NULL
+      AND F.NoST IS NULL
+      AND G.NoST IS NULL
+      ) A
+      )A2
+      GROUP BY Jenis, Tebal, Lebar, Panjang
+      ) Z4 ON Z4.Jenis = Z.Jenis AND Z4.Tebal = Z.Tebal AND Z4.Lebar = Z.Lebar AND Z4.Panjang = Z.Panjang
+
+      LEFT JOIN
+
+      (
+      SELECT CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END AS Jenis, Tebal, Lebar, Panjang, SUM(JmlhBatang) AS JmlhBatang,
+      SUM(round((Tebal * Lebar * Panjang)*304.8/1000000000/1.416,4)*JmlhBatang) as AdjusmentInput
+      FROM AdjusmentRacipanInput A
+      INNER JOIN AdjusmentRacipan_h B ON B.NoAdjusmentRacipan = A.NoAdjusmentRacipan
+      INNER JOIN MstJenisKayu C ON C.IdJenisKayu = A.IdJenisKayu
+      WHERE Tanggal >=  @TglAwal and Tanggal <= @TglAkhir
+      GROUP BY (CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END), Tebal, Lebar, Panjang
+      ) Z5 ON Z5.Jenis = Z.Jenis AND Z5.Tebal = Z.Tebal AND Z5.Lebar = Z.Lebar AND Z5.Panjang = Z.Panjang
+
+      LEFT JOIN
+
+      (
+      SELECT CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END AS Jenis, Tebal, Lebar, Panjang, SUM(JmlhBatang) AS JmlhBatang,
+      SUM(round((Tebal * Lebar * Panjang)*304.8/1000000000/1.416,4)*JmlhBatang) as AdjusmentOutput
+      FROM AdjusmentRacipanOutput A
+      INNER JOIN AdjusmentRacipan_h B ON B.NoAdjusmentRacipan = A.NoAdjusmentRacipan
+      INNER JOIN MstJenisKayu C ON C.IdJenisKayu = A.IdJenisKayu
+      WHERE Tanggal >=  @TglAwal and Tanggal <= @TglAkhir
+      GROUP BY (CASE WHEN Jenis LIKE '%KAYU LAT%' THEN 'RACIP '+Jenis ELSE 'ST RACIP '+ Jenis END), Tebal, Lebar, Panjang
+      ) Z6 ON Z6.Jenis = Z.Jenis AND Z6.Tebal = Z.Tebal AND Z6.Lebar = Z.Lebar AND Z6.Panjang = Z.Panjang
+
+  ) x
+  WHERE x.Sawal <> 0 OR x.SawalJlhBtg <> 0 OR x.Masuk <> 0 OR x.MskJlhBtg <> 0
+     OR x.Keluar <> 0 OR x.KeluarJlhBtg <> 0 OR x.AdjusmentInput <> 0 OR x.AdjInJlhBtg <> 0
+     OR x.AdjusmentOutput <> 0 OR x.AdjOutJlhBtg <> 0 OR x.Akhir <> 0 OR x.AkhirJlhBtg <> 0
+`;
+
+// Saldo awal racipan: semua kombinasi Jenis/Tebal/Lebar/Panjang yang pernah
+// tercatat, dibekukan ke snapshot saat SO dibuat. Mengikuti snapshotKayuBulat.
+async function snapshotRacipan(tx, noSO, tgl) {
+  await tx
+    .request()
+    .input('NoSO', sql.VarChar, noSO)
+    .input('Tgl', sql.VarChar, tgl)
+    .query(SNAPSHOT_RACIPAN);
+}
+
 // Stok awal kayu bulat: semua log yang dibuat 1 bulan terakhir sampai tanggal
 // SO (batang balok masuk); balance 0 ikut dibekukan. Angka sistem (Pcs,
 // BalokTerpakai) dibekukan ke snapshot; Fisik dihitung saat disajikan.
@@ -235,19 +605,24 @@ async function create(body, username) {
       .input('IsSanding', sql.Bit, flags.IsSanding)
       .input('IsBJ', sql.Bit, flags.IsBJ)
       .input('IsKB', sql.Bit, flags.IsKB)
+      .input('IsRacipan', sql.Bit, flags.IsRacipan)
       .input('IsAscend', sql.Bit, asc ? 1 : 0)
       .query(`
         INSERT INTO StockOpname_h
           (NoSO, Tgl, IsKB, IsSTBasah, IsSTKering, IsS4S, IsFJ, IsMoulding, IsLaminating, IsCCAkhir,
-           IsSanding, IsReproses, IsWIP, IsBJ, IsST, IsAscend)
+           IsSanding, IsReproses, IsWIP, IsBJ, IsST, IsAscend, IsRacipan)
         VALUES
           (@NoSO, CAST(@Tgl AS datetime), @IsKB, 0, 0, @IsS4S, @IsFJ, @IsMoulding, @IsLaminating, @IsCCAkhir,
-           @IsSanding, 0, 0, @IsBJ, @IsST, @IsAscend)`);
+           @IsSanding, 0, 0, @IsBJ, @IsST, @IsAscend, @IsRacipan)`);
 
     // Stok awal per jenis label: dibuat sebelum tanggal SO dan belum terpakai pada tanggal SO.
     for (const k of jenis) {
       if (k === 'KB') {
         await snapshotKayuBulat(tx, noSO, tgl);
+        continue;
+      }
+      if (k === 'RC') {
+        await snapshotRacipan(tx, noSO, tgl);
         continue;
       }
       const j = JENIS[k];
@@ -378,6 +753,8 @@ async function laporanAscend(noso) {
 const SO_CHILD_TABLES = [
   ...Object.values(JENIS).flatMap((j) => [j.hasil, j.so]),
   ...['KayuBulat', 'STBasah', 'STKering', 'Reproses', 'WIP'].flatMap((n) => [`StockOpname_Hasil_d_${n}`, `StockOpname${n}`]),
+  'StockOpnameRacipan',
+  'StockOpname_Hasil_d_Racipan',
   'StockOpnameAscendHasil',
   'StockOpnameAscend',
   'StockOpnameAscend_dFamily',
