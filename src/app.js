@@ -31,6 +31,7 @@ const masterOrgTellyRoutes = require("./modules/master-org-telly/master-org-tell
 const cariKoordinatRoutes = require("./modules/cari-koordinat/cari-koordinat-routes");
 const stockOpnameWebRoutes = require("./modules/stock-opname-web/stock-opname-web-routes");
 const tutupTransaksiRoutes = require("./modules/tutup-transaksi/tutup-transaksi-routes");
+const myWorkRoutes = require("./modules/my-work/my-work-routes");
 const favoritRoutes = require("./modules/favorit/favorit-routes");
 const dashboardSawmillRoutes = require("./modules/dashboard-sawmill/dashboard-sawmill-routes");
 const masterSpkRoutes = require("./modules/master-spk/master-spk-routes");
@@ -156,6 +157,7 @@ app.use("/api/master/org-telly", masterOrgTellyRoutes);
 app.use("/api/operasional/cari-koordinat", cariKoordinatRoutes);
 app.use("/api/operasional/stock-opname", stockOpnameWebRoutes);
 app.use("/api/tutup-transaksi", tutupTransaksiRoutes);
+app.use("/api/my-work", myWorkRoutes);
 app.use("/api/favorit", favoritRoutes);
 app.use("/api/dashboard/sawmill", dashboardSawmillRoutes);
 app.use("/api/master/spk", masterSpkRoutes);
