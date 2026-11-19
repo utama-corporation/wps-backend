@@ -8,7 +8,8 @@ const { sql, poolPromise } = require("../../core/config/db");
  *   lmt → MstSPK_dLaminating  cca → MstSPK_dCCA       sand → MstSPK_dSanding
  *   st  → MstSPK_dST          produk → MstSPK_dProdukSPK
  * Simpan/ubah menulis header + seluruh detail dalam satu transaksi (ubah = hapus lalu isi ulang, seperti VB).
- * NoSPK diinput manual (MstSPK_d.NoSPK hanya varchar(10)).
+ * NoSPK diinput manual, maks 20 karakter. MstSPK_d/MstSPK_dProgress dulu varchar(10):
+ * jalankan widen-nospk-to-20.sql agar semua tabel MstSPK* sama-sama varchar(20).
  * ==========================================================*/
 
 function httpError(status, message) {
@@ -78,7 +79,7 @@ const m3Of = (t, l, p, pcs) => Math.round(((t * l * p * pcs) / 1e9) * 10000) / 1
 function validate(data) {
   const noSPK = str(data.noSPK);
   if (!noSPK) throw httpError(400, "No. SPK harus diisi.");
-  if (noSPK.length > 10) throw httpError(400, "No. SPK maksimal 10 karakter.");
+  if (noSPK.length > 20) throw httpError(400, "Tidak bisa simpan SPK, No. SPK maksimal 20 karakter.");
   if (!str(data.noContract)) throw httpError(400, "No. Contract harus diisi.");
   if (!str(data.tujuan)) throw httpError(400, "Tujuan harus diisi.");
   if (!/^\d{4}-\d{2}-\d{2}/.test(str(data.tanggal))) throw httpError(400, "Tanggal harus diisi.");

@@ -60,6 +60,7 @@ const masterTargetKayuBulatRoutes = require("./modules/master-target-kayu-bulat/
 const masterLosstimeFaktorRoutes = require("./modules/master-losstime-faktor/master-losstime-faktor-routes");
 const masterLosstimePlanningRoutes = require("./modules/master-losstime-planning/master-losstime-planning-routes");
 const masterHolidayRoutes = require("./modules/master-holiday/master-holiday-routes");
+const bongkarStickReminderRoutes = require("./modules/bongkar-stick-reminder/bongkar-stick-reminder-routes");
 const masterOtherSupplierRoutes = require("./modules/master-other-supplier/master-other-supplier-routes");
 const masterUomRoutes = require("./modules/master-uom/master-uom-routes");
 const masterGolPengukuranRoutes = require("./modules/master-gol-pengukuran/master-gol-pengukuran-routes");
@@ -185,6 +186,7 @@ app.use("/api/master/target-kayu-bulat", masterTargetKayuBulatRoutes);
 app.use("/api/master/losstime-faktor", masterLosstimeFaktorRoutes);
 app.use("/api/master/losstime-planning", masterLosstimePlanningRoutes);
 app.use("/api/master/holiday", masterHolidayRoutes);
+app.use("/api/bongkar-stick-reminder", bongkarStickReminderRoutes);
 app.use("/api/mst-user", mstUserRoutes);
   app.use("/api/mst-user-so", mstUserSoRoutes);
 app.use("/api/master-permission-group", masterPermissionGroupRoutes);
