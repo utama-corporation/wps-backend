@@ -650,7 +650,67 @@ async function getAuditByPkValue({
   };
 }
 
+const MY_ACTIVITY_MAX = 20;
+const MY_ACTIVITY_DAYS = 14;
+
+/**
+ * Aktivitas terakhir milik satu pengguna. Trigger audit menulis satu baris per baris tabel
+ * yang berubah, jadi baris dikelompokkan per RequestId (satu simpan = satu aktivitas);
+ * baris pertama (AuditId terkecil) dipakai sebagai wakil, biasanya tabel header.
+ * Actor bisa berisi IdUsername atau username, keduanya dicocokkan.
+ * Dibatasi 14 hari terakhir (MY_ACTIVITY_DAYS) agar tidak memindai seluruh AuditTrail.
+ */
+async function getMyActivity({ idUsername, username, limit = 8 } = {}) {
+  const ids = [idUsername, username]
+    .map((v) => (v === undefined || v === null ? "" : String(v).trim()))
+    .filter(Boolean);
+  if (!ids.length) return [];
+  const safeLimit = Math.min(Math.max(Number.parseInt(limit, 10) || 8, 1), MY_ACTIVITY_MAX);
+
+  const pool = await poolPromise;
+  const req = pool.request();
+  req.input("actor1", sql.NVarChar(100), ids[0]);
+  req.input("actor2", sql.NVarChar(100), ids[1] ?? ids[0]);
+  req.input("days", sql.Int, MY_ACTIVITY_DAYS);
+  req.input("limit", sql.Int, safeLimit);
+
+  const result = await req.query(`
+    WITH Mine AS (
+      SELECT a.AuditId, a.EventTime, a.Action, a.TableName, a.PK,
+             ISNULL(NULLIF(a.RequestId, N''), CAST(a.AuditId AS nvarchar(50))) AS Grp
+      FROM dbo.AuditTrail a
+      WHERE a.Actor IN (@actor1, @actor2)
+        AND a.EventTime >= DATEADD(DAY, -@days, SYSDATETIME())
+    ),
+    Ranked AS (
+      SELECT *,
+             ROW_NUMBER() OVER (PARTITION BY Grp ORDER BY AuditId) AS Rn,
+             COUNT(1) OVER (PARTITION BY Grp) AS Jumlah,
+             MAX(AuditId) OVER (PARTITION BY Grp) AS LastId,
+             MAX(EventTime) OVER (PARTITION BY Grp) AS LastTime
+      FROM Mine
+    )
+    SELECT TOP (@limit)
+      AuditId, Grp AS RequestId, Action, TableName, PK, Jumlah,
+      CONVERT(varchar(23), LastTime, 121) AS EventTime
+    FROM Ranked
+    WHERE Rn = 1
+    ORDER BY LastId DESC;
+  `);
+
+  return result.recordset.map((row) => ({
+    auditId: row.AuditId,
+    requestId: row.RequestId,
+    eventTime: row.EventTime,
+    action: row.Action,
+    tableName: row.TableName,
+    pk: parseJsonSafe(row.PK),
+    rows: row.Jumlah,
+  }));
+}
+
 module.exports = {
+  getMyActivity,
   getAuditList,
   getAuditDetail,
   getAuditByPkValue,

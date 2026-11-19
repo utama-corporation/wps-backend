@@ -18,5 +18,7 @@ router.get("/rendemen-daftar", ctrl.rendemenDaftar);
 router.get("/bahan-baku", ctrl.bahanBaku);
 router.get("/kd", ctrl.kd);
 router.get("/saldo-kb", ctrl.saldoKb);
+router.get("/spk-aktif", ctrl.spkAktif);
+router.get("/target-rendemen", ctrl.targetRendemen);
 
 module.exports = router;

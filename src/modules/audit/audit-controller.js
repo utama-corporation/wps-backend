@@ -102,3 +102,18 @@ exports.getAuditByPkValue = async (req, res) => {
     });
   }
 };
+
+/** Aktivitas terakhir pengguna yang sedang login (actor diambil dari token, bukan query). */
+exports.getMyActivity = async (req, res) => {
+  try {
+    const data = await auditService.getMyActivity({
+      idUsername: req.idUsername,
+      username: req.username,
+      limit: req.query.limit,
+    });
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error("Error getMyActivity:", error);
+    res.status(500).json({ success: false, message: "Terjadi kesalahan di server" });
+  }
+};

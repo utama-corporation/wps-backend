@@ -780,7 +780,81 @@ const saldoKb = async (tgl) => {
   }));
 };
 
+/** Batas baris SPK aktif yang dikirim ke dashboard. */
+const MAKS_SPK_AKTIF = 30;
+
+/**
+ * Progres SPK produk sawmill yang masih aktif (header Enable = 1 dan baris produk IsEnable = 1).
+ * Target = MstSPK_dProdukSPK.Ton; realisasi = ton ST sawmill yang dicatat ke SPK+produk itu
+ * (rumus sama dengan /api/sawmill/sisa-ton, FLOOR 4 desimal per baris).
+ */
+const spkAktif = async () => {
+  const pool = await poolPromise;
+  const result = await pool.request().query(`
+    SELECT TOP (${MAKS_SPK_AKTIF})
+      S.NoSPK AS noSpk,
+      CONVERT(varchar(10), H.Tanggal, 23) AS tanggal,
+      B.Buyer AS buyer,
+      S.IdProdukSPK AS idProdukSpk,
+      P.NamaProduk AS produk,
+      S.Ton AS targetTon,
+      ISNULL(R.Ton, 0) AS realisasiTon
+    FROM MstSPK_dProdukSPK S
+    INNER JOIN MstSPK_h H ON H.NoSPK = S.NoSPK
+    LEFT JOIN MstBuyer B ON B.IdBuyer = H.IdBuyer
+    LEFT JOIN MstProdukSPK P ON P.IdProdukSPK = S.IdProdukSPK
+    OUTER APPLY (
+      SELECT SUM(
+        CASE
+          WHEN D.IdUOMTblLebar = 1 AND D.IdUOMPanjang = 4 THEN
+            FLOOR(D.Tebal * D.Lebar * D.Panjang * 304.8 * D.JmlhBatang / 1000000000 / 1.416 * 10000) / 10000
+          WHEN D.IdUOMTblLebar = 3 AND D.IdUOMPanjang = 4 THEN
+            FLOOR(D.Tebal * D.Lebar * D.Panjang * D.JmlhBatang / 7200.8 * 10000) / 10000
+        END
+      ) AS Ton
+      FROM STSawmill_d D
+      WHERE D.NoSPK = S.NoSPK AND D.IdProdukSPK = S.IdProdukSPK
+    ) R
+    WHERE ISNULL(H.[Enable], 0) = 1 AND ISNULL(S.IsEnable, 0) = 1 AND ISNULL(S.Ton, 0) > 0
+    ORDER BY H.Tanggal DESC, S.NoSPK DESC, P.NamaProduk ASC
+  `);
+  return result.recordset.map((r) => {
+    const target = Number(r.targetTon) || 0;
+    const realisasi = Number(r.realisasiTon) || 0;
+    return {
+      noSpk: r.noSpk,
+      tanggal: r.tanggal,
+      buyer: r.buyer,
+      idProdukSpk: r.idProdukSpk,
+      produk: r.produk,
+      targetTon: target,
+      realisasiTon: realisasi,
+      sisaTon: Math.round((target - realisasi) * 10000) / 10000,
+      persen: target > 0 ? Math.round((realisasi / target) * 10000) / 100 : 0,
+    };
+  });
+};
+
+/**
+ * Target rendemen (persen) per kelompok. Belum ada tabel master untuk ini, jadi nilainya dari
+ * env TARGET_RENDEMEN_BANSAW / TARGET_RENDEMEN_SLP. Null bila belum diisi (tablet tidak
+ * menggambar garis target).
+ */
+const angkaEnv = (name) => {
+  const raw = String(process.env[name] ?? "").trim().replace(",", ".");
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 && n <= 100 ? n : null;
+};
+
+const targetRendemen = async () => ({
+  bansaw: angkaEnv("TARGET_RENDEMEN_BANSAW"),
+  slp: angkaEnv("TARGET_RENDEMEN_SLP"),
+});
+
 module.exports = {
+  spkAktif,
+  targetRendemen,
   saldoKb,
   vacuum,
   produktivitasSlp,

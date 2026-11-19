@@ -81,3 +81,19 @@ exports.rendemen = async (req, res) => {
     fail(res, err, "rendemen");
   }
 };
+
+exports.spkAktif = async (req, res) => {
+  try {
+    res.json({ success: true, data: await service.spkAktif() });
+  } catch (err) {
+    fail(res, err, "spk-aktif");
+  }
+};
+
+exports.targetRendemen = async (req, res) => {
+  try {
+    res.json({ success: true, data: await service.targetRendemen() });
+  } catch (err) {
+    fail(res, err, "target-rendemen");
+  }
+};
