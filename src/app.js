@@ -34,6 +34,7 @@ const tutupTransaksiRoutes = require("./modules/tutup-transaksi/tutup-transaksi-
 const myWorkRoutes = require("./modules/my-work/my-work-routes");
 const favoritRoutes = require("./modules/favorit/favorit-routes");
 const dashboardSawmillRoutes = require("./modules/dashboard-sawmill/dashboard-sawmill-routes");
+const dashboardHomeRoutes = require("./modules/dashboard-home/dashboard-home-routes");
 const masterSpkRoutes = require("./modules/master-spk/master-spk-routes");
 const masterSpkProdukRoutes = require("./modules/master-spk-produk/master-spk-produk-routes");
 const masterSpkReserveRoutes = require("./modules/master-spk-reserve/master-spk-reserve-routes");
@@ -160,6 +161,7 @@ app.use("/api/tutup-transaksi", tutupTransaksiRoutes);
 app.use("/api/my-work", myWorkRoutes);
 app.use("/api/favorit", favoritRoutes);
 app.use("/api/dashboard/sawmill", dashboardSawmillRoutes);
+app.use("/api/dashboard/home", dashboardHomeRoutes);
 app.use("/api/master/spk", masterSpkRoutes);
 app.use("/api/master/spk-produk", masterSpkProdukRoutes);
 app.use("/api/master/spk-reserve", masterSpkReserveRoutes);

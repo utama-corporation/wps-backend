@@ -7,7 +7,8 @@
     "dev": "nodemon server.js",
     "test:label-modules": "node test/label-modules.test.cjs",
     "test:dashboard-home": "node test/dashboard-home.test.cjs",
-    "test:my-work": "node test/my-work.test.cjs"
+    "test:my-work": "node test/my-work.test.cjs",
+    "test:dashboard-analytics": "node test/dashboard-analytics.test.cjs"
   },
   "author": "",
   "license": "ISC",
