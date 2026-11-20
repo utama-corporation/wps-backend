@@ -875,9 +875,9 @@ async function getPdfData(noST) {
       k.Jenis AS JenisKayu,
       t.NamaOrgTelly,
       s.NamaStickBy,
-      kb.NoTruk,
       kb.NoPlat,
-      sup.NmSupplier AS Supplier,
+      COALESCE(phsup.NmSupplier, sup.NmSupplier) AS Supplier,
+      COALESCE(PH.NoTruk, kb.NoTruk) AS NoTruk,
       P.NoPenerimaanST AS NoPenerimaanSTPembelian
     FROM ${MASTER_TABLE} A
     LEFT JOIN MstJenisKayu k ON k.IdJenisKayu = A.IdJenisKayu
@@ -886,6 +886,8 @@ async function getPdfData(noST) {
     LEFT JOIN KayuBulat_h kb ON kb.NoKayuBulat = A.NoKayuBulat
     LEFT JOIN MstSupplier sup ON sup.IdSupplier = kb.IdSupplier
     LEFT JOIN PenerimaanSTPembelian_d P ON P.NoST = A.NoST
+    LEFT JOIN PenerimaanSTPembelian_h PH ON PH.NoPenerimaanST = P.NoPenerimaanST
+    LEFT JOIN MstSupplier phsup ON phsup.IdSupplier = PH.IdSupplier
     WHERE A.${KEY_COLUMN} = @noST
   `);
 
