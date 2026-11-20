@@ -351,7 +351,7 @@ async function saveHeader({
 async function createLabel({
   idJenisKayu, idGrade, noSPKAsal, noSPK, ukuran,
   tebal, lebar, panjang, jmlhBatang, idLokasi,
-  isRepair, isReject, isLembur, idWarna, noProduksi,
+  isRepair, isReject, isLembur, isReproses, idWarna, noProduksi,
   noBongkarSusun, dateCreate, tanggal, rawDate, jam,
   idUOMTblLebar, idUOMPanjang,
   idUsername,
@@ -425,6 +425,7 @@ async function createLabel({
   req.input("isrep", sql.Bit, isRepair ? 1 : 0);
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
+  req.input("isrepros", sql.Bit, isReproses ? 1 : 0);
   req.input("wrn", sql.Int, idWarna ? Number(idWarna) : null);
   req.input("date", sql.Date, tanggalProduksi || effectiveDate);
   req.input("jam", sql.VarChar(8), jam || currentJamWib());
@@ -447,8 +448,8 @@ async function createLabel({
       DECLARE @ns VARCHAR(20);
       SELECT @ns = ISNULL('R.' + FORMAT(RIGHT(MAX(NoS4S), 6) + 1, '000000'), 'R.000001')
       FROM S4S_h;
-      INSERT INTO S4S_h (NoS4S, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoSTAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair, IdWarna)
-      VALUES (@ns, @jk, @gr, @otel, @date, NULL, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 4, 4, NULLIF(@stasal, ''), @lok, 0, @isrep, @wrn);
+      INSERT INTO S4S_h (NoS4S, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoSTAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair, IsReproses, IdWarna)
+      VALUES (@ns, @jk, @gr, @otel, @date, NULL, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 4, 4, NULLIF(@stasal, ''), @lok, 0, @isrep, @isrepros, @wrn);
       INSERT INTO S4S_d (NoS4S, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};

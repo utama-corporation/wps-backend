@@ -156,6 +156,7 @@ async function getHeaderForEdit(noMoulding) {
       h.IsReject,
       h.IsLembur,
       h.IsRepair,
+      h.IsReproses,
       h.Remark,
       k.Jenis              AS JenisKayu,
       g.NamaGrade          AS Grade,
@@ -186,6 +187,7 @@ async function updateLabel(noMoulding, data) {
   req.input("isReject", sql.Bit, data.isReject ? 1 : 0);
   req.input("isLembur", sql.Bit, data.isLembur ? 1 : 0);
   req.input("isRepair", sql.Bit, data.isRepair ? 1 : 0);
+  req.input("isReproses", sql.Bit, data.isReproses ? 1 : 0);
   req.input("jam", sql.VarChar(10), data.jam || null);
 
   req.input("noSPKAsal", sql.VarChar(20), data.noSPKAsal || null);
@@ -202,6 +204,7 @@ async function updateLabel(noMoulding, data) {
         IsReject = @isReject,
         IsLembur = @isLembur,
         IsRepair = @isRepair,
+        IsReproses = @isReproses,
         Jam = @jam
     WHERE ${KEY_COLUMN} = @noMoulding
   `);
