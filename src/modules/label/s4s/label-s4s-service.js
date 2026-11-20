@@ -178,6 +178,7 @@ async function getHeaderForEdit(noS4S) {
       h.IsReject,
       h.IsLembur,
       h.IsRepair,
+      h.IsReproses,
       h.Remark,
       k.Jenis              AS JenisKayu,
       g.NamaGrade          AS Grade,
@@ -214,6 +215,7 @@ async function updateLabel(noS4S, data) {
   req.input("isReject", sql.Bit, data.isReject ? 1 : 0);
   req.input("isLembur", sql.Bit, data.isLembur ? 1 : 0);
   req.input("isRepair", sql.Bit, data.isRepair ? 1 : 0);
+  req.input("isReproses", sql.Bit, data.isReproses ? 1 : 0);
   req.input("jam", sql.VarChar(10), data.jam || null);
 
   await req.query(`
@@ -228,6 +230,7 @@ async function updateLabel(noS4S, data) {
         IsReject = @isReject,
         IsLembur = @isLembur,
         IsRepair = @isRepair,
+        IsReproses = @isReproses,
         Jam = @jam
     WHERE ${KEY_COLUMN} = @noS4S
   `);

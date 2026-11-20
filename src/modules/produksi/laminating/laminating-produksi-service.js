@@ -573,7 +573,7 @@ async function deleteHeader(noProduksi) {
 async function createLabel({
   idJenisKayu, idGrade, noSPKAsal, noSPK, ukuran,
   tebal, lebar, panjang, jmlhBatang, idLokasi,
-  isRepair, isReject, isLembur, noProduksi,
+  isRepair, isReject, isLembur, isReproses, noProduksi,
   noBongkarSusun, dateCreate, tanggal, rawDate, jam,
   idUOMTblLebar, idUOMPanjang,
   idUsername,
@@ -641,6 +641,7 @@ async function createLabel({
   req.input("isrep", sql.Bit, isRepair ? 1 : 0);
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
+  req.input("isrepros", sql.Bit, isReproses ? 1 : 0);
   req.input("date", sql.Date, effectiveDate);
   req.input("jam", sql.VarChar(8), jam || currentJamWib());
   req.input("uomLebar", sql.Int, Number(idUOMTblLebar) || 1);
@@ -666,8 +667,8 @@ async function createLabel({
       DECLARE @ns VARCHAR(20);
       SELECT @ns = ISNULL('U.' + FORMAT(RIGHT(MAX(NoLaminating), 6) + 1, '000000'), 'U.000001')
       FROM Laminating_h WITH (UPDLOCK, HOLDLOCK);
-      INSERT INTO Laminating_h (NoLaminating, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair)
-       VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 7, 7, NULLIF(@stasal, ''), @lok, 0, @isrep);
+      INSERT INTO Laminating_h (NoLaminating, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair, IsReproses)
+       VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 7, 7, NULLIF(@stasal, ''), @lok, 0, @isrep, @isrepros);
       INSERT INTO Laminating_d (NoLaminating, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};

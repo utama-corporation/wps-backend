@@ -153,6 +153,7 @@ async function getHeaderForEdit(noCCA) {
       h.IsReject,
       h.IsLembur,
       h.IsRepair,
+      h.IsReproses,
       k.Jenis              AS JenisKayu,
       g.NamaGrade          AS Grade,
       t.NamaOrgTelly       AS Telly
@@ -182,6 +183,7 @@ async function updateLabel(noCCA, data) {
   req.input("isReject", sql.Bit, data.isReject ? 1 : 0);
   req.input("isLembur", sql.Bit, data.isLembur ? 1 : 0);
   req.input("isRepair", sql.Bit, data.isRepair ? 1 : 0);
+  req.input("isReproses", sql.Bit, data.isReproses ? 1 : 0);
   req.input("jam", sql.VarChar(10), data.jam || null);
 
   req.input("noSPKAsal", sql.VarChar(20), data.noSPKAsal || null);
@@ -197,6 +199,7 @@ async function updateLabel(noCCA, data) {
         IsReject = @isReject,
         IsLembur = @isLembur,
         IsRepair = @isRepair,
+        IsReproses = @isReproses,
         Jam = @jam
     WHERE ${KEY_COLUMN} = @noCCA
   `);
