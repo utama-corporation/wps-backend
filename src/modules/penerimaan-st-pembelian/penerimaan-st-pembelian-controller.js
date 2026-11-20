@@ -15,6 +15,7 @@ const fail = (res, err, label) => {
 };
 
 const noOf = (req) => String(req.params.no || "").trim();
+const noUrutOf = (req) => String(req.params.noUrut || "").trim();
 
 exports.getAll = async (req, res) => {
   try {
@@ -101,6 +102,24 @@ exports.addReject = async (req, res) => {
     return res.status(201).json({ success: true, message: "Reject berhasil ditambahkan!", data });
   } catch (err) {
     return fail(res, err, "PenerimaanSTPembelian AddReject Error");
+  }
+};
+
+exports.updateReject = async (req, res) => {
+  try {
+    const data = await service.updateReject(noOf(req), noUrutOf(req), req.body || {});
+    return res.json({ success: true, message: "Reject berhasil diubah!", data });
+  } catch (err) {
+    return fail(res, err, "PenerimaanSTPembelian UpdateReject Error");
+  }
+};
+
+exports.removeReject = async (req, res) => {
+  try {
+    const data = await service.removeReject(noOf(req), noUrutOf(req));
+    return res.json({ success: true, message: "Reject berhasil dihapus!", data });
+  } catch (err) {
+    return fail(res, err, "PenerimaanSTPembelian RemoveReject Error");
   }
 };
 

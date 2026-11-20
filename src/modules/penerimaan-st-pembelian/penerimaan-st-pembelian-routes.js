@@ -18,6 +18,8 @@ router.get(`${BASE}/:no/pdf`, verifyToken, attachPermissions, requirePermission(
 router.get(`${BASE}/:no`, verifyToken, attachPermissions, requirePermission("label_st:read"), ctrl.getByNo);
 router.post(BASE, verifyToken, attachPermissions, requirePermission("label_st:create"), ctrl.create);
 router.post(`${BASE}/:no/reject`, verifyToken, attachPermissions, requirePermission("label_st:create"), ctrl.addReject);
+router.put(`${BASE}/:no/reject/:noUrut`, verifyToken, attachPermissions, requirePermission("label_st:update"), ctrl.updateReject);
+router.delete(`${BASE}/:no/reject/:noUrut`, verifyToken, attachPermissions, requirePermission("label_st:delete"), ctrl.removeReject);
 router.put(`${BASE}/:no`, verifyToken, attachPermissions, requirePermission("label_st:update"), ctrl.update);
 router.delete(`${BASE}/:no`, verifyToken, attachPermissions, requirePermission("label_st:delete"), ctrl.remove);
 

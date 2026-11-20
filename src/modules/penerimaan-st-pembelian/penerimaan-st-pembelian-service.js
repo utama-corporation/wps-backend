@@ -209,10 +209,13 @@ async function remove(no) {
  * REJECT (paritas tablet: NoUrut = jumlah reject + 1, Ton floor 4 desimal)
  * ==========================================================*/
 
-async function addReject(no, d) {
-  const existing = await getByNo(no);
-  if (!existing) throw httpError(404, "Penerimaan ST tidak ditemukan");
+function parseNoUrut(value) {
+  const noUrut = parseInt(value, 10);
+  if (!(noUrut > 0)) throw httpError(400, "NoUrut reject tidak valid");
+  return noUrut;
+}
 
+function validateReject(d) {
   const tebal = Number(d.tebal);
   const lebar = Number(d.lebar);
   const panjang = Number(d.panjang);
@@ -221,6 +224,14 @@ async function addReject(no, d) {
     throw httpError(400, "Tebal, lebar, panjang, dan pcs harus diisi dengan benar");
   }
   const idUOMTblLebar = Number(d.idUOMTblLebar) === 1 ? 1 : 3;
+  return { tebal, lebar, panjang, pcs, idUOMTblLebar };
+}
+
+async function addReject(no, d) {
+  const existing = await getByNo(no);
+  if (!existing) throw httpError(404, "Penerimaan ST tidak ditemukan");
+
+  const { tebal, lebar, panjang, pcs, idUOMTblLebar } = validateReject(d);
   const idUOMPanjang = 4;
   const ton = hitungTon(tebal, lebar, panjang, pcs, idUOMTblLebar);
 
@@ -258,6 +269,56 @@ async function addReject(no, d) {
   }
 }
 
+async function updateReject(no, noUrutValue, d) {
+  const noUrut = parseNoUrut(noUrutValue);
+  const existing = await getByNo(no);
+  if (!existing) throw httpError(404, "Penerimaan ST tidak ditemukan");
+
+  const { tebal, lebar, panjang, pcs, idUOMTblLebar } = validateReject(d);
+  const pool = await poolPromise;
+  const current = await pool
+    .request()
+    .input("no", sql.VarChar(50), no)
+    .input("noUrut", sql.Int, noUrut)
+    .query(`SELECT IdUOMPanjang FROM ${REJECT} WHERE NoPenerimaanST = @no AND NoUrut = @noUrut`);
+  const row = current.recordset[0];
+  if (!row) throw httpError(404, "Reject tidak ditemukan");
+
+  const idUOMPanjang = Number(row.IdUOMPanjang) > 0 ? Number(row.IdUOMPanjang) : 4;
+  const ton = hitungTon(tebal, lebar, panjang, pcs, idUOMTblLebar);
+  const req = pool
+    .request()
+    .input("no", sql.VarChar(50), no)
+    .input("noUrut", sql.Int, noUrut)
+    .input("tebal", sql.Decimal(18, 4), tebal)
+    .input("lebar", sql.Decimal(18, 4), lebar)
+    .input("panjang", sql.Decimal(18, 4), panjang)
+    .input("pcs", sql.Int, pcs)
+    .input("uomTl", sql.Int, idUOMTblLebar)
+    .input("uomP", sql.Int, idUOMPanjang)
+    .input("ton", sql.Decimal(18, 4), ton);
+  const result = await req.query(`
+    UPDATE ${REJECT}
+    SET Tebal = @tebal, Lebar = @lebar, Panjang = @panjang, JmlhBatang = @pcs,
+        IdUOMTblLebar = @uomTl, IdUOMPanjang = @uomP, Ton = @ton
+    WHERE NoPenerimaanST = @no AND NoUrut = @noUrut
+  `);
+  if (!result.rowsAffected[0]) throw httpError(404, "Reject tidak ditemukan");
+  return { noPenerimaanST: no, noUrut, ton };
+}
+
+async function removeReject(no, noUrutValue) {
+  const noUrut = parseNoUrut(noUrutValue);
+  const pool = await poolPromise;
+  const result = await pool
+    .request()
+    .input("no", sql.VarChar(50), no)
+    .input("noUrut", sql.Int, noUrut)
+    .query(`DELETE FROM ${REJECT} WHERE NoPenerimaanST = @no AND NoUrut = @noUrut`);
+  if (!result.rowsAffected[0]) throw httpError(404, "Reject tidak ditemukan");
+  return { noPenerimaanST: no, noUrut };
+}
+
 module.exports = {
   hitungTon,
   getAll,
@@ -270,4 +331,6 @@ module.exports = {
   update,
   remove,
   addReject,
+  updateReject,
+  removeReject,
 };
