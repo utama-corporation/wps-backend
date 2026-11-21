@@ -24,6 +24,7 @@ async function getHeader(noMoulding) {
       h.Remark,
       h.IsReject,
       h.IsLembur,
+      h.IsReproses,
       h.HasBeenPrinted,
       h.DateUsage,
       k.Jenis              AS JenisKayu,
@@ -365,6 +366,7 @@ async function getLabelData(noMoulding) {
     remark: (header.Remark || "").trim(),
     isReject: truthy(header.IsReject),
     isLembur: truthy(header.IsLembur),
+    isReproses: truthy(header.IsReproses),
     hasBeenPrinted: parseInt(header.HasBeenPrinted, 10) || 0,
     dateUsage: header.DateUsage || null,
     detail: detail.map((r) => ({

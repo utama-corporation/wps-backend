@@ -48,6 +48,9 @@ function buildLmtLabelHtml(data) {
   const lemburRow = data.isLembur
     ? `<div class="flags">LEMBUR</div>`
     : "";
+  const reprosesRow = data.isReproses
+    ? `<div class="reproses">REPROSES</div>`
+    : "";
   const remarkRow =
     remark && remark !== "-"
       ? `<div class="remark">Remark : ${esc(remark)}</div>`
@@ -74,6 +77,7 @@ function buildLmtLabelHtml(data) {
     .replace("{{watermarkText}}", esc(watermarkText))
     .replace("{{rejectRow}}", rejectRow)
     .replace("{{lemburRow}}", lemburRow)
+    .replace("{{reprosesRow}}", reprosesRow)
     .replace("{{remarkRow}}", remarkRow)
     .replace("{{qrBase64}}", data.qrBase64 || "");
 }

@@ -23,6 +23,7 @@ async function getHeader(noBJ) {
       b.Buyer             AS Buyer,
       h.IsReject,
       h.IsLembur,
+      h.IsReproses,
       h.DateUsage,
       k.Jenis              AS JenisKayu,
       g.NamaBarangJadi     AS NamaBJ,
@@ -395,6 +396,7 @@ async function getLabelData(noBJ) {
     remark: "",
     isReject: truthy(header.IsReject),
     isLembur: truthy(header.IsLembur),
+    isReproses: truthy(header.IsReproses),
     hasBeenPrinted: 0,
     dateUsage: header.DateUsage || null,
     detail: detail.map((r) => ({

@@ -23,6 +23,7 @@ async function getHeader(noLMT) {
       b.Buyer             AS Buyer,
       h.IsReject,
       h.IsLembur,
+      h.IsReproses,
       h.DateUsage,
       k.Jenis              AS JenisKayu,
       g.NamaGrade          AS Grade,
@@ -363,6 +364,7 @@ async function getLabelData(noLMT) {
     remark: (header.Remark || "").trim(),
     isReject: truthy(header.IsReject),
     isLembur: truthy(header.IsLembur),
+    isReproses: truthy(header.IsReproses),
     hasBeenPrinted: parseInt(header.HasBeenPrinted, 10) || 0,
     dateUsage: header.DateUsage || null,
     detail: detail.map((r) => ({
