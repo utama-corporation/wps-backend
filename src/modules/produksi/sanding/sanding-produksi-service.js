@@ -577,7 +577,7 @@ async function deleteHeader(noProduksi) {
 async function createLabel({
   idJenisKayu, idGrade, noSPKAsal, noSPK, ukuran,
   tebal, lebar, panjang, jmlhBatang, idLokasi,
-  isRepair, isReject, isLembur, isReproses, noProduksi,
+  isRepair, isReject, isLembur, isReproses, hasilDariReproses, noProduksi,
   noBongkarSusun, dateCreate, tanggal, rawDate, jam,
   idUOMTblLebar, idUOMPanjang,
   idUsername,
@@ -646,6 +646,7 @@ async function createLabel({
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
   req.input("isrepros", sql.Bit, isReproses ? 1 : 0);
+  req.input("hasildari", sql.Bit, hasilDariReproses ? 1 : 0);
   req.input("date", sql.Date, effectiveDate);
   req.input("jam", sql.VarChar(8), jam || currentJamWib());
   req.input("uomLebar", sql.Int, Number(idUOMTblLebar) || 1);
@@ -671,8 +672,8 @@ async function createLabel({
       DECLARE @ns VARCHAR(20);
       SELECT @ns = ISNULL('W.' + FORMAT(RIGHT(MAX(NoSanding), 6) + 1, '000000'), 'W.000001')
       FROM Sanding_h;
-      INSERT INTO Sanding_h (NoSanding, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, IdFJProfile, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair, IsReproses)
-       VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 9, 9, NULL, NULLIF(@stasal, ''), @lok, 0, @isrep, @isrepros);
+      INSERT INTO Sanding_h (NoSanding, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, IdFJProfile, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair, IsReproses, HasilDariReproses)
+       VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 9, 9, NULL, NULLIF(@stasal, ''), @lok, 0, @isrep, @isrepros, @hasildari);
       INSERT INTO Sanding_d (NoSanding, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};

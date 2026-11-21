@@ -639,7 +639,7 @@ async function createLabel({
   kategori = "CCA",
   idJenisKayu, idGrade, noSPKAsal, noSPK, ukuran,
   tebal, lebar, panjang, jmlhBatang, idLokasi,
-  isRepair, isReject, isLembur, isReproses, idWarna, noProduksi,
+  isRepair, isReject, isLembur, isReproses, hasilDariReproses, idWarna, noProduksi,
   noBongkarSusun, dateCreate, tanggal, rawDate, jam,
   idUOMTblLebar, idUOMPanjang,
   idUsername,
@@ -712,6 +712,7 @@ async function createLabel({
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
   req.input("isrepros", sql.Bit, isReproses ? 1 : 0);
+  req.input("hasildari", sql.Bit, hasilDariReproses ? 1 : 0);
   req.input("wrn", sql.Int, idWarna ? Number(idWarna) : null);
   req.input("date", sql.Date, effectiveDate);
   req.input("jam", sql.VarChar(8), jam || currentJamWib());
@@ -730,10 +731,10 @@ async function createLabel({
   // TRY/CATCH: tanpa ini, kegagalan INSERT header (statement-level) tetap
   // dilanjuti INSERT detail sehingga error aslinya tertutupi FK detail.
   const insertHead = cat === "S4S"
-    ? `INSERT INTO S4S_h (NoS4S, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoSTAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair, IsReproses, IdWarna)
-       VALUES (@ns, @jk, @gr, @otel, @date, NULL, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 4, 4, NULLIF(@stasal, ''), @lok, 0, @isrep, @isrepros, @wrn);`
-    : `INSERT INTO CCAkhir_h (NoCCAkhir, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, NoLaminatingAsal, NoFJAsal, IdWarehouse, IdFJProfile, IsLembur, IdFisik, NoSPKAsal, IsRepair, IsReproses, IdLokasi)
-        VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, NULL, NULL, 8, NULL, @isleb, 8, NULLIF(@stasal, ''), @isrep, @isrepros, @lok);`;
+    ? `INSERT INTO S4S_h (NoS4S, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoSTAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair, IsReproses, HasilDariReproses, IdWarna)
+       VALUES (@ns, @jk, @gr, @otel, @date, NULL, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 4, 4, NULLIF(@stasal, ''), @lok, 0, @isrep, @isrepros, @hasildari, @wrn);`
+    : `INSERT INTO CCAkhir_h (NoCCAkhir, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, NoLaminatingAsal, NoFJAsal, IdWarehouse, IdFJProfile, IsLembur, IdFisik, NoSPKAsal, IsRepair, IsReproses, HasilDariReproses, IdLokasi)
+        VALUES (@ns, @jk, @gr, @otel, @date, NULL, @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, NULL, NULL, 8, NULL, @isleb, 8, NULLIF(@stasal, ''), @isrep, @isrepros, @hasildari, @lok);`;
 
   const result = await req.query(`
     SET XACT_ABORT ON;

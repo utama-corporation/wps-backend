@@ -613,7 +613,7 @@ async function createLabel({
   idJenisKayu, idBarangJadi, idFJProfile, noSPK, noSPKAsal,
   noWIPAsal, noMouldingAsal, noSandingAsal, idWarehouse, idLokasi,
   ukuran, tebal, lebar, panjang, jmlhBatang,
-  isRepair, isReject, isLembur, isReproses, noProduksi,
+  isRepair, isReject, isLembur, isReproses, hasilDariReproses, noProduksi,
   noBongkarSusun, dateCreate, tanggal, rawDate, jam,
   idUOMTblLebar, idUOMPanjang,
   idUsername,
@@ -695,6 +695,7 @@ async function createLabel({
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
   req.input("isrepros", sql.Bit, isReproses ? 1 : 0);
+  req.input("hasildari", sql.Bit, hasilDariReproses ? 1 : 0);
   req.input("date", sql.Date, effectiveDate);
   req.input("jam", sql.VarChar(8), jam || currentJamWib());
   req.input("bongkar", sql.VarChar(20), noBongkarSusun || null);
@@ -718,8 +719,8 @@ async function createLabel({
       DECLARE @ns VARCHAR(20);
       SELECT @ns = ISNULL('I.' + FORMAT(RIGHT(MAX(NoBJ), 6) + 1, '000000'), 'I.000001')
       FROM BarangJadi_h WITH (UPDLOCK, HOLDLOCK);
-      INSERT INTO BarangJadi_h (NoBJ, IdJenisKayu, IdBarangJadi, DateCreate, DateUsage, IdOrgTelly, IdFJProfile, NoSPK, NoSPKAsal, Jam, IsReject, IsRepair, IsSisa, NoWIPAsal, NoMouldingAsal, NoSandingAsal, IdWarehouse, IdLokasi, IsLembur, HasBeenPrinted, IsReproses)
-       VALUES (@ns, @jk, @bj, @date, NULL, @otel, @fj, NULLIF(@nospk, ''), NULLIF(@stasal, ''), @jam, @isrej, @isrep, 0, NULLIF(@nwip, ''), NULLIF(@nmou, ''), NULLIF(@nsan, ''), @wh, @lok, @isleb, 0, @isrepros);
+      INSERT INTO BarangJadi_h (NoBJ, IdJenisKayu, IdBarangJadi, DateCreate, DateUsage, IdOrgTelly, IdFJProfile, NoSPK, NoSPKAsal, Jam, IsReject, IsRepair, IsSisa, NoWIPAsal, NoMouldingAsal, NoSandingAsal, IdWarehouse, IdLokasi, IsLembur, HasBeenPrinted, IsReproses, HasilDariReproses)
+       VALUES (@ns, @jk, @bj, @date, NULL, @otel, @fj, NULLIF(@nospk, ''), NULLIF(@stasal, ''), @jam, @isrej, @isrep, 0, NULLIF(@nwip, ''), NULLIF(@nmou, ''), NULLIF(@nsan, ''), @wh, @lok, @isleb, 0, @isrepros, @hasildari);
       INSERT INTO BarangJadi_d (NoBJ, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};
