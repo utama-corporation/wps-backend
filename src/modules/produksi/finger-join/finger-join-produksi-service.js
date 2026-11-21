@@ -572,7 +572,7 @@ async function deleteHeader(noProduksi) {
 async function createLabel({
   idJenisKayu, idGrade, noS4SAsal, noSPKAsal, noSPK, ukuran,
   tebal, lebar, panjang, jmlhBatang, idLokasi,
-  isRepair, isReject, isLembur, isReproses, noProduksi,
+  isRepair, isReject, isLembur, isReproses, hasilDariReproses, noProduksi,
   noBongkarSusun, dateCreate, tanggal, rawDate, jam,
   idUOMTblLebar, idUOMPanjang,
   idUsername,
@@ -649,6 +649,7 @@ async function createLabel({
   req.input("isrej", sql.Bit, isReject ? 1 : 0);
   req.input("isleb", sql.Bit, isLembur ? 1 : 0);
   req.input("isrepros", sql.Bit, isReproses ? 1 : 0);
+  req.input("hasildari", sql.Bit, hasilDariReproses ? 1 : 0);
   req.input("date", sql.Date, tanggalProduksi || effectiveDate);
   req.input("jam", sql.VarChar(8), jam || currentJamWib());
   req.input("uomLebar", sql.Int, Number(idUOMTblLebar) || 1);
@@ -669,8 +670,8 @@ async function createLabel({
       DECLARE @ns VARCHAR(20);
       SELECT @ns = ISNULL('S.' + FORMAT(RIGHT(MAX(NoFJ), 6) + 1, '000000'), 'S.000001')
       FROM FJ_h;
-      INSERT INTO FJ_h (NoFJ, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoS4SAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair, IsReproses)
-      VALUES (@ns, @jk, @gr, @otel, @date, NULL, NULLIF(@s4sasal, ''), @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep, @isrepros);
+      INSERT INTO FJ_h (NoFJ, IdJenisKayu, IdGrade, IdOrgTelly, DateCreate, DateUsage, NoS4SAsal, IdUOMTblLebar, IdUOMPanjang, NoSPK, Jam, IsReject, IsLembur, IdWarehouse, IdFisik, NoSPKAsal, IdLokasi, HasBeenPrinted, IsRepair, IsReproses, HasilDariReproses)
+      VALUES (@ns, @jk, @gr, @otel, @date, NULL, NULLIF(@s4sasal, ''), @uomLebar, @uomPanjang, NULLIF(@nospk, ''), @jam, @isrej, @isleb, 5, 5, NULLIF(@stasal, ''), @lok, 0, @isrep, @isrepros, @hasildari);
       INSERT INTO FJ_d (NoFJ, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
       VALUES
         ${dimTuples};
