@@ -1,6 +1,9 @@
 const { sql, poolPromise } = require("../../../core/config/db");
 const { assertPeriodeTerbuka } = require("../../../core/utils/periode-lock");
-const { currentJamWib } = require("../../../core/utils/format-utils");
+const {
+  currentJamWib,
+  currentTanggalWib,
+} = require("../../../core/utils/format-utils");
 const { findUsage } = require("../../../core/utils/label-usage-trace");
 
 /** Tanggal produksi (CCAkhirProduksi_h.Tanggal) — dasar cek kunci periode. */
@@ -16,7 +19,10 @@ async function getTanggalProduksi(noProduksi) {
 
 async function getMesinList() {
   const pool = await poolPromise;
-  const result = await pool.request().query(`
+  const result = await pool
+    .request()
+    .input("tgl", sql.Date, currentTanggalWib())
+    .query(`
     SELECT
       M.IdMesin,
       M.NamaMesin,
@@ -33,7 +39,7 @@ async function getMesinList() {
       SELECT TOP 1 H.NoProduksi, H.Shift, H.JamKerja, H.JmlhAnggota, H.IdOperator
       FROM CCAkhirProduksi_h H
       WHERE H.IdMesin = M.IdMesin
-        AND H.Tanggal = CONVERT(date, GETDATE())
+        AND H.Tanggal = @tgl
       ORDER BY H.NoProduksi DESC
     ) P
     LEFT JOIN MstOperator C ON C.IdOperator = P.IdOperator

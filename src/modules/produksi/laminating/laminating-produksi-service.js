@@ -1,6 +1,9 @@
 const { sql, poolPromise } = require("../../../core/config/db");
 const { assertPeriodeTerbuka } = require("../../../core/utils/periode-lock");
-const { currentJamWib } = require("../../../core/utils/format-utils");
+const {
+  currentJamWib,
+  currentTanggalWib,
+} = require("../../../core/utils/format-utils");
 const { findUsage } = require("../../../core/utils/label-usage-trace");
 
 /** Tanggal produksi (LaminatingProduksi_h.Tanggal) — dasar cek kunci periode. */
@@ -16,11 +19,13 @@ async function getTanggalProduksi(noProduksi) {
 
 async function getMesinList() {
   const pool = await poolPromise;
-  const result = await pool.request().query(`
+  const result = await pool
+    .request()
+    .input("tgl", sql.Date, currentTanggalWib())
+    .query(`
     SELECT
       M.IdMesin,
       M.NamaMesin,
-      S.ShiftNo AS ShiftSlot,
       CASE WHEN P.NoProduksi IS NULL THEN 0 ELSE 1 END AS IsJalanHariIni,
       ISNULL(P.Shift, '') AS Shift,
       ISNULL(P.NoProduksi, '') AS NoProduksi,
@@ -31,20 +36,18 @@ async function getMesinList() {
       ISNULL(D.NamaOperator, '') AS DefaultOperatorName
     FROM MstMesin M
     INNER JOIN MstBagian B ON B.IdBagian = M.IdBagian
-    CROSS JOIN (VALUES (1), (2), (3)) S(ShiftNo)
     OUTER APPLY (
       SELECT TOP 1 H.NoProduksi, H.Shift, H.JamKerja, H.JmlhAnggota, H.IdOperator
       FROM LaminatingProduksi_h H
       WHERE H.IdMesin = M.IdMesin
-        AND H.Tanggal = CONVERT(date, GETDATE())
-        AND TRY_CAST(H.Shift AS int) = S.ShiftNo
+        AND H.Tanggal = @tgl
       ORDER BY H.NoProduksi DESC
     ) P
     LEFT JOIN MstOperator C ON C.IdOperator = P.IdOperator
     LEFT JOIN MstOperator D ON D.IdOperator = M.DefaultOprator
     WHERE M.Enable = 1
       AND B.NamaBagian LIKE '%LAMINATING%'
-    ORDER BY M.NamaMesin, S.ShiftNo
+    ORDER BY CASE WHEN P.NoProduksi IS NULL THEN 1 ELSE 0 END, M.NamaMesin
   `);
   return result.recordset;
 }
