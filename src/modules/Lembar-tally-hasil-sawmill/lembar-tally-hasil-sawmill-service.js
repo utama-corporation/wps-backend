@@ -342,7 +342,7 @@ const getMejaStatus = async (pool) => {
     SELECT NoMeja, NamaMeja, IdGroupMesinSawmill
     FROM MstMesinSawmill
     WHERE Enable = 1
-    ORDER BY NamaMeja ASC
+    ORDER BY NoMeja ASC
   `);
 
   const today = new Date();
