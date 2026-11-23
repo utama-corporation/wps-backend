@@ -48,6 +48,9 @@ function buildS4sLabelHtml(data) {
   const lemburRow = data.isLembur
     ? `<div class="flags">LEMBUR</div>`
     : "";
+  const repairRow = data.isRepair
+    ? `<div class="reproses">REPAIR</div>`
+    : "";
   const reprosesRow = data.isReproses
     ? `<div class="reproses">REPROSES</div>`
     : "";
@@ -77,6 +80,7 @@ function buildS4sLabelHtml(data) {
     .replace("{{watermarkText}}", esc(watermarkText))
     .replace("{{rejectRow}}", rejectRow)
     .replace("{{lemburRow}}", lemburRow)
+    .replace("{{repairRow}}", repairRow)
     .replace("{{reprosesRow}}", reprosesRow)
     .replace("{{remarkRow}}", remarkRow)
     .replace("{{qrBase64}}", data.qrBase64 || "");

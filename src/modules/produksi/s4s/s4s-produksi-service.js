@@ -184,8 +184,8 @@ async function getDetail(noProduksi) {
       ISNULL(J.Jenis, '') AS Jenis,
       ${m.grade ? "ISNULL(G.NamaGrade, '') AS NamaGrade" : "'' AS NamaGrade"},
       ${m.flags
-        ? "ISNULL(H.IsRepair, 0) AS IsRepair, ISNULL(H.IsReject, 0) AS IsReject, ISNULL(H.IsLembur, 0) AS IsLembur"
-        : "0 AS IsRepair, 0 AS IsReject, 0 AS IsLembur"},
+        ? "ISNULL(H.IsRepair, 0) AS IsRepair, ISNULL(H.IsReject, 0) AS IsReject, ISNULL(H.IsLembur, 0) AS IsLembur, ISNULL(H.IsReproses, 0) AS IsReproses"
+        : "0 AS IsRepair, 0 AS IsReject, 0 AS IsLembur, 0 AS IsReproses"},
       ${m.warna ? "W.NamaWarna" : "NULL AS NamaWarna"},
       CASE WHEN H.${m.key} IS NOT NULL AND H.DateUsage IS NULL THEN 1 ELSE 0 END AS IsTemporary
     FROM ${m.input} A
@@ -219,6 +219,7 @@ async function getDetail(noProduksi) {
       ISNULL(H.IsRepair, 0) AS IsRepair,
       ISNULL(H.IsReject, 0) AS IsReject,
       ISNULL(H.IsLembur, 0) AS IsLembur,
+      ISNULL(H.IsReproses, 0) AS IsReproses,
       ISNULL(H.HasBeenPrinted, 0) AS HasBeenPrinted,
       W.NamaWarna
     FROM S4SProduksiOutput O
