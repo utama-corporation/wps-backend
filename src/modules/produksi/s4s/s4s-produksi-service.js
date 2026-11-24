@@ -184,8 +184,8 @@ async function getDetail(noProduksi) {
       ISNULL(J.Jenis, '') AS Jenis,
       ${m.grade ? "ISNULL(G.NamaGrade, '') AS NamaGrade" : "'' AS NamaGrade"},
       ${m.flags
-        ? "ISNULL(H.IsRepair, 0) AS IsRepair, ISNULL(H.IsReject, 0) AS IsReject, ISNULL(H.IsLembur, 0) AS IsLembur, ISNULL(H.IsReproses, 0) AS IsReproses"
-        : "0 AS IsRepair, 0 AS IsReject, 0 AS IsLembur, 0 AS IsReproses"},
+        ? "ISNULL(H.IsRepair, 0) AS IsRepair, ISNULL(H.IsReject, 0) AS IsReject, ISNULL(H.IsLembur, 0) AS IsLembur, ISNULL(H.IsReproses, 0) AS IsReproses, ISNULL(H.HasilDariReproses, 0) AS HasilDariReproses"
+        : "0 AS IsRepair, 0 AS IsReject, 0 AS IsLembur, 0 AS IsReproses, 0 AS HasilDariReproses"},
       ${m.warna ? "W.NamaWarna" : "NULL AS NamaWarna"},
       CASE WHEN H.${m.key} IS NOT NULL AND H.DateUsage IS NULL THEN 1 ELSE 0 END AS IsTemporary
     FROM ${m.input} A
@@ -217,6 +217,8 @@ async function getDetail(noProduksi) {
       AGG.M3,
       COALESCE(AGG.JmlhUkuran, 0) AS JmlhUkuran,
       ISNULL(H.IsRepair, 0) AS IsRepair,
+      ISNULL(H.IsReproses, 0) AS IsReproses,
+      ISNULL(H.HasilDariReproses, 0) AS HasilDariReproses,
       ISNULL(H.IsReject, 0) AS IsReject,
       ISNULL(H.IsLembur, 0) AS IsLembur,
       ISNULL(H.IsReproses, 0) AS IsReproses,
@@ -837,12 +839,12 @@ async function removeOutput({ noProduksi, noS4S }) {
 
 // ── Stok Item: label input (master) yang belum dipakai, dikelompokkan per jenis ──
 const STOK_MASTERS = {
-  ST: { table: "ST_h", col: "NoST", uomLebar: "IdUOMTblLebar" },
-  S4S: { table: "S4S_h", col: "NoS4S", uomLebar: "IdUOMTblLebar" },
-  CCAKHIR: { table: "CCAkhir_h", col: "NoCCAkhir", uomLebar: "IdUOMTblLebar" },
-  FJ: { table: "FJ_h", col: "NoFJ", uomLebar: "IdUOMTblLebar" },
-  MOULDING: { table: "Moulding_h", col: "NoMoulding", uomLebar: "IdUOMTblLebar" },
-  LAMINATING: { table: "Laminating_h", col: "NoLaminating", uomLebar: "IdUOMTblLebar" },
+  ST: { table: "ST_h", col: "NoST", uomLebar: "IdUOMTblLebar", flags: false },
+  S4S: { table: "S4S_h", col: "NoS4S", uomLebar: "IdUOMTblLebar", flags: true },
+  CCAKHIR: { table: "CCAkhir_h", col: "NoCCAkhir", uomLebar: "IdUOMTblLebar", flags: true },
+  FJ: { table: "FJ_h", col: "NoFJ", uomLebar: "IdUOMTblLebar", flags: true },
+  MOULDING: { table: "Moulding_h", col: "NoMoulding", uomLebar: "IdUOMTblLebar", flags: true },
+  LAMINATING: { table: "Laminating_h", col: "NoLaminating", uomLebar: "IdUOMTblLebar", flags: true },
 };
 
 function stokMaster(tipe) {
@@ -908,6 +910,9 @@ async function getStokLabels(tipe, idJenis) {
     SELECT TOP 500
       A.${m.col} AS Label,
       A.DateCreate AS Tanggal,
+      ${m.flags ? "ISNULL(A.IsRepair, 0)" : "0"} AS IsRepair,
+      ${m.flags ? "ISNULL(A.IsReproses, 0)" : "0"} AS IsReproses,
+      ${m.flags ? "ISNULL(A.HasilDariReproses, 0)" : "0"} AS HasilDariReproses,
       AGG.M3 AS BeratM3,
       ISNULL(SUM(AGG.M3) OVER(), 0) AS TotalM3,
       COUNT(*) OVER() AS TotalJumlah

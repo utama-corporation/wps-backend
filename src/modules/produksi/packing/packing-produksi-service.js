@@ -251,6 +251,8 @@ async function getDetail(noProduksi) {
       ISNULL(J.Jenis, '') AS Jenis,
       ${m.grade ? "ISNULL(G.NamaGrade, '') AS NamaGrade" : "'' AS NamaGrade"},
       ${m.repair ? "ISNULL(H.IsRepair, 0)" : "0"} AS IsRepair,
+      ${m.repair ? "ISNULL(H.IsReproses, 0)" : "0"} AS IsReproses,
+      ${m.repair ? "ISNULL(H.HasilDariReproses, 0)" : "0"} AS HasilDariReproses,
       ${m.reject ? "ISNULL(H.IsReject, 0)" : "0"} AS IsReject,
       ${m.lembur ? "ISNULL(H.IsLembur, 0)" : "0"} AS IsLembur,
       ${m.repair ? "ISNULL(H.IsReproses, 0)" : "0"} AS IsReproses,
@@ -284,6 +286,8 @@ async function getDetail(noProduksi) {
       AGG.M3,
       COALESCE(AGG.JmlhUkuran, 0) AS JmlhUkuran,
       ISNULL(H.IsRepair, 0) AS IsRepair,
+      ISNULL(H.IsReproses, 0) AS IsReproses,
+      ISNULL(H.HasilDariReproses, 0) AS HasilDariReproses,
       ISNULL(H.IsReject, 0) AS IsReject,
       ISNULL(H.IsLembur, 0) AS IsLembur,
       ISNULL(H.IsReproses, 0) AS IsReproses,
@@ -973,11 +977,11 @@ async function removeOutput({ noProduksi, noBJ }) {
 
 // ── Stok Item: label input (master) yang belum dipakai, dikelompokkan per jenis ──
 const STOK_MASTERS = {
-  BARANGJADI: { table: "BarangJadi_h", col: "NoBJ", uomLebar: null, uomPanjang: null },
-  CCAKHIR: { table: "CCAkhir_h", col: "NoCCAkhir", uomLebar: "IdUOMTblLebar", uomPanjang: "IdUOMPanjang" },
-  MOULDING: { table: "Moulding_h", col: "NoMoulding", uomLebar: "IdUOMTblLebar", uomPanjang: "IdUOMPanjang" },
-  SANDING: { table: "Sanding_h", col: "NoSanding", uomLebar: "IdUOMTblLebar", uomPanjang: "IdUOMPanjang" },
-  WIP: { table: "WIP_h", col: "NoWIP", uomLebar: "IdUOMTlbLebar", uomPanjang: "IdUOMPanjang" },
+  BARANGJADI: { table: "BarangJadi_h", col: "NoBJ", uomLebar: null, uomPanjang: null, flags: true },
+  CCAKHIR: { table: "CCAkhir_h", col: "NoCCAkhir", uomLebar: "IdUOMTblLebar", uomPanjang: "IdUOMPanjang", flags: true },
+  MOULDING: { table: "Moulding_h", col: "NoMoulding", uomLebar: "IdUOMTblLebar", uomPanjang: "IdUOMPanjang", flags: true },
+  SANDING: { table: "Sanding_h", col: "NoSanding", uomLebar: "IdUOMTblLebar", uomPanjang: "IdUOMPanjang", flags: true },
+  WIP: { table: "WIP_h", col: "NoWIP", uomLebar: "IdUOMTlbLebar", uomPanjang: "IdUOMPanjang", flags: false },
 };
 
 function stokMaster(tipe) {
@@ -1043,6 +1047,9 @@ async function getStokLabels(tipe, idJenis) {
     SELECT TOP 500
       A.${m.col} AS Label,
       A.DateCreate AS Tanggal,
+      ${m.flags ? "ISNULL(A.IsRepair, 0)" : "0"} AS IsRepair,
+      ${m.flags ? "ISNULL(A.IsReproses, 0)" : "0"} AS IsReproses,
+      ${m.flags ? "ISNULL(A.HasilDariReproses, 0)" : "0"} AS HasilDariReproses,
       AGG.M3 AS BeratM3,
       ISNULL(SUM(AGG.M3) OVER(), 0) AS TotalM3,
       COUNT(*) OVER() AS TotalJumlah

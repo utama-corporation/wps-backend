@@ -255,6 +255,8 @@ async function getDetail(noProduksi) {
       ISNULL(J.Jenis, '') AS Jenis,
       ${m.grade ? "ISNULL(G.NamaGrade, '') AS NamaGrade" : "'' AS NamaGrade"},
       ${m.repair ? "ISNULL(H.IsRepair, 0)" : "0"} AS IsRepair,
+      ${m.repair ? "ISNULL(H.IsReproses, 0)" : "0"} AS IsReproses,
+      ${m.repair ? "ISNULL(H.HasilDariReproses, 0)" : "0"} AS HasilDariReproses,
       ${m.reject ? "ISNULL(H.IsReject, 0)" : "0"} AS IsReject,
       ${m.lembur ? "ISNULL(H.IsLembur, 0)" : "0"} AS IsLembur,
       ${m.repair ? "ISNULL(H.IsReproses, 0)" : "0"} AS IsReproses,
@@ -288,6 +290,8 @@ async function getDetail(noProduksi) {
       AGG.M3,
       COALESCE(AGG.JmlhUkuran, 0) AS JmlhUkuran,
       ISNULL(H.IsRepair, 0) AS IsRepair,
+      ISNULL(H.IsReproses, 0) AS IsReproses,
+      ISNULL(H.HasilDariReproses, 0) AS HasilDariReproses,
       ISNULL(H.IsReject, 0) AS IsReject,
       ISNULL(H.IsLembur, 0) AS IsLembur,
       ISNULL(H.IsReproses, 0) AS IsReproses,
@@ -922,7 +926,7 @@ const STOK_MASTERS = {
   BARANGJADI: { table: "BarangJadi_h", col: "NoBJ", uomLebar: null, uomPanjang: null },
   CCAKHIR: { table: "CCAkhir_h", col: "NoCCAkhir", uomLebar: "IdUOMTblLebar", uomPanjang: "IdUOMPanjang" },
   MOULDING: { table: "Moulding_h", col: "NoMoulding", uomLebar: "IdUOMTblLebar", uomPanjang: "IdUOMPanjang" },
-  REPROSES: { table: "Reproses_h", col: "NoReproses", uomLebar: "IdUOMTblLebar", uomPanjang: "IdUOMPanjang" },
+  REPROSES: { table: "Reproses_h", col: "NoReproses", uomLebar: "IdUOMTblLebar", uomPanjang: "IdUOMPanjang", flags: false },
   SANDING: { table: "Sanding_h", col: "NoSanding", uomLebar: "IdUOMTblLebar", uomPanjang: "IdUOMPanjang" },
 };
 
@@ -989,6 +993,9 @@ async function getStokLabels(tipe, idJenis) {
     SELECT TOP 500
       A.${m.col} AS Label,
       A.DateCreate AS Tanggal,
+      ${m.flags === false ? "0" : "ISNULL(A.IsRepair, 0)"} AS IsRepair,
+      ${m.flags === false ? "0" : "ISNULL(A.IsReproses, 0)"} AS IsReproses,
+      ${m.flags === false ? "0" : "ISNULL(A.HasilDariReproses, 0)"} AS HasilDariReproses,
       AGG.M3 AS BeratM3,
       ISNULL(SUM(AGG.M3) OVER(), 0) AS TotalM3,
       COUNT(*) OVER() AS TotalJumlah

@@ -17,6 +17,7 @@ router.post("/bongkar-susun/lookup", requirePermission("bongkar_susun:read"), ct
 router.post("/bongkar-susun", requirePermission("bongkar_susun:create"), ctrl.create);
 router.put("/bongkar-susun/:no", requirePermission("bongkar_susun:update"), ctrl.update);
 router.post("/bongkar-susun/:no/save", requirePermission("bongkar_susun:update"), ctrl.saveDetail);
+router.delete("/bongkar-susun/:no", requirePermission("bongkar_susun:delete"), ctrl.deleteHeader);
 router.delete("/bongkar-susun/:no/label", requirePermission("bongkar_susun:delete"), ctrl.deleteLabel);
 
 module.exports = router;

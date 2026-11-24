@@ -85,6 +85,16 @@ exports.deleteLabel = async (req, res) => {
   }
 };
 
+/* DELETE /api/bongkar-susun/:no (header + seluruh detail) */
+exports.deleteHeader = async (req, res) => {
+  try {
+    const data = await svc.deleteHeader(req.params.no, req.username);
+    res.json({ success: true, data, message: "Berhasil menghapus data" });
+  } catch (err) {
+    fail(res, err);
+  }
+};
+
 /* GET /api/bongkar-susun/:no/history */
 exports.getHistory = async (req, res) => {
   try {

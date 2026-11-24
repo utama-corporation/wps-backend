@@ -496,6 +496,63 @@ async function deleteLabel(no, rawLabel, user) {
 }
 
 /* ============================================================
+ * DELETE HEADER — hapus BongkarSusun_h + seluruh detail input
+ * (8 tipe), DateUsage label input dilepas kembali.
+ * Ditolak bila masih ada label OUTPUT: label hasil bongkar susun
+ * adalah stok tersendiri (dihapus lewat menu label masing-masing).
+ * ==========================================================*/
+async function deleteHeader(no, user) {
+  const header = await getHeaderRow(null, no);
+  if (!header) throw httpError(404, `Bongkar Susun ${no} tidak ditemukan.`);
+  if (header.Tanggal) await assertPeriodeTerbuka(header.Tanggal);
+
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    for (const tipe of TIPE_URUT) {
+      const cfg = cfgByTipe[tipe];
+
+      const outReq = new sql.Request(transaction);
+      outReq.input("no", sql.VarChar(50), no);
+      const out = await outReq.query(
+        `SELECT TOP 1 ${cfg.col} AS label FROM ${cfg.output} WHERE NoBongkarSusun = @no`,
+      );
+      if (out.recordset.length > 0) {
+        throw httpError(
+          409,
+          `Tidak dapat dihapus: masih ada label output ${cfg.label} (${out.recordset[0].label}). Hapus label output terlebih dahulu.`,
+        );
+      }
+
+      const upd = new sql.Request(transaction);
+      upd.input("no", sql.VarChar(50), no);
+      await upd.query(`
+        UPDATE h SET h.DateUsage = NULL
+        FROM ${cfg.h} h
+        INNER JOIN ${cfg.input} i ON i.${cfg.col} = h.${cfg.col}
+        WHERE i.NoBongkarSusun = @no
+      `);
+
+      const del = new sql.Request(transaction);
+      del.input("no", sql.VarChar(50), no);
+      await del.query(`DELETE FROM ${cfg.input} WHERE NoBongkarSusun = @no`);
+    }
+
+    const delH = new sql.Request(transaction);
+    delH.input("no", sql.VarChar(50), no);
+    await delH.query(`DELETE FROM dbo.BongkarSusun_h WHERE NoBongkarSusun = @no`);
+
+    await audit(transaction, user, `Menghapus Data ${no} Pada Bongkar Susun (Web)`);
+    await transaction.commit();
+    return { noBongkarSusun: no };
+  } catch (err) {
+    try { await transaction.rollback(); } catch { /* ignore */ }
+    throw err;
+  }
+}
+
+/* ============================================================
  * HISTORY — paritas showHistoryDialog / getHistoryItems:
  * jumlah label per waktu simpan, per tipe.
  * ==========================================================*/
@@ -603,6 +660,98 @@ module.exports = {
   lookup,
   saveDetail,
   deleteLabel,
+  deleteHeader,
   getHistory,
   getLabelInfo,
+};/* ============================================================
+ * DELETE HEADER — hapus BongkarSusun_h + seluruh detail:
+ *  - label INPUT: DateUsage dilepas, baris input dihapus.
+ *  - label OUTPUT: bila ada yang DateUsage-nya sudah terisi (sudah dipakai)
+ *    → ditolak (409). Bila belum, label output ikut dihapus
+ *    (lewat deleteLabel modul label masing-masing).
+ * ==========================================================*/
+const OUTPUT_LABEL_DELETERS = {
+  st: () => require("../label/st/label-st-service").deleteLabel,
+  s4s: () => require("../label/s4s/label-s4s-service").deleteLabel,
+  fj: () => require("../label/fj/label-fj-service").deleteLabel,
+  moulding: () => require("../label/moulding/label-moulding-service").deleteLabel,
+  laminating: () => require("../label/lmt/label-lmt-service").deleteLabel,
+  ccAkhir: () => require("../label/cca/label-cca-service").deleteLabel,
+  sanding: () => require("../label/snd/label-snd-service").deleteLabel,
+  packing: () => require("../label/bj/label-bj-service").deleteLabel,
 };
+
+async function deleteHeader(no, user) {
+  const header = await getHeaderRow(null, no);
+  if (!header) throw httpError(404, `Bongkar Susun ${no} tidak ditemukan.`);
+  if (header.Tanggal) await assertPeriodeTerbuka(header.Tanggal);
+
+  const pool = await poolPromise;
+
+  // 1) Validasi: label output yang sudah terpakai (DateUsage terisi) = tidak boleh hapus.
+  const outputs = [];
+  for (const tipe of TIPE_URUT) {
+    const cfg = cfgByTipe[tipe];
+    const req = pool.request();
+    req.input("no", sql.VarChar(50), no);
+    const r = await req.query(`
+      SELECT o.${cfg.col} AS label, h.DateUsage
+      FROM ${cfg.output} o
+      LEFT JOIN ${cfg.h} h ON h.${cfg.col} = o.${cfg.col}
+      WHERE o.NoBongkarSusun = @no
+    `);
+    for (const row of r.recordset) {
+      if (row.DateUsage != null) {
+        throw httpError(
+          409,
+          `Tidak dapat dihapus: label output ${row.label} (${cfg.label}) sudah terpakai (DateUsage terisi).`,
+        );
+      }
+      outputs.push({ tipe, label: row.label });
+    }
+  }
+
+  // 2) Hapus label output (belum terpakai) lewat modul label masing-masing.
+  for (const o of outputs) {
+    await OUTPUT_LABEL_DELETERS[o.tipe]()(o.label);
+  }
+
+  // 3) Lepas label input + hapus header, satu transaksi.
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    for (const tipe of TIPE_URUT) {
+      const cfg = cfgByTipe[tipe];
+
+      const upd = new sql.Request(transaction);
+      upd.input("no", sql.VarChar(50), no);
+      await upd.query(`
+        UPDATE h SET h.DateUsage = NULL
+        FROM ${cfg.h} h
+        INNER JOIN ${cfg.input} i ON i.${cfg.col} = h.${cfg.col}
+        WHERE i.NoBongkarSusun = @no
+      `);
+
+      const del = new sql.Request(transaction);
+      del.input("no", sql.VarChar(50), no);
+      await del.query(`DELETE FROM ${cfg.input} WHERE NoBongkarSusun = @no`);
+
+      const delOut = new sql.Request(transaction);
+      delOut.input("no", sql.VarChar(50), no);
+      await delOut.query(`DELETE FROM ${cfg.output} WHERE NoBongkarSusun = @no`);
+    }
+
+    const delH = new sql.Request(transaction);
+    delH.input("no", sql.VarChar(50), no);
+    await delH.query(`DELETE FROM dbo.BongkarSusun_h WHERE NoBongkarSusun = @no`);
+
+    await audit(transaction, user, `Menghapus Data ${no} Pada Bongkar Susun (Web)`);
+    await transaction.commit();
+    return { noBongkarSusun: no, outputDihapus: outputs.length };
+  } catch (err) {
+    try { await transaction.rollback(); } catch { /* ignore */ }
+    throw err;
+  }
+}
+
+

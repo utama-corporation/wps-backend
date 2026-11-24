@@ -252,6 +252,8 @@ async function getDetail(noProduksi) {
       ISNULL(J.Jenis, '') AS Jenis,
       ${m.grade ? "ISNULL(G.NamaGrade, '') AS NamaGrade" : "'' AS NamaGrade"},
       ${m.repair ? "ISNULL(H.IsRepair, 0)" : "0"} AS IsRepair,
+      ${m.repair ? "ISNULL(H.IsReproses, 0)" : "0"} AS IsReproses,
+      ${m.repair ? "ISNULL(H.HasilDariReproses, 0)" : "0"} AS HasilDariReproses,
       ${m.reject ? "ISNULL(H.IsReject, 0)" : "0"} AS IsReject,
       ${m.lembur ? "ISNULL(H.IsLembur, 0)" : "0"} AS IsLembur,
       ${m.repair ? "ISNULL(H.IsReproses, 0)" : "0"} AS IsReproses,
@@ -286,6 +288,8 @@ async function getDetail(noProduksi) {
       AGG.M3,
       COALESCE(AGG.JmlhUkuran, 0) AS JmlhUkuran,
       ISNULL(H.IsRepair, 0) AS IsRepair,
+      ISNULL(H.IsReproses, 0) AS IsReproses,
+      ISNULL(H.HasilDariReproses, 0) AS HasilDariReproses,
       ISNULL(H.IsReject, 0) AS IsReject,
       ISNULL(H.IsLembur, 0) AS IsLembur,
       ISNULL(H.IsReproses, 0) AS IsReproses,
@@ -952,7 +956,7 @@ async function removeOutput({ noProduksi, noFJ }) {
 const STOK_MASTERS = {
   S4S: { table: "S4S_h", col: "NoS4S", uomLebar: "IdUOMTblLebar" },
   // WIP_h memakai ejaan kolom berbeda: IdUOMTlbLebar (bukan IdUOMTblLebar).
-  WIP: { table: "WIP_h", col: "NoWIP", uomLebar: "IdUOMTlbLebar" },
+  WIP: { table: "WIP_h", col: "NoWIP", uomLebar: "IdUOMTlbLebar", flags: false },
   CCAKHIR: { table: "CCAkhir_h", col: "NoCCAkhir", uomLebar: "IdUOMTblLebar" },
 };
 
@@ -1019,6 +1023,9 @@ async function getStokLabels(tipe, idJenis) {
     SELECT TOP 500
       A.${m.col} AS Label,
       A.DateCreate AS Tanggal,
+      ${m.flags === false ? "0" : "ISNULL(A.IsRepair, 0)"} AS IsRepair,
+      ${m.flags === false ? "0" : "ISNULL(A.IsReproses, 0)"} AS IsReproses,
+      ${m.flags === false ? "0" : "ISNULL(A.HasilDariReproses, 0)"} AS HasilDariReproses,
       AGG.M3 AS BeratM3,
       ISNULL(SUM(AGG.M3) OVER(), 0) AS TotalM3,
       COUNT(*) OVER() AS TotalJumlah
