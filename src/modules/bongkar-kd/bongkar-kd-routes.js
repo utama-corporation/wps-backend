@@ -69,9 +69,11 @@ router.get("/kd-bongkar/:noProcKD/detail", verifyToken, async (req, res) => {
 
     // Ambil data label header (ST_h)
     const labelHeaderQuery = `
-      SELECT KD.[NoProcKD], KD.[NoST], ST.[DateCreate], ST.[IdUOMTblLebar], ST.[IdUOMPanjang], ST.[IdLokasi]
+      SELECT KD.[NoProcKD], KD.[NoST], ST.[DateCreate], ST.[IdUOMTblLebar], ST.[IdUOMPanjang], ST.[IdLokasi],
+             JK.Jenis AS JenisKayu
       FROM KD_d KD
       LEFT JOIN ST_h ST ON KD.NoST = ST.NoST
+      LEFT JOIN MstJenisKayu JK ON JK.IdJenisKayu = ST.IdJenisKayu
       WHERE KD.NoProcKD = @noProcKD
         AND (
           ST.IdLokasi LIKE '%J%' OR
@@ -140,7 +142,27 @@ router.get("/kd-bongkar/:noProcKD/detail", verifyToken, async (req, res) => {
       ORDER BY ST.NoST, STD.NoUrut
     `;
 
-    const detailResult = await request.query(detailQuery);
+    // Grade ST tersimpan di STStick (NamaGradeStick), bukan di ST_h.
+    const gradeQuery = `
+      SELECT S.NoST, G.NamaGradeStick
+      FROM STStick S
+      INNER JOIN MstGradeStick G ON G.IdGradeStick = S.IdGradeStick
+      WHERE S.NoST IN (${noSTList})
+      ORDER BY S.NoST, G.NamaGradeStick
+    `;
+
+    const [detailResult, gradeResult] = await Promise.all([
+      request.query(detailQuery),
+      request.query(gradeQuery),
+    ]);
+
+    const gradesByNoST = {};
+    gradeResult.recordset.forEach((row) => {
+      const name = row.NamaGradeStick == null ? "" : String(row.NamaGradeStick).trim();
+      if (!name) return;
+      if (!gradesByNoST[row.NoST]) gradesByNoST[row.NoST] = new Set();
+      gradesByNoST[row.NoST].add(name);
+    });
 
     // Group data berdasarkan NoST
     const groupedData = {};
@@ -159,6 +181,10 @@ router.get("/kd-bongkar/:noProcKD/detail", verifyToken, async (req, res) => {
         IdUOMTblLebar: h.IdUOMTblLebar,
         IdUOMPanjang: h.IdUOMPanjang,
         IdLokasi: h.IdLokasi,
+        JenisKayu: h.JenisKayu == null ? "-" : String(h.JenisKayu).trim() || "-",
+        Grade: gradesByNoST[h.NoST]?.size
+          ? [...gradesByNoST[h.NoST]].join(", ")
+          : "-",
         Details: [],
       };
       labelOrder.push(h.NoST);
@@ -282,9 +308,11 @@ router.get(
 
       // Ambil data label header (sudah dicek) - ST_h
       const labelHeaderQuery = `
-      SELECT KD.[NoProcKD], KD.[NoST], ST.[DateCreate], ST.[IdUOMTblLebar], ST.[IdUOMPanjang], ST.[IdLokasi]
+      SELECT KD.[NoProcKD], KD.[NoST], ST.[DateCreate], ST.[IdUOMTblLebar], ST.[IdUOMPanjang], ST.[IdLokasi],
+             JK.Jenis AS JenisKayu
       FROM KD_d KD
       LEFT JOIN ST_h ST ON KD.NoST = ST.NoST
+      LEFT JOIN MstJenisKayu JK ON JK.IdJenisKayu = ST.IdJenisKayu
       WHERE KD.NoProcKD = @noProcKD
         AND ST.IdLokasi NOT LIKE '%J%'
         AND ST.IdLokasi NOT LIKE '%L%'
@@ -349,7 +377,27 @@ router.get(
       ORDER BY ST.NoST, STD.NoUrut
     `;
 
-      const detailResult = await request.query(detailQuery);
+      // Grade ST tersimpan di STStick (NamaGradeStick), bukan di ST_h.
+      const gradeQuery = `
+      SELECT S.NoST, G.NamaGradeStick
+      FROM STStick S
+      INNER JOIN MstGradeStick G ON G.IdGradeStick = S.IdGradeStick
+      WHERE S.NoST IN (${noSTList})
+      ORDER BY S.NoST, G.NamaGradeStick
+    `;
+
+      const [detailResult, gradeResult] = await Promise.all([
+        request.query(detailQuery),
+        request.query(gradeQuery),
+      ]);
+
+      const gradesByNoST = {};
+      gradeResult.recordset.forEach((row) => {
+        const name = row.NamaGradeStick == null ? "" : String(row.NamaGradeStick).trim();
+        if (!name) return;
+        if (!gradesByNoST[row.NoST]) gradesByNoST[row.NoST] = new Set();
+        gradesByNoST[row.NoST].add(name);
+      });
 
       // Group data berdasarkan NoST
       const groupedData = {};
@@ -368,6 +416,10 @@ router.get(
           IdUOMTblLebar: h.IdUOMTblLebar,
           IdUOMPanjang: h.IdUOMPanjang,
           IdLokasi: h.IdLokasi,
+          JenisKayu: h.JenisKayu == null ? "-" : String(h.JenisKayu).trim() || "-",
+          Grade: gradesByNoST[h.NoST]?.size
+            ? [...gradesByNoST[h.NoST]].join(", ")
+            : "-",
           Details: [],
         };
         labelOrder.push(h.NoST);
