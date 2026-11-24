@@ -255,7 +255,6 @@ async function getDetail(noProduksi) {
       ${m.repair ? "ISNULL(H.HasilDariReproses, 0)" : "0"} AS HasilDariReproses,
       ${m.reject ? "ISNULL(H.IsReject, 0)" : "0"} AS IsReject,
       ${m.lembur ? "ISNULL(H.IsLembur, 0)" : "0"} AS IsLembur,
-      ${m.repair ? "ISNULL(H.IsReproses, 0)" : "0"} AS IsReproses,
       NULL AS NamaWarna,
       CASE WHEN H.${m.key} IS NOT NULL AND H.DateUsage IS NULL THEN 1 ELSE 0 END AS IsTemporary
     FROM ${m.input} A
@@ -290,7 +289,6 @@ async function getDetail(noProduksi) {
       ISNULL(H.HasilDariReproses, 0) AS HasilDariReproses,
       ISNULL(H.IsReject, 0) AS IsReject,
       ISNULL(H.IsLembur, 0) AS IsLembur,
-      ISNULL(H.IsReproses, 0) AS IsReproses,
       ISNULL(H.HasBeenPrinted, 0) AS HasBeenPrinted,
       NULL AS NamaWarna
     FROM PackingProduksiOutput O

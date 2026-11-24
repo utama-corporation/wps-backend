@@ -221,7 +221,6 @@ async function getDetail(noProduksi) {
       ISNULL(H.HasilDariReproses, 0) AS HasilDariReproses,
       ISNULL(H.IsReject, 0) AS IsReject,
       ISNULL(H.IsLembur, 0) AS IsLembur,
-      ISNULL(H.IsReproses, 0) AS IsReproses,
       ISNULL(H.HasBeenPrinted, 0) AS HasBeenPrinted,
       W.NamaWarna
     FROM S4SProduksiOutput O
