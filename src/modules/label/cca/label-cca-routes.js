@@ -3,6 +3,7 @@ const router = express.Router();
 const verifyToken = require("../../../core/middleware/verify-token");
 const attachPermissions = require("../../../core/middleware/attach-permissions");
 const requirePermission = require("../../../core/middleware/require-permission");
+const { resetPrintHandler } = require("../../../core/utils/print-limit");
 const { mastersHandler } = require("../label-masters-service");
 const ctrl = require("./label-cca-controller");
 const { getSusunList } = require("../st/label-st-controller");
@@ -72,6 +73,13 @@ router.get(
   "/label/cca/:nocca",
   requirePermission("label_cca:read"),
   ctrl.getLabelData,
+);
+
+// PUT /api/label/cca/:nocca/print/reset -> reset HasBeenPrinted (butuh permission khusus)
+router.put(
+  "/label/cca/:nocca/print/reset",
+  requirePermission("label_cca:reset_print"),
+  resetPrintHandler({ table: "CCAkhir_h", keyCol: "NoCCAkhir", param: "nocca", label: "CCA" }),
 );
 
 module.exports = router;

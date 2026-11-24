@@ -18,16 +18,19 @@ exports.generatePdf = async (req, res) => {
 
     const data = await labelCcaService.getLabelData(NoCCA);
 
-    const pdfBuffer = await generateLabelPdf(
+    // Klaim jatah cetak (maks 2x) secara atomik SEBELUM PDF dikirim; 403 bila habis.
+    await labelCcaService.incrementPrintStatus(NoCCA, req);
+    let pdfBuffer;
+    try {
+    pdfBuffer = await generateLabelPdf(
       { ...data, noLabel: data.noCCAkhir },
       buildCcaLabelHtml,
     );
-
-    try {
-      await labelCcaService.incrementPrintStatus(NoCCA);
-    } catch (printErr) {
-      console.error("CCA IncrementPrint Error:", printErr.message);
+    } catch (pdfErr) {
+      await labelCcaService.releasePrintStatus(NoCCA, req).catch(() => {});
+      throw pdfErr;
     }
+
 
     res.set({
       "Content-Type": "application/pdf",

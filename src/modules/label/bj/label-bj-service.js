@@ -1,3 +1,4 @@
+const { claimPrint, releasePrint } = require("../../../core/utils/print-limit");
 const moment = require("moment");
 const { sql, poolPromise } = require("../../../core/config/db");
 
@@ -191,7 +192,6 @@ async function getHeaderForEdit(noBJ) {
       h.IsLembur,
       ISNULL(h.IsRepair, 0) AS IsRepair,
       ISNULL(h.IsReproses, 0) AS IsReproses,
-      ISNULL(h.HasilDariReproses, 0) AS HasilDariReproses,
       k.Jenis              AS JenisKayu,
       g.NamaBarangJadi     AS NamaBJ,
       t.NamaOrgTelly       AS Telly
@@ -221,7 +221,6 @@ async function updateLabel(noBJ, data) {
   req.input("isLembur", sql.Bit, data.isLembur ? 1 : 0);
   req.input("isRepair", sql.Bit, data.isRepair ? 1 : 0);
   req.input("isReproses", sql.Bit, data.isReproses ? 1 : 0);
-  req.input("hasilDariReproses", sql.Bit, data.hasilDariReproses ? 1 : 0);
   req.input("jam", sql.VarChar(10), data.jam || null);
 
   req.input("noSPKAsal", sql.VarChar(20), data.noSPKAsal || null);
@@ -242,7 +241,6 @@ async function updateLabel(noBJ, data) {
         IsLembur = @isLembur,
         IsRepair = @isRepair,
         IsReproses = @isReproses,
-        HasilDariReproses = @hasilDariReproses,
         Jam = @jam
     WHERE ${KEY_COLUMN} = @noBJ
   `);
@@ -416,21 +414,18 @@ async function getLabelData(noBJ) {
 }
 
 /** Tambah hitungan cetak label (BarangJadi_h.HasBeenPrinted) + waktu cetak terakhir. */
-async function incrementPrintStatus(noPacking) {
-  const pool = await poolPromise;
-  const result = await pool
-    .request()
-    .input("no", sql.VarChar(50), noPacking)
-    .query(`
-      UPDATE ${MASTER_TABLE}
-      SET HasBeenPrinted = COALESCE(HasBeenPrinted, 0) + 1,
-          LastPrintDate = GETDATE()
-      WHERE ${KEY_COLUMN} = @no
-    `);
-  return result.rowsAffected[0] > 0;
+/** Klaim 1 jatah cetak (maks MAX_PRINT); 403 bila batas tercapai. */
+function incrementPrintStatus(no, req) {
+  return claimPrint({ table: MASTER_TABLE, keyCol: KEY_COLUMN, no, req });
+}
+
+/** Kembalikan jatah bila PDF gagal dibuat. */
+function releasePrintStatus(no, req) {
+  return releasePrint({ table: MASTER_TABLE, keyCol: KEY_COLUMN, no, req });
 }
 
 module.exports = {
+  releasePrintStatus,
   incrementPrintStatus,
   getLabelData,
   getAllLabels,

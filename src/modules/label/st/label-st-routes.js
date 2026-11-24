@@ -3,6 +3,7 @@ const router = express.Router();
 const verifyToken = require("../../../core/middleware/verify-token");
 const attachPermissions = require("../../../core/middleware/attach-permissions");
 const requirePermission = require("../../../core/middleware/require-permission");
+const { resetPrintHandler } = require("../../../core/utils/print-limit");
 const ctrl = require("./label-st-controller");
 
 router.use(express.json());
@@ -74,8 +75,8 @@ router.get(
 // PUT /api/label/st/:nost/print/reset -> reset status cetak
 router.put(
   "/label/st/:nost/print/reset",
-  requirePermission("label_st:read"),
-  ctrl.resetPrintStatus,
+  requirePermission("label_st:reset_print"),
+  resetPrintHandler({ table: "ST_h", keyCol: "NoST", param: "nost", label: "ST" }),
 );
 
 // GET /api/label/st/:nost -> data mentah label

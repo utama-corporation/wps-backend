@@ -1,3 +1,4 @@
+const { claimPrint, releasePrint } = require("../../../core/utils/print-limit");
 const moment = require("moment");
 const { sql, poolPromise } = require("../../../core/config/db");
 const { assertPeriodeTerbuka } = require("../../../core/utils/periode-lock");
@@ -181,7 +182,6 @@ async function getHeaderForEdit(noS4S) {
       h.IsLembur,
       h.IsRepair,
       h.IsReproses,
-      h.HasilDariReproses,
       h.Remark,
       k.Jenis              AS JenisKayu,
       g.NamaGrade          AS Grade,
@@ -203,10 +203,16 @@ async function getHeaderForEdit(noS4S) {
  * UPDATE LABEL
  * ==========================================================*/
 
-async function updateLabel(noS4S, data) {
-  await assertPeriodeTerbuka(await getTanggalLabel(noS4S));
+/** Request di dalam transaksi `tx` (withAudit) atau pool bila tx tidak diberikan. */
+async function newRequest(tx) {
+  if (tx) return tx.request();
   const pool = await poolPromise;
-  const req = pool.request();
+  return pool.request();
+}
+
+async function updateLabel(noS4S, data, tx) {
+  await assertPeriodeTerbuka(await getTanggalLabel(noS4S));
+  const req = await newRequest(tx);
   req.input("noS4S", sql.VarChar(50), noS4S);
   req.input("idJenisKayu", sql.Int, data.idJenisKayu || null);
   req.input("idGrade", sql.Int, data.idGrade || null);
@@ -219,9 +225,10 @@ async function updateLabel(noS4S, data) {
   req.input("isLembur", sql.Bit, data.isLembur ? 1 : 0);
   req.input("isRepair", sql.Bit, data.isRepair ? 1 : 0);
   req.input("isReproses", sql.Bit, data.isReproses ? 1 : 0);
-  req.input("hasilDariReproses", sql.Bit, data.hasilDariReproses ? 1 : 0);
   req.input("jam", sql.VarChar(10), data.jam || null);
 
+  // Kondisi WHERE "ada yang berubah" -> tidak ada UPDATE (dan tidak ada audit)
+  // bila nilainya sama persis dengan yang sudah tersimpan.
   await req.query(`
     UPDATE ${MASTER_TABLE}
     SET IdJenisKayu = @idJenisKayu,
@@ -235,40 +242,90 @@ async function updateLabel(noS4S, data) {
         IsLembur = @isLembur,
         IsRepair = @isRepair,
         IsReproses = @isReproses,
-        HasilDariReproses = @hasilDariReproses,
         Jam = @jam
     WHERE ${KEY_COLUMN} = @noS4S
+      AND (
+           ISNULL(IdJenisKayu, -1) <> ISNULL(@idJenisKayu, -1)
+        OR ISNULL(IdGrade, -1) <> ISNULL(@idGrade, -1)
+        OR ISNULL(IdOrgTelly, -1) <> ISNULL(@idOrgTelly, -1)
+        OR ISNULL(NoSPK, '') <> ISNULL(@noSPK, '')
+        OR ISNULL(NoSPKAsal, '') <> ISNULL(@noSPKAsal, '')
+        OR ISNULL(IdLokasi, '') <> ISNULL(@idLokasi, '')
+        OR ISNULL(NoSTAsal, '') <> ISNULL(@noSTAsal, '')
+        OR ISNULL(IsReject, 0) <> @isReject
+        OR ISNULL(IsLembur, 0) <> @isLembur
+        OR ISNULL(IsRepair, 0) <> @isRepair
+        OR ISNULL(IsReproses, 0) <> @isReproses
+        OR ISNULL(CONVERT(time(0), Jam), '00:00:00') <> ISNULL(TRY_CONVERT(time(0), @jam), '00:00:00')
+      )
   `);
 
   return { noS4S };
 }
 
 /* ============================================================
- * UPDATE DETAIL (delete old + insert new)
+ * UPDATE DETAIL (selektif per NoUrut: UPDATE / INSERT / DELETE)
  * ==========================================================*/
 
-async function updateDetail(noS4S, details) {
-  const pool = await poolPromise;
+async function updateDetail(noS4S, details, tx) {
+  const readReq = await newRequest(tx);
+  readReq.input("noS4S", sql.VarChar(50), noS4S);
+  const existing = (
+    await readReq.query(`
+      SELECT NoUrut,
+             CONVERT(decimal(18,3), Tebal)   AS Tebal,
+             CONVERT(decimal(18,3), Lebar)   AS Lebar,
+             CONVERT(decimal(18,3), Panjang) AS Panjang,
+             JmlhBatang
+      FROM ${DETAIL_TABLE}
+      WHERE ${KEY_COLUMN} = @noS4S
+    `)
+  ).recordset;
+  const byUrut = new Map(existing.map((r) => [Number(r.NoUrut), r]));
+  const num = (v) => Number(v || 0);
 
-  // Delete old details
-  const delReq = pool.request();
-  delReq.input("noS4S", sql.VarChar(50), noS4S);
-  await delReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noS4S`);
-
-  // Insert new details
   for (let i = 0; i < details.length; i++) {
     const d = details[i];
-    const insReq = pool.request();
-    insReq.input("noS4S", sql.VarChar(50), noS4S);
-    insReq.input("noUrut", sql.Int, i + 1);
-    insReq.input("tebal", sql.Decimal(18, 2), d.tebal || 0);
-    insReq.input("lebar", sql.Decimal(18, 2), d.lebar || 0);
-    insReq.input("panjang", sql.Decimal(18, 2), d.panjang || 0);
-    insReq.input("jmlhBatang", sql.Int, d.jmlhBatang || 0);
-    await insReq.query(`
-      INSERT INTO ${DETAIL_TABLE} (${KEY_COLUMN}, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
-      VALUES (@noS4S, @noUrut, @tebal, @lebar, @panjang, @jmlhBatang)
-    `);
+    const noUrut = i + 1;
+    const cur = byUrut.get(noUrut);
+
+    const same =
+      cur &&
+      num(cur.Tebal) === num(d.tebal) &&
+      num(cur.Lebar) === num(d.lebar) &&
+      num(cur.Panjang) === num(d.panjang) &&
+      Number(cur.JmlhBatang || 0) === Number(d.jmlhBatang || 0);
+    if (same) continue;
+
+    const wReq = await newRequest(tx);
+    wReq.input("noS4S", sql.VarChar(50), noS4S);
+    wReq.input("noUrut", sql.Int, noUrut);
+    wReq.input("tebal", sql.Decimal(18, 3), d.tebal || 0);
+    wReq.input("lebar", sql.Decimal(18, 3), d.lebar || 0);
+    wReq.input("panjang", sql.Decimal(18, 3), d.panjang || 0);
+    wReq.input("jmlhBatang", sql.Int, d.jmlhBatang || 0);
+    if (cur) {
+      await wReq.query(`
+        UPDATE ${DETAIL_TABLE}
+        SET Tebal = @tebal, Lebar = @lebar, Panjang = @panjang, JmlhBatang = @jmlhBatang
+        WHERE ${KEY_COLUMN} = @noS4S AND NoUrut = @noUrut
+      `);
+    } else {
+      await wReq.query(`
+        INSERT INTO ${DETAIL_TABLE} (${KEY_COLUMN}, NoUrut, Tebal, Lebar, Panjang, JmlhBatang)
+        VALUES (@noS4S, @noUrut, @tebal, @lebar, @panjang, @jmlhBatang)
+      `);
+    }
+  }
+
+  // Baris berlebih (daftar baru lebih pendek)
+  if (existing.length > details.length) {
+    const delReq = await newRequest(tx);
+    delReq.input("noS4S", sql.VarChar(50), noS4S);
+    delReq.input("maxUrut", sql.Int, details.length);
+    await delReq.query(
+      `DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noS4S AND NoUrut > @maxUrut`,
+    );
   }
 
   return { noS4S, detailCount: details.length };
@@ -278,28 +335,20 @@ async function updateDetail(noS4S, details) {
  * DELETE LABEL (header + detail + output refs)
  * ==========================================================*/
 
-async function deleteLabel(noS4S) {
+async function deleteLabel(noS4S, tx) {
   await assertPeriodeTerbuka(await getTanggalLabel(noS4S));
-  const pool = await poolPromise;
 
-  // Delete output references first
-  const outReq1 = pool.request();
-  outReq1.input("noS4S", sql.VarChar(50), noS4S);
-  await outReq1.query(`DELETE FROM S4SProduksiOutput WHERE NoS4S = @noS4S`);
-
-  const outReq2 = pool.request();
-  outReq2.input("noS4S", sql.VarChar(50), noS4S);
-  await outReq2.query(`DELETE FROM CCAkhirProduksiOutputS4S WHERE NoS4S = @noS4S`);
-
-  // Delete detail
-  const detReq = pool.request();
-  detReq.input("noS4S", sql.VarChar(50), noS4S);
-  await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noS4S`);
-
-  // Delete header
-  const hdrReq = pool.request();
-  hdrReq.input("noS4S", sql.VarChar(50), noS4S);
-  await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noS4S`);
+  const statements = [
+    `DELETE FROM S4SProduksiOutput WHERE NoS4S = @noS4S`,
+    `DELETE FROM CCAkhirProduksiOutputS4S WHERE NoS4S = @noS4S`,
+    `DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noS4S`,
+    `DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noS4S`,
+  ];
+  for (const q of statements) {
+    const r = await newRequest(tx);
+    r.input("noS4S", sql.VarChar(50), noS4S);
+    await r.query(q);
+  }
 
   return { noS4S };
 }
@@ -407,21 +456,18 @@ async function getLabelData(noS4S) {
 }
 
 /** Tambah hitungan cetak label (S4S_h.HasBeenPrinted) + waktu cetak terakhir. */
-async function incrementPrintStatus(noS4S) {
-  const pool = await poolPromise;
-  const result = await pool
-    .request()
-    .input("no", sql.VarChar(50), noS4S)
-    .query(`
-      UPDATE ${MASTER_TABLE}
-      SET HasBeenPrinted = COALESCE(HasBeenPrinted, 0) + 1,
-          LastPrintDate = GETDATE()
-      WHERE ${KEY_COLUMN} = @no
-    `);
-  return result.rowsAffected[0] > 0;
+/** Klaim 1 jatah cetak (maks MAX_PRINT); 403 bila batas tercapai. */
+function incrementPrintStatus(no, req) {
+  return claimPrint({ table: MASTER_TABLE, keyCol: KEY_COLUMN, no, req });
+}
+
+/** Kembalikan jatah bila PDF gagal dibuat. */
+function releasePrintStatus(no, req) {
+  return releasePrint({ table: MASTER_TABLE, keyCol: KEY_COLUMN, no, req });
 }
 
 module.exports = {
+  releasePrintStatus,
   incrementPrintStatus,
   getLabelData,
   getAllLabels,

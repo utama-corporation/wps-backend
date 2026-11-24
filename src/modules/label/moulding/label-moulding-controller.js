@@ -18,16 +18,19 @@ exports.generatePdf = async (req, res) => {
 
     const data = await labelMouldingService.getLabelData(NoMoulding);
 
-    const pdfBuffer = await generateLabelPdf(
+    // Klaim jatah cetak (maks 2x) secara atomik SEBELUM PDF dikirim; 403 bila habis.
+    await labelMouldingService.incrementPrintStatus(NoMoulding, req);
+    let pdfBuffer;
+    try {
+    pdfBuffer = await generateLabelPdf(
       { ...data, noLabel: data.noMoulding },
       buildMouldingLabelHtml,
     );
-
-    try {
-      await labelMouldingService.incrementPrintStatus(NoMoulding);
-    } catch (printErr) {
-      console.error("Moulding IncrementPrint Error:", printErr.message);
+    } catch (pdfErr) {
+      await labelMouldingService.releasePrintStatus(NoMoulding, req).catch(() => {});
+      throw pdfErr;
     }
+
 
     res.set({
       "Content-Type": "application/pdf",

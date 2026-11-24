@@ -18,16 +18,19 @@ exports.generatePdf = async (req, res) => {
 
     const data = await labelLmtService.getLabelData(NoLmt);
 
-    const pdfBuffer = await generateLabelPdf(
+    // Klaim jatah cetak (maks 2x) secara atomik SEBELUM PDF dikirim; 403 bila habis.
+    await labelLmtService.incrementPrintStatus(NoLmt, req);
+    let pdfBuffer;
+    try {
+    pdfBuffer = await generateLabelPdf(
       { ...data, noLabel: data.noLaminating },
       buildLmtLabelHtml,
     );
-
-    try {
-      await labelLmtService.incrementPrintStatus(NoLmt);
-    } catch (printErr) {
-      console.error("Laminating IncrementPrint Error:", printErr.message);
+    } catch (pdfErr) {
+      await labelLmtService.releasePrintStatus(NoLmt, req).catch(() => {});
+      throw pdfErr;
     }
+
 
     res.set({
       "Content-Type": "application/pdf",

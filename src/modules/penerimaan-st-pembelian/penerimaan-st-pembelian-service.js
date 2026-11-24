@@ -120,7 +120,7 @@ function bindHeader(req, d) {
   req.input("noPlat", sql.VarChar(50), String(d.noPlat).trim());
   req.input("suket", sql.VarChar(100), String(d.suket).trim());
   req.input("tonSJ", sql.VarChar(50), String(d.tonSJ).trim());
-  req.input("note", sql.VarChar(50), d.note ? String(d.note).slice(0, 50) : null);
+  req.input("note", sql.VarChar(100), d.note ? String(d.note).slice(0, 100) : null);
   // 1 = Kering, 0 = Basah, NULL = tidak ditentukan.
   const k = d.isKering;
   req.input("isKering", sql.Bit, k === null || k === undefined || k === "" ? null : k === true || k === 1 || k === "1" || k === "true" ? 1 : 0);

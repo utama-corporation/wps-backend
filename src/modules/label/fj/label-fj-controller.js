@@ -17,16 +17,19 @@ exports.generatePdf = async (req, res) => {
     }
 
     const data = await labelFjService.getLabelData(NoFJ);
-    const pdfBuffer = await generateLabelPdf(
+    // Klaim jatah cetak (maks 2x) secara atomik SEBELUM PDF dikirim; 403 bila habis.
+    await labelFjService.incrementPrintStatus(NoFJ, req);
+    let pdfBuffer;
+    try {
+    pdfBuffer = await generateLabelPdf(
       { ...data, noLabel: data.noFJ },
       buildFjLabelHtml,
     );
-
-    try {
-      await labelFjService.incrementPrintStatus(NoFJ);
-    } catch (printErr) {
-      console.error("FJ IncrementPrint Error:", printErr.message);
+    } catch (pdfErr) {
+      await labelFjService.releasePrintStatus(NoFJ, req).catch(() => {});
+      throw pdfErr;
     }
+
 
     res.set({
       "Content-Type": "application/pdf",

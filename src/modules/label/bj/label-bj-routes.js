@@ -3,6 +3,7 @@ const router = express.Router();
 const verifyToken = require("../../../core/middleware/verify-token");
 const attachPermissions = require("../../../core/middleware/attach-permissions");
 const requirePermission = require("../../../core/middleware/require-permission");
+const { resetPrintHandler } = require("../../../core/utils/print-limit");
 const ctrl = require("./label-bj-controller");
 const { getSusunList } = require("../st/label-st-controller");
 
@@ -70,6 +71,13 @@ router.delete(
   "/label/bj/:nobj",
   requirePermission("label_bj:delete"),
   ctrl.deleteLabel,
+);
+
+// PUT /api/label/bj/:nobj/print/reset -> reset HasBeenPrinted (butuh permission khusus)
+router.put(
+  "/label/bj/:nobj/print/reset",
+  requirePermission("label_bj:reset_print"),
+  resetPrintHandler({ table: "BarangJadi_h", keyCol: "NoBJ", param: "nobj", label: "BJ" }),
 );
 
 module.exports = router;

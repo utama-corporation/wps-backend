@@ -461,7 +461,11 @@ exports.generatePdf = async (req, res) => {
     const tellyFull = (header.NamaOrgTelly || "-").trim();
     const tellyFirst = tellyFull.split(" ")[0] || "-";
 
-    const pdfBuffer = await generateLabelPdf(
+    // Klaim jatah cetak (maks 2x) secara atomik SEBELUM PDF dikirim; 403 bila habis.
+    await labelStService.incrementPrintStatus(noST, req);
+    let pdfBuffer;
+    try {
+    pdfBuffer = await generateLabelPdf(
       {
         noLabel: header.NoST,
         noST: header.NoST,
@@ -495,12 +499,11 @@ exports.generatePdf = async (req, res) => {
       // Dicetak ke dot matrix: QR nyaris tanpa bingkai agar sebesar label Java.
       { width: "105mm", qrMargin: 1 },
     );
-
-    try {
-      await labelStService.incrementPrintStatus(noST);
-    } catch (printErr) {
-      console.error("ST IncrementPrint Error:", printErr.message);
+    } catch (pdfErr) {
+      await labelStService.releasePrintStatus(noST, req).catch(() => {});
+      throw pdfErr;
     }
+
 
     res.set({
       "Content-Type": "application/pdf",
