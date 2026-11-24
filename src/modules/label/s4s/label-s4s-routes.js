@@ -3,6 +3,7 @@ const router = express.Router();
 const verifyToken = require("../../../core/middleware/verify-token");
 const attachPermissions = require("../../../core/middleware/attach-permissions");
 const requirePermission = require("../../../core/middleware/require-permission");
+const { resetPrintHandler } = require("../../../core/utils/print-limit");
 const { mastersHandler } = require("../label-masters-service");
 const ctrl = require("./label-s4s-controller");
 const { getSusunList } = require("../st/label-st-controller");
@@ -71,6 +72,13 @@ router.delete(
   "/label/s4s/:nos4s",
   requirePermission("label_s4s:delete"),
   ctrl.deleteLabel,
+);
+
+// PUT /api/label/s4s/:nos4s/print/reset -> reset HasBeenPrinted (butuh permission khusus)
+router.put(
+  "/label/s4s/:nos4s/print/reset",
+  requirePermission("label_s4s:reset_print"),
+  resetPrintHandler({ table: "S4S_h", keyCol: "NoS4S", param: "nos4s", label: "S4S" }),
 );
 
 module.exports = router;

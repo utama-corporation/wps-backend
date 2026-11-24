@@ -121,37 +121,55 @@
       /* UPDATE */
       IF EXISTS (SELECT 1 FROM inserted) AND EXISTS (SELECT 1 FROM deleted)
       BEGIN
-        INSERT dbo.AuditTrail(Action, TableName, Actor, RequestId, PK, OldData, NewData)
-        SELECT
-          'UPDATE',
-          'S4S_d',
-          @actor,
-          @rid,
-          @pk,
-          (
-            SELECT
-              d.NoS4S,
-              d.NoUrut,
-              TRY_CONVERT(decimal(18,3), d.Tebal)   AS Tebal,
-              TRY_CONVERT(decimal(18,3), d.Lebar)   AS Lebar,
-              TRY_CONVERT(decimal(18,3), d.Panjang) AS Panjang,
-              d.JmlhBatang
-            FROM deleted d
-            ORDER BY d.NoS4S, d.NoUrut
-            FOR JSON PATH
-          ),
-          (
-            SELECT
-              i.NoS4S,
-              i.NoUrut,
-              TRY_CONVERT(decimal(18,3), i.Tebal)   AS Tebal,
-              TRY_CONVERT(decimal(18,3), i.Lebar)   AS Lebar,
-              TRY_CONVERT(decimal(18,3), i.Panjang) AS Panjang,
-              i.JmlhBatang
-            FROM inserted i
-            ORDER BY i.NoS4S, i.NoUrut
-            FOR JSON PATH
-          );
+        -- Pasangkan baris lama/baru lewat PK (NoS4S, NoUrut); hanya baris yang
+        -- benar-benar berubah yang diaudit (UPDATE no-op diabaikan).
+        DECLARE @chg TABLE (NoS4S nvarchar(100) NOT NULL, NoUrut int NOT NULL, PRIMARY KEY (NoS4S, NoUrut));
+
+        INSERT @chg (NoS4S, NoUrut)
+        SELECT i.NoS4S, i.NoUrut
+        FROM inserted i
+        INNER JOIN deleted d ON d.NoS4S = i.NoS4S AND d.NoUrut = i.NoUrut
+        WHERE ISNULL(TRY_CONVERT(decimal(18,3), i.Tebal), -1)   <> ISNULL(TRY_CONVERT(decimal(18,3), d.Tebal), -1)
+           OR ISNULL(TRY_CONVERT(decimal(18,3), i.Lebar), -1)   <> ISNULL(TRY_CONVERT(decimal(18,3), d.Lebar), -1)
+           OR ISNULL(TRY_CONVERT(decimal(18,3), i.Panjang), -1) <> ISNULL(TRY_CONVERT(decimal(18,3), d.Panjang), -1)
+           OR ISNULL(i.JmlhBatang, -1) <> ISNULL(d.JmlhBatang, -1);
+
+        IF EXISTS (SELECT 1 FROM @chg)
+        BEGIN
+          INSERT dbo.AuditTrail(Action, TableName, Actor, RequestId, PK, OldData, NewData)
+          SELECT
+            'UPDATE',
+            'S4S_d',
+            @actor,
+            @rid,
+            @pk,
+            (
+              SELECT
+                d.NoS4S,
+                d.NoUrut,
+                TRY_CONVERT(decimal(18,3), d.Tebal)   AS Tebal,
+                TRY_CONVERT(decimal(18,3), d.Lebar)   AS Lebar,
+                TRY_CONVERT(decimal(18,3), d.Panjang) AS Panjang,
+                d.JmlhBatang
+              FROM deleted d
+              INNER JOIN @chg c ON c.NoS4S = d.NoS4S AND c.NoUrut = d.NoUrut
+              ORDER BY d.NoS4S, d.NoUrut
+              FOR JSON PATH
+            ),
+            (
+              SELECT
+                i.NoS4S,
+                i.NoUrut,
+                TRY_CONVERT(decimal(18,3), i.Tebal)   AS Tebal,
+                TRY_CONVERT(decimal(18,3), i.Lebar)   AS Lebar,
+                TRY_CONVERT(decimal(18,3), i.Panjang) AS Panjang,
+                i.JmlhBatang
+              FROM inserted i
+              INNER JOIN @chg c ON c.NoS4S = i.NoS4S AND c.NoUrut = i.NoUrut
+              ORDER BY i.NoS4S, i.NoUrut
+              FOR JSON PATH
+            );
+        END
       END
     END TRY
     BEGIN CATCH

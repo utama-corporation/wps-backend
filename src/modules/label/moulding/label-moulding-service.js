@@ -1,3 +1,4 @@
+const { claimPrint, releasePrint } = require("../../../core/utils/print-limit");
 const moment = require("moment");
 const { sql, poolPromise } = require("../../../core/config/db");
 
@@ -386,21 +387,18 @@ async function getLabelData(noMoulding) {
 }
 
 /** Tambah hitungan cetak label (Moulding_h.HasBeenPrinted) + waktu cetak terakhir. */
-async function incrementPrintStatus(noMoulding) {
-  const pool = await poolPromise;
-  const result = await pool
-    .request()
-    .input("no", sql.VarChar(50), noMoulding)
-    .query(`
-      UPDATE ${MASTER_TABLE}
-      SET HasBeenPrinted = COALESCE(HasBeenPrinted, 0) + 1,
-          LastPrintDate = GETDATE()
-      WHERE ${KEY_COLUMN} = @no
-    `);
-  return result.rowsAffected[0] > 0;
+/** Klaim 1 jatah cetak (maks MAX_PRINT); 403 bila batas tercapai. */
+function incrementPrintStatus(no, req) {
+  return claimPrint({ table: MASTER_TABLE, keyCol: KEY_COLUMN, no, req });
+}
+
+/** Kembalikan jatah bila PDF gagal dibuat. */
+function releasePrintStatus(no, req) {
+  return releasePrint({ table: MASTER_TABLE, keyCol: KEY_COLUMN, no, req });
 }
 
 module.exports = {
+  releasePrintStatus,
   incrementPrintStatus,
   getLabelData,
   getAllLabels,

@@ -3,6 +3,7 @@ const router = express.Router();
 const verifyToken = require("../../../core/middleware/verify-token");
 const attachPermissions = require("../../../core/middleware/attach-permissions");
 const requirePermission = require("../../../core/middleware/require-permission");
+const { resetPrintHandler } = require("../../../core/utils/print-limit");
 const { mastersHandler } = require("../label-masters-service");
 const ctrl = require("./label-snd-controller");
 const { getSusunList } = require("../st/label-st-controller");
@@ -71,6 +72,13 @@ router.delete(
   "/label/snd/:nosnd",
   requirePermission("label_snd:delete"),
   ctrl.deleteLabel,
+);
+
+// PUT /api/label/snd/:nosnd/print/reset -> reset HasBeenPrinted (butuh permission khusus)
+router.put(
+  "/label/snd/:nosnd/print/reset",
+  requirePermission("label_snd:reset_print"),
+  resetPrintHandler({ table: "Sanding_h", keyCol: "NoSanding", param: "nosnd", label: "Sanding" }),
 );
 
 module.exports = router;

@@ -1,3 +1,4 @@
+const { claimPrint, releasePrint } = require("../../../core/utils/print-limit");
 const { sql, poolPromise } = require("../../../core/config/db");
 
 const MASTER_TABLE = "ST_h";
@@ -788,19 +789,14 @@ async function getOutputByDate(date) {
  * PRINT STATUS (paritas tablet updatePrintStatus / reset)
  * ==========================================================*/
 
-async function incrementPrintStatus(noST) {
-  const pool = await poolPromise;
-  const req = pool.request();
-  req.input("noST", sql.VarChar(50), noST);
+/** Klaim 1 jatah cetak (maks MAX_PRINT); 403 bila batas tercapai. */
+function incrementPrintStatus(no, req) {
+  return claimPrint({ table: MASTER_TABLE, keyCol: KEY_COLUMN, no, req });
+}
 
-  const result = await req.query(`
-    UPDATE ${MASTER_TABLE}
-    SET HasBeenPrinted = COALESCE(HasBeenPrinted, 0) + 1,
-        LastPrintDate = GETDATE()
-    WHERE ${KEY_COLUMN} = @noST
-  `);
-
-  return result.rowsAffected[0] > 0;
+/** Kembalikan jatah bila PDF gagal dibuat. */
+function releasePrintStatus(no, req) {
+  return releasePrint({ table: MASTER_TABLE, keyCol: KEY_COLUMN, no, req });
 }
 
 async function resetPrintStatus(noST) {
@@ -907,6 +903,7 @@ async function getPdfData(noST) {
 }
 
 module.exports = {
+  releasePrintStatus,
   getHeader,
   getDetail,
   getStick,

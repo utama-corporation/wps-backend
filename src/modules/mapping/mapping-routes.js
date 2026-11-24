@@ -3,6 +3,7 @@ const verifyToken = require("../../core/middleware/verify-token");
 const moment = require("moment");
 const { sql, poolPromise } = require("../../core/config/db");
 const crypto = require("crypto");
+const { withAudit } = require("../../core/utils/with-audit");
 const router = express.Router();
 
 const formatDate = (date) => {
@@ -697,18 +698,17 @@ router.post("/label-list/save-changes", verifyToken, async (req, res) => {
         });
       }
 
-      await pool
-        .request()
-        .input("actorId", sql.VarChar, actorId)
-        .input("requestId", sql.VarChar, requestId)
-        .input("idlokasi", sql.VarChar, idlokasi)
-        .input("resultscanned", sql.VarChar, resultscanned).query(`
-                EXEC sp_set_session_context N'actor_id', @actorId;
-                EXEC sp_set_session_context N'request_id', @requestId;
+      // Context audit di-set + di-reset dalam satu transaksi (tidak bocor ke pool).
+      await withAudit({ actorId, requestId }, (tx) =>
+        tx
+          .request()
+          .input("idlokasi", sql.VarChar, idlokasi)
+          .input("resultscanned", sql.VarChar, resultscanned).query(`
                 UPDATE ${tableH}
                 SET IdLokasi = @idlokasi
                 WHERE ${columnName} = @resultscanned;
-            `);
+            `),
+      );
     }
 
     console.log(

@@ -17,16 +17,19 @@ exports.generatePdf = async (req, res) => {
     }
 
     const data = await labelSndService.getLabelData(NoSND);
-    const pdfBuffer = await generateLabelPdf(
+    // Klaim jatah cetak (maks 2x) secara atomik SEBELUM PDF dikirim; 403 bila habis.
+    await labelSndService.incrementPrintStatus(NoSND, req);
+    let pdfBuffer;
+    try {
+    pdfBuffer = await generateLabelPdf(
       { ...data, noLabel: data.noSanding },
       buildSndLabelHtml,
     );
-
-    try {
-      await labelSndService.incrementPrintStatus(NoSND);
-    } catch (printErr) {
-      console.error("Sanding IncrementPrint Error:", printErr.message);
+    } catch (pdfErr) {
+      await labelSndService.releasePrintStatus(NoSND, req).catch(() => {});
+      throw pdfErr;
     }
+
 
     res.set({
       "Content-Type": "application/pdf",

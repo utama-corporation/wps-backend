@@ -1,4 +1,5 @@
 const labelS4sService = require("./label-s4s-service");
+const { withAudit, actorFromReq } = require("../../../core/utils/with-audit");
 const { generateLabelPdf } = require("../../../core/utils/pdf/label-generator");
 const {
   buildS4sLabelHtml,
@@ -17,15 +18,17 @@ exports.generatePdf = async (req, res) => {
     }
 
     const data = await labelS4sService.getLabelData(NoS4S);
-    const pdfBuffer = await generateLabelPdf(
-      { ...data, noLabel: data.noS4S },
-      buildS4sLabelHtml,
-    );
-
+    // Klaim jatah cetak (maks 2x) secara atomik SEBELUM PDF dikirim; 403 bila habis.
+    await labelS4sService.incrementPrintStatus(NoS4S, req);
+    let pdfBuffer;
     try {
-      await labelS4sService.incrementPrintStatus(NoS4S);
-    } catch (printErr) {
-      console.error("S4S IncrementPrint Error:", printErr.message);
+      pdfBuffer = await generateLabelPdf(
+        { ...data, noLabel: data.noS4S },
+        buildS4sLabelHtml,
+      );
+    } catch (pdfErr) {
+      await labelS4sService.releasePrintStatus(NoS4S, req).catch(() => {});
+      throw pdfErr;
     }
 
     res.set({
@@ -173,12 +176,13 @@ exports.updateLabel = async (req, res) => {
         .json({ success: false, message: "nos4s wajib diisi" });
     }
 
-    await labelS4sService.updateLabel(NoS4S, req.body);
-
-    // Update detail if provided
-    if (req.body.details && Array.isArray(req.body.details)) {
-      await labelS4sService.updateDetail(NoS4S, req.body.details);
-    }
+    // Header + detail dalam satu transaksi, satu request_id audit.
+    await withAudit(actorFromReq(req), async (tx) => {
+      await labelS4sService.updateLabel(NoS4S, req.body, tx);
+      if (req.body.details && Array.isArray(req.body.details)) {
+        await labelS4sService.updateDetail(NoS4S, req.body.details, tx);
+      }
+    });
 
     return res.status(200).json({
       success: true,
@@ -207,7 +211,9 @@ exports.deleteLabel = async (req, res) => {
         .json({ success: false, message: "nos4s wajib diisi" });
     }
 
-    await labelS4sService.deleteLabel(NoS4S);
+    await withAudit(actorFromReq(req), (tx) =>
+      labelS4sService.deleteLabel(NoS4S, tx),
+    );
     return res.status(200).json({
       success: true,
       message: `Label S4S ${NoS4S} berhasil dihapus`,

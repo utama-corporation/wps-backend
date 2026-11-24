@@ -3,6 +3,7 @@ const router = express.Router();
 const verifyToken = require("../../../core/middleware/verify-token");
 const attachPermissions = require("../../../core/middleware/attach-permissions");
 const requirePermission = require("../../../core/middleware/require-permission");
+const { resetPrintHandler } = require("../../../core/utils/print-limit");
 const { mastersHandler } = require("../label-masters-service");
 const ctrl = require("./label-lmt-controller");
 const { getSusunList } = require("../st/label-st-controller");
@@ -72,6 +73,13 @@ router.get(
   "/label/lmt/:nolmt",
   requirePermission("label_lmt:read"),
   ctrl.getLabelData,
+);
+
+// PUT /api/label/lmt/:nolmt/print/reset -> reset HasBeenPrinted (butuh permission khusus)
+router.put(
+  "/label/lmt/:nolmt/print/reset",
+  requirePermission("label_lmt:reset_print"),
+  resetPrintHandler({ table: "Laminating_h", keyCol: "NoLaminating", param: "nolmt", label: "Laminating" }),
 );
 
 module.exports = router;
