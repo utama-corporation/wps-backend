@@ -275,33 +275,36 @@ async function updateDetail(noS4S, details) {
 }
 
 /* ============================================================
- * DELETE LABEL (header + detail + output refs)
+ * DELETE LABEL (tautan output + detail + header, dalam satu transaksi)
+ * Paritas modul label lain (FJ, Moulding, ...): tautan BongkarSusunOutputS4S
+ * ikut dihapus agar tidak tertinggal saat label hasil Bongkar Susun dihapus.
  * ==========================================================*/
 
 async function deleteLabel(noS4S) {
   await assertPeriodeTerbuka(await getTanggalLabel(noS4S));
   const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
 
-  // Delete output references first
-  const outReq1 = pool.request();
-  outReq1.input("noS4S", sql.VarChar(50), noS4S);
-  await outReq1.query(`DELETE FROM S4SProduksiOutput WHERE NoS4S = @noS4S`);
-
-  const outReq2 = pool.request();
-  outReq2.input("noS4S", sql.VarChar(50), noS4S);
-  await outReq2.query(`DELETE FROM CCAkhirProduksiOutputS4S WHERE NoS4S = @noS4S`);
-
-  // Delete detail
-  const detReq = pool.request();
-  detReq.input("noS4S", sql.VarChar(50), noS4S);
-  await detReq.query(`DELETE FROM ${DETAIL_TABLE} WHERE ${KEY_COLUMN} = @noS4S`);
-
-  // Delete header
-  const hdrReq = pool.request();
-  hdrReq.input("noS4S", sql.VarChar(50), noS4S);
-  await hdrReq.query(`DELETE FROM ${MASTER_TABLE} WHERE ${KEY_COLUMN} = @noS4S`);
-
-  return { noS4S };
+  try {
+    const tables = [
+      "BongkarSusunOutputS4S",
+      "S4SProduksiOutput",
+      "CCAkhirProduksiOutputS4S",
+      DETAIL_TABLE,
+      MASTER_TABLE,
+    ];
+    for (const table of tables) {
+      const req = new sql.Request(transaction);
+      req.input("noS4S", sql.VarChar(50), noS4S);
+      await req.query(`DELETE FROM ${table} WHERE ${KEY_COLUMN} = @noS4S`);
+    }
+    await transaction.commit();
+    return { noS4S };
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 }
 
 /* ============================================================
