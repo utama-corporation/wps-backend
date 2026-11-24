@@ -95,6 +95,17 @@ exports.deleteHeader = async (req, res) => {
   }
 };
 
+/* DELETE /api/bongkar-susun/:no/output?label= — lepas label output (label tidak dihapus) */
+exports.deleteOutputLabel = async (req, res) => {
+  try {
+    const label = req.query.label || req.body?.label;
+    const data = await svc.deleteOutputLabel(req.params.no, label, req.username);
+    res.json({ success: true, data, message: "Label output dilepas dari Bongkar Susun" });
+  } catch (err) {
+    fail(res, err);
+  }
+};
+
 /* GET /api/bongkar-susun/:no/history */
 exports.getHistory = async (req, res) => {
   try {

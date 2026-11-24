@@ -8,7 +8,8 @@
     "test:label-modules": "node test/label-modules.test.cjs",
     "test:dashboard-home": "node test/dashboard-home.test.cjs",
     "test:my-work": "node test/my-work.test.cjs",
-    "test:dashboard-analytics": "node test/dashboard-analytics.test.cjs"
+    "test:dashboard-analytics": "node test/dashboard-analytics.test.cjs",
+    "test:bongkar-susun-output": "node test/bongkar-susun-output.test.cjs"
   },
   "author": "",
   "license": "ISC",
