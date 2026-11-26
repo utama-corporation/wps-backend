@@ -29,8 +29,8 @@ sql.Request.prototype.query = function (command, ...rest) {
     typeof rest[0] !== 'function'
   ) {
     const store = auditStore.getStore();
-    this.input('__audit_actor', sql.VarChar(128), store?.actorId != null ? String(store.actorId) : null);
-    this.input('__audit_rid', sql.VarChar(64), store?.requestId ?? null);
+    this.replaceInput('__audit_actor', sql.VarChar(128), store?.actorId != null ? String(store.actorId) : null);
+    this.replaceInput('__audit_rid', sql.VarChar(64), store?.requestId ?? null);
     command =
       "SET NOCOUNT ON; EXEC sp_set_session_context N'actor_id', @__audit_actor; " +
       "EXEC sp_set_session_context N'request_id', @__audit_rid; SET NOCOUNT OFF;\n" +
