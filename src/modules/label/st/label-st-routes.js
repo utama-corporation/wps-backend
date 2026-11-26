@@ -24,6 +24,13 @@ router.get(
 );
 
 // GET /api/label/st/masters -> all combo data + tellyDefault
+// GET /api/label/st/po-lock -> ukuran yang diizinkan PO untuk form label
+router.get(
+  "/label/st/po-lock",
+  requirePermission("label_st:read"),
+  ctrl.getPOLock,
+);
+
 router.get(
   "/label/st/masters",
   requirePermission("label_st:read"),

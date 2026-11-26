@@ -531,6 +531,15 @@ function toIsBagusKulit(value) {
 }
 
 async function createLabel(data) {
+  // Penerimaan pembelian ber-PO: ukuran terkunci ke baris PO.
+  if (data.noPenerimaanSTPembelian) {
+    await require("../../po-supplier-st/po-supplier-st-lock").assertLabelSesuaiPO({
+      noPenerimaan: data.noPenerimaanSTPembelian,
+      idJenisKayu: data.idJenisKayu,
+      idUOMTebal: data.idUOMTebal,
+      details: data.details || [],
+    });
+  }
   const pool = await poolPromise;
   const transaction = new sql.Transaction(pool);
   await transaction.begin();

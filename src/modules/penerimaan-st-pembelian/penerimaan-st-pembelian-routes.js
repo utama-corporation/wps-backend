@@ -12,6 +12,8 @@ const BASE = "/penerimaan-st-pembelian";
 
 router.get(BASE, verifyToken, attachPermissions, requirePermission("label_st:read"), ctrl.getAll);
 router.get(`${BASE}/masters`, verifyToken, attachPermissions, requirePermission("label_st:read"), ctrl.getMasters);
+router.get(`${BASE}/po-open`, verifyToken, attachPermissions, requirePermission("label_st:read"), ctrl.getOpenPO);
+router.get(`${BASE}/po-open/:noPO`, verifyToken, attachPermissions, requirePermission("label_st:read"), ctrl.getPOSummary);
 router.get(`${BASE}/:no/labels`, verifyToken, attachPermissions, requirePermission("label_st:read"), ctrl.getLabels);
 router.get(`${BASE}/:no/reject`, verifyToken, attachPermissions, requirePermission("label_st:read"), ctrl.getRejects);
 router.get(`${BASE}/:no/pdf`, verifyToken, attachPermissions, requirePermission("label_st:read"), ctrl.generatePdf);

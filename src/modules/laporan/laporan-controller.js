@@ -419,6 +419,10 @@ const PDF_REPORTS = {
     path: "/dashboard-moulding/pdf",
     params: ["start_date", "end_date"],
   },
+  "moulding-reproses": {
+    path: "/moulding/moulding-reproses-dan-hasil-reproses/pdf",
+    params: ["start_date", "end_date"],
+  },
   "mutasi-laminating": {
     path: "/mutasi-laminating/pdf",
     params: ["TglAwal", "TglAkhir"],

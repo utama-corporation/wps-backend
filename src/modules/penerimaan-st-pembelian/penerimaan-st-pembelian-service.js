@@ -27,7 +27,7 @@ const SELECT_HEADER = `
   SELECT
     p.NoPenerimaanST, p.TglLaporan, p.TglMasuk, p.IdSupplier, s.NmSupplier AS Supplier,
     p.NoTruk, p.NoPlat, p.Suket, p.TonSJ, p.Note, p.IsKering,
-    p.IdTanah, t.NamaTanah AS SuratTanah
+    p.IdTanah, t.NamaTanah AS SuratTanah, p.NoPO
   FROM ${HEADER} p
   LEFT JOIN MstSupplier s ON s.IdSupplier = p.IdSupplier
   LEFT JOIN MstSuratTanah t ON t.IdTanah = p.IdTanah
@@ -40,7 +40,7 @@ async function getAll({ search } = {}) {
   let where = "";
   if (keyword) {
     req.input("kw", sql.VarChar(100), `%${keyword}%`);
-    where = `WHERE p.NoPenerimaanST LIKE @kw OR s.NmSupplier LIKE @kw OR p.NoPlat LIKE @kw OR p.NoTruk LIKE @kw`;
+    where = `WHERE p.NoPenerimaanST LIKE @kw OR s.NmSupplier LIKE @kw OR p.NoPlat LIKE @kw OR p.NoTruk LIKE @kw OR p.NoPO LIKE @kw`;
   }
   const result = await req.query(`${SELECT_HEADER} ${where} ORDER BY p.NoPenerimaanST DESC`);
   return result.recordset;
@@ -137,21 +137,32 @@ function validateHeader(d) {
   if (!String(d.tonSJ ?? "").trim()) throw httpError(400, "Ton SJ harus diisi");
 }
 
+/** PO opsional: string kosong dianggap tanpa PO. */
+const normalizeNoPO = (v) => String(v ?? "").trim() || null;
+
+/** require di sini untuk menghindari circular import (po service memakai hitungTon dari file ini). */
+const assertPOUsable = (...args) =>
+  require("../po-supplier-st/po-supplier-st-service").assertPOUsable(...args);
+
 async function create(data) {
   validateHeader(data);
+  const noPO = normalizeNoPO(data.noPO);
   const pool = await poolPromise;
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
   try {
+    // Kunci PO lebih dulu (urutan kunci sama dengan tutup/hapus PO).
+    await assertPOUsable(transaction, noPO, data.idSupplier);
     const noPenerimaanST = await nextNo(transaction);
     const req = new sql.Request(transaction);
     req.input("no", sql.VarChar(50), noPenerimaanST);
     bindHeader(req, data);
+    req.input("noPO", sql.VarChar(13), noPO);
     await req.query(`
       INSERT INTO ${HEADER}
-        (NoPenerimaanST, TglLaporan, TglMasuk, IdSupplier, IdTanah, NoTruk, NoPlat, Suket, TonSJ, Note, IsKering)
+        (NoPenerimaanST, TglLaporan, TglMasuk, IdSupplier, IdTanah, NoTruk, NoPlat, Suket, TonSJ, Note, IsKering, NoPO)
       VALUES
-        (@no, @tglLaporan, @tglMasuk, @idSupplier, @idTanah, @noTruk, @noPlat, @suket, @tonSJ, @note, @isKering)
+        (@no, @tglLaporan, @tglMasuk, @idSupplier, @idTanah, @noTruk, @noPlat, @suket, @tonSJ, @note, @isKering, @noPO)
     `);
     await transaction.commit();
     return { noPenerimaanST };
@@ -165,17 +176,32 @@ async function update(no, data) {
   validateHeader(data);
   const existing = await getByNo(no);
   if (!existing) throw httpError(404, "Penerimaan ST tidak ditemukan");
+  const currentNoPO = existing.NoPO || null;
+  // Request tanpa field noPO tidak mengubah hubungan PO yang sudah ada.
+  const noPO = data.noPO === undefined ? currentNoPO : normalizeNoPO(data.noPO);
+
   const pool = await poolPromise;
-  const req = pool.request();
-  req.input("no", sql.VarChar(50), no);
-  bindHeader(req, data);
-  await req.query(`
-    UPDATE ${HEADER}
-    SET TglLaporan = @tglLaporan, TglMasuk = @tglMasuk, IdSupplier = @idSupplier, IdTanah = @idTanah,
-        NoTruk = @noTruk, NoPlat = @noPlat, Suket = @suket, TonSJ = @tonSJ, Note = @note, IsKering = @isKering
-    WHERE NoPenerimaanST = @no
-  `);
-  return { noPenerimaanST: no };
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    await assertPOUsable(transaction, noPO, data.idSupplier, currentNoPO);
+    const req = new sql.Request(transaction);
+    req.input("no", sql.VarChar(50), no);
+    req.input("noPO", sql.VarChar(13), noPO);
+    bindHeader(req, data);
+    await req.query(`
+      UPDATE ${HEADER}
+      SET TglLaporan = @tglLaporan, TglMasuk = @tglMasuk, IdSupplier = @idSupplier, IdTanah = @idTanah,
+          NoTruk = @noTruk, NoPlat = @noPlat, Suket = @suket, TonSJ = @tonSJ, Note = @note, IsKering = @isKering,
+          NoPO = @noPO
+      WHERE NoPenerimaanST = @no
+    `);
+    await transaction.commit();
+    return { noPenerimaanST: no };
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 }
 
 async function remove(no) {

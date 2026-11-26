@@ -1,4 +1,5 @@
 const labelStService = require("./label-st-service");
+const poLock = require("../../po-supplier-st/po-supplier-st-lock");
 const { generateLabelPdf } = require("../../../core/utils/pdf/label-generator");
 const {
   buildStLabelHtml,
@@ -140,6 +141,14 @@ exports.updateLabel = async (req, res) => {
         .json({ success: false, message: "nost wajib diisi" });
     }
 
+    // Cek kunci PO SEBELUM ada yang ditulis (header & detail disimpan terpisah).
+    await poLock.assertLabelSesuaiPO({
+      noST,
+      idJenisKayu: req.body.idJenisKayu,
+      idUOMTebal: req.body.idUOMTebal,
+      details: Array.isArray(req.body.details) ? req.body.details : undefined,
+    });
+
     await labelStService.updateLabel(noST, req.body);
 
     if (req.body.details && Array.isArray(req.body.details)) {
@@ -266,7 +275,26 @@ exports.createLabel = async (req, res) => {
     });
   } catch (err) {
     console.error("ST Create Error:", err);
-    return res.status(500).json({
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      message: err.message || "Terjadi kesalahan server",
+    });
+  }
+};
+
+/**
+ * GET /api/label/st/po-lock?noPenerimaan=|noST= -> kunci PO untuk form label (null = bebas)
+ */
+exports.getPOLock = async (req, res) => {
+  try {
+    const data = await poLock.getPOLock({
+      noPenerimaan: String(req.query.noPenerimaan || "").trim(),
+      noST: String(req.query.noST || "").trim(),
+    });
+    return res.status(200).json({ success: true, message: "Kunci PO berhasil diambil", data });
+  } catch (err) {
+    console.error("ST POLock Error:", err);
+    return res.status(err.statusCode || 500).json({
       success: false,
       message: err.message || "Terjadi kesalahan server",
     });

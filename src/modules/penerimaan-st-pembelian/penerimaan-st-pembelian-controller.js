@@ -1,4 +1,5 @@
 const service = require("./penerimaan-st-pembelian-service");
+const poService = require("../po-supplier-st/po-supplier-st-service");
 
 // Cetak memakai service laporan (open-api-report). Autentikasi: token JWT user diteruskan apa adanya.
 // Override via REPORT_API_ST_PEMBELIAN_URL.
@@ -32,6 +33,25 @@ exports.getMasters = async (req, res) => {
     return res.json({ success: true, message: "Masters berhasil diambil", data: { supplier, surat_tanah } });
   } catch (err) {
     return fail(res, err, "PenerimaanSTPembelian Masters Error");
+  }
+};
+
+/* PO Open per supplier + ringkasannya, untuk form ST Pembelian (cukup label_st:read). */
+exports.getOpenPO = async (req, res) => {
+  try {
+    const data = await poService.getOpenBySupplier(req.query.idSupplier);
+    return res.json({ success: true, message: "List PO berhasil diambil", data });
+  } catch (err) {
+    return fail(res, err, "PenerimaanSTPembelian OpenPO Error");
+  }
+};
+
+exports.getPOSummary = async (req, res) => {
+  try {
+    const { header, lines, progres } = await poService.getByNo(String(req.params.noPO || "").trim());
+    return res.json({ success: true, message: "Ringkasan PO berhasil diambil", data: { header, lines, progres } });
+  } catch (err) {
+    return fail(res, err, "PenerimaanSTPembelian POSummary Error");
   }
 };
 

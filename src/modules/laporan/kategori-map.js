@@ -48,6 +48,7 @@ module.exports = {
   "label-sanding": "sanding",
   "label-st-hidup": "st",
   "lembur-per-mesin": "management",
+  "moulding-reproses": "moulding",
   "mutasi-bj": "bj",
   "mutasi-bj-jenis": "bj",
   "mutasi-cca": "cca",
