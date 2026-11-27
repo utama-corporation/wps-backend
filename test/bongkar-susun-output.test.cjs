@@ -178,13 +178,26 @@ const writes = (queries) =>
       module,
       exports: module.exports,
       console,
-      require: (n) => (n.includes("/db") ? db : n.includes("periode-lock") ? { assertPeriodeTerbuka: async () => {} } : n === "moment" ? () => ({ format: () => "" }) : require(n)),
+      require: (n) =>
+        n.includes("/db")
+          ? db
+          : n.includes("periode-lock")
+            ? { assertPeriodeTerbuka: async () => {} }
+            : n.includes("print-limit")
+              ? { claimPrint: async () => true, releasePrint: async () => {} }
+              : n === "moment"
+                ? () => ({ format: () => "" })
+                : require(n),
     });
-    await module.exports.deleteLabel("R.000123");
+    // Sejak Print Limit/Audit Trail, transaksi dibuka controller (withAudit) lalu diteruskan ke service.
+    const auditTx = { request: () => new Request(true) };
+    await module.exports.deleteLabel("R.000123", auditTx);
     const deletes = queries.filter((x) => x.q.startsWith("DELETE FROM")).map((x) => x.q.split(" ")[2]);
     assert.deepEqual(deletes, ["BongkarSusunOutputS4S", "S4SProduksiOutput", "CCAkhirProduksiOutputS4S", "S4S_d", "S4S_h"]);
-    assert.ok(queries.filter((x) => x.q.startsWith("DELETE FROM")).every((x) => x.inTx));
-    assert.ok(tx.committed && !tx.rolledBack);
+    assert.ok(queries.filter((x) => x.q.startsWith("DELETE FROM")).every((x) => x.inTx), "semua DELETE lewat transaksi controller");
+    assert.ok(!tx.committed && !tx.rolledBack, "service tidak membuka/menutup transaksi sendiri");
+    const ctrl = fs.readFileSync(path.join(root, "src/modules/label/s4s/label-s4s-controller.js"), "utf8");
+    assert.ok(/withAudit\([^)]*\),?\s*\(tx\)\s*=>\s*\n?\s*labelS4sService\.deleteLabel\(NoS4S, tx\)/.test(ctrl), "controller membungkus hapus dalam transaksi audit");
     console.log("PASS hapus label S4S (menu Label): tautan BongkarSusunOutputS4S ikut, dalam transaksi");
   }
 

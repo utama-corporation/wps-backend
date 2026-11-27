@@ -107,6 +107,22 @@ router.delete(
   ctrl.deleteLabel,
 );
 
+// POST /api/label/st/preview-upah -> preview upah kru stick saat input/ubah label.
+// Hanya menghitung (tidak menulis): cukup salah satu izin buat ATAU ubah label.
+router.post(
+  "/label/st/preview-upah",
+  (req, res, next) => {
+    const p = req.userPermissions;
+    if (p && (p.has("*") || p.has("label_st:create") || p.has("label_st:update"))) return next();
+    return res.status(403).json({
+      success: false,
+      message: "Forbidden: insufficient permission",
+      required: ["label_st:create", "label_st:update"],
+    });
+  },
+  ctrl.previewUpah,
+);
+
 // POST /api/label/st -> create new label ST
 router.post(
   "/label/st",

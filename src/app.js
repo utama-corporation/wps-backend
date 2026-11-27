@@ -51,6 +51,7 @@ const masterSpecialConditionRoutes = require("./modules/master-special-condition
 const masterVacuumRoutes = require("./modules/master-vacuum/master-vacuum-routes");
 const masterStickByRoutes = require("./modules/master-stick-by/master-stick-by-routes");
 const masterGradeStickRoutes = require("./modules/master-grade-stick/master-grade-stick-routes");
+const masterTarifUpahStickRoutes = require("./modules/master-tarif-upah-stick/master-tarif-upah-stick-routes");
 const masterGradeAbcRoutes = require("./modules/master-grade-abc/master-grade-abc-routes");
 const masterStickRoutes = require("./modules/master-stick/master-stick-routes");
 const masterChemicalTankRoutes = require("./modules/master-chemical-tank/master-chemical-tank-routes");
@@ -109,6 +110,7 @@ const bongkarSusunRoutes = require('./modules/bongkar-susun/bongkar-susun-routes
 const gradeAbcRoutes = require('./modules/grade-abc/grade-abc-routes');
 const nyangkutManageRoutes = require('./modules/nyangkut/nyangkut-manage-routes');
 const laporanRoutes = require('./modules/laporan/laporan-routes');
+const laporanPengupahanRoutes = require('./modules/laporan-pengupahan/laporan-pengupahan-routes');
 const labelListRoutes = require('./modules/label-list/label-list-routes');
 
 const app = express();
@@ -180,6 +182,7 @@ app.use("/api/master/special-condition", masterSpecialConditionRoutes);
 app.use("/api/master/vacuum", masterVacuumRoutes);
 app.use("/api/master/stick-by", masterStickByRoutes);
 app.use("/api/master/grade-stick", masterGradeStickRoutes);
+app.use("/api/master/tarif-upah-stick", masterTarifUpahStickRoutes);
 app.use("/api/master/grade-abc", masterGradeAbcRoutes);
 app.use("/api/master/stick", masterStickRoutes);
 app.use("/api/master/chemical-tank", masterChemicalTankRoutes);
@@ -236,6 +239,7 @@ app.use("/api", penjualanStRoutes);
 app.use("/api", bongkarSusunRoutes);
 app.use("/api", gradeAbcRoutes);
 app.use("/api", nyangkutManageRoutes);
+app.use("/api/laporan/pengupahan", laporanPengupahanRoutes);
 app.use("/api/laporan", laporanRoutes);
 // Bukan "/api/label-list": path itu sudah dipakai modul mapping (tablet).
 app.use("/api/label-explorer", labelListRoutes);

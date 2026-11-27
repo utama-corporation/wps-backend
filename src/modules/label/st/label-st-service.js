@@ -1,5 +1,6 @@
 const { claimPrint, releasePrint } = require("../../../core/utils/print-limit");
 const { sql, poolPromise } = require("../../../core/config/db");
+const upahStick = require("./upah-stick");
 
 const MASTER_TABLE = "ST_h";
 const DETAIL_TABLE = "ST_d";
@@ -63,7 +64,8 @@ async function getHeader(noST) {
     WHERE A.${KEY_COLUMN} = @noST
   `);
 
-  return result.recordset[0] || null;
+  const header = result.recordset[0] || null;
+  return header && { ...header, ...(await upahStick.bacaUpahStick(noST)) };
 }
 
 /* ============================================================
@@ -309,7 +311,8 @@ async function getHeaderForEdit(noST) {
     WHERE A.${KEY_COLUMN} = @noST
   `);
 
-  return result.recordset[0] || null;
+  const header = result.recordset[0] || null;
+  return header && { ...header, ...(await upahStick.bacaUpahStick(noST)) };
 }
 
 /* ============================================================
@@ -318,49 +321,61 @@ async function getHeaderForEdit(noST) {
 
 async function updateLabel(noST, data) {
   const pool = await poolPromise;
-  const req = pool.request();
-  req.input("noST", sql.VarChar(50), noST);
-  req.input("idJenisKayu", sql.Int, data.idJenisKayu || null);
-  req.input("idUOMTebal", sql.Int, data.idUOMTebal || null);
-  req.input("idUOMPanjang", sql.Int, data.idUOMPanjang || null);
-  req.input("idStickBy", sql.Int, data.idStickBy || null);
-  req.input("noSPK", sql.VarChar(50), data.noSPK || null);
-  req.input("remark", sql.VarChar(200), data.remark || null);
-  req.input("idOrgTelly", sql.Int, data.idOrgTelly || null);
-  req.input("startKering", sql.Bit, data.startKering ? 1 : 0);
-  req.input("isBagusKulit", sql.Int, toIsBagusKulit(data.isBagusKulit));
-  req.input("noKayuBulat", sql.VarChar(50), data.noKayuBulat || null);
-  req.input("vacuumDate", sql.Date, data.vacuumDate || null);
-  req.input("dateCreate", sql.Date, data.dateCreate || null);
-  req.input("isSLP", sql.Bit, data.isSLP ? 1 : 0);
-  req.input("isSticked", sql.Bit, data.isSticked ? 1 : 0);
-  req.input("isUpah", sql.Bit, data.isUpah ? 1 : 0);
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    await assertKbJenisKayu(
+      new sql.Request(transaction),
+      data.noKayuBulat,
+      data.idJenisKayu,
+    );
+    const req = new sql.Request(transaction);
+    req.input("noST", sql.VarChar(50), noST);
+    req.input("idJenisKayu", sql.Int, data.idJenisKayu || null);
+    req.input("idUOMTebal", sql.Int, data.idUOMTebal || null);
+    req.input("idUOMPanjang", sql.Int, data.idUOMPanjang || null);
+    req.input("idStickBy", sql.Int, data.idStickBy || null);
+    req.input("noSPK", sql.VarChar(50), data.noSPK || null);
+    req.input("remark", sql.VarChar(200), data.remark || null);
+    req.input("idOrgTelly", sql.Int, data.idOrgTelly || null);
+    req.input("startKering", sql.Bit, data.startKering ? 1 : 0);
+    req.input("isBagusKulit", sql.Int, toIsBagusKulit(data.isBagusKulit));
+    req.input("noKayuBulat", sql.VarChar(50), data.noKayuBulat || null);
+    req.input("vacuumDate", sql.Date, data.vacuumDate || null);
+    req.input("dateCreate", sql.Date, data.dateCreate || null);
+    req.input("isSLP", sql.Bit, data.isSLP ? 1 : 0);
+    req.input("isSticked", sql.Bit, data.isSticked ? 1 : 0);
+    req.input("isUpah", sql.Bit, data.isUpah ? 1 : 0);
 
-  // Paritas tablet: IdLokasi = L01 jika StartKering 0, selain itu NULL
-  req.input("idLokasi", sql.VarChar(20), data.startKering ? null : "L01");
+    // Paritas tablet: IdLokasi = L01 jika StartKering 0, selain itu NULL
+    req.input("idLokasi", sql.VarChar(20), data.startKering ? null : "L01");
 
-  await req.query(`
-    UPDATE ${MASTER_TABLE}
-    SET IdJenisKayu = @idJenisKayu,
-        IdUOMTblLebar = @idUOMTebal,
-        IdUOMPanjang = @idUOMPanjang,
-        IdStickBy = @idStickBy,
-        NoSPK = @noSPK,
-        IdLokasi = @idLokasi,
-        Remark = @remark,
-        IdOrgTelly = @idOrgTelly,
-        StartKering = @startKering,
-        IsBagusKulit = @isBagusKulit,
-        NoKayuBulat = @noKayuBulat,
-        VacuumDate = @vacuumDate,
-        DateCreate = @dateCreate,
-        IsSLP = @isSLP,
-        IsSticked = @isSticked,
-        IsUpah = @isUpah
-    WHERE ${KEY_COLUMN} = @noST
-  `);
-
-  return { noST };
+    await req.query(`
+      UPDATE ${MASTER_TABLE}
+      SET IdJenisKayu = @idJenisKayu,
+          IdUOMTblLebar = @idUOMTebal,
+          IdUOMPanjang = @idUOMPanjang,
+          IdStickBy = @idStickBy,
+          NoSPK = @noSPK,
+          IdLokasi = @idLokasi,
+          Remark = @remark,
+          IdOrgTelly = @idOrgTelly,
+          StartKering = @startKering,
+          IsBagusKulit = @isBagusKulit,
+          NoKayuBulat = @noKayuBulat,
+          VacuumDate = @vacuumDate,
+          DateCreate = @dateCreate,
+          IsSLP = @isSLP,
+          IsSticked = @isSticked,
+          IsUpah = @isUpah
+      WHERE ${KEY_COLUMN} = @noST
+    `);
+    await transaction.commit();
+    return { noST };
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 }
 
 /* ============================================================
@@ -521,8 +536,51 @@ async function lookupNoKB(noKB) {
   return result.recordset[0] || null;
 }
 
+async function assertKbJenisKayu(request, noKB, idJenisKayu) {
+  const no = String(noKB || "").trim();
+  if (!no) return;
+  if (idJenisKayu == null || String(idJenisKayu).trim() === "") {
+    const err = new Error("Jenis kayu wajib diisi.");
+    err.statusCode = 400;
+    throw err;
+  }
+  const result = await request
+    .input("noKB", sql.VarChar(50), no)
+    .input("idJenisKayu", sql.Int, idJenisKayu)
+    .query(
+      `SELECT k.IdGroup AS KbIdGroup, j.IdGroup AS LabelIdGroup
+       FROM KayuBulat_h kb WITH (UPDLOCK, HOLDLOCK)
+       INNER JOIN MstJenisKayu k WITH (UPDLOCK, HOLDLOCK)
+         ON k.IdJenisKayu = kb.IdJenisKayu
+       LEFT JOIN MstJenisKayu j WITH (UPDLOCK, HOLDLOCK)
+         ON j.IdJenisKayu = @idJenisKayu
+       WHERE kb.NoKayuBulat = @noKB`,
+    );
+  const kb = result.recordset[0];
+  if (!kb) {
+    const err = new Error("No Kayu Bulat tidak ditemukan.");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (kb.LabelIdGroup == null) {
+    const err = new Error("Jenis kayu tidak ditemukan.");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (
+    kb.KbIdGroup == null ||
+    Number(kb.KbIdGroup) !== Number(kb.LabelIdGroup)
+  ) {
+    const err = new Error(
+      "Jenis kayu label harus satu kelompok dengan No Kayu Bulat.",
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+}
+
 /* ============================================================
- * CREATE LABEL ST (insert ST_h + ST_d + STStick)
+ * CREATE LABEL (insert ST_h + ST_d + STStick)
  * ==========================================================*/
 
 function toIsBagusKulit(value) {
@@ -532,6 +590,8 @@ function toIsBagusKulit(value) {
 }
 
 async function createLabel(data) {
+  // Validasi jumlah tingkat sebelum apa pun ditulis.
+  const jumlahTingkat = upahStick.parseJumlahTingkat(data);
   // Penerimaan pembelian ber-PO: ukuran terkunci ke baris PO.
   if (data.noPenerimaanSTPembelian) {
     await require("../../po-supplier-st/po-supplier-st-lock").assertLabelSesuaiPO({
@@ -548,6 +608,11 @@ async function createLabel(data) {
   console.log("ST CREATE payload:", JSON.stringify(data));
 
   try {
+    await assertKbJenisKayu(
+      new sql.Request(transaction),
+      data.noKayuBulat,
+      data.idJenisKayu,
+    );
     // Nomor dialokasikan di dalam transaksi: baris MAX di-lock sampai
     // commit, jadi dua request tidak dapat nomor yang sama.
     let noST = String(data.noST ?? "").trim();
@@ -653,6 +718,9 @@ async function createLabel(data) {
         VALUES (@noPen, @noST)
       `);
     }
+
+    // Upah kru stick dari detail yang baru disimpan (satu transaksi).
+    await upahStick.simpanUpahStick(transaction, noST, jumlahTingkat);
 
     await transaction.commit();
     return { noST, noBongkarSusun: data.noBongkarSusun || null };

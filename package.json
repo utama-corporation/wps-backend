@@ -9,7 +9,9 @@
     "test:dashboard-home": "node test/dashboard-home.test.cjs",
     "test:my-work": "node test/my-work.test.cjs",
     "test:dashboard-analytics": "node test/dashboard-analytics.test.cjs",
-    "test:bongkar-susun-output": "node test/bongkar-susun-output.test.cjs"
+    "test:bongkar-susun-output": "node test/bongkar-susun-output.test.cjs",
+    "test:tarif-upah-stick": "node test/tarif-upah-stick.test.cjs",
+    "test:laporan-pengupahan": "node test/laporan-pengupahan.test.cjs"
   },
   "author": "",
   "license": "ISC",

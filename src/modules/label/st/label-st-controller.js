@@ -1,5 +1,6 @@
 const labelStService = require("./label-st-service");
 const poLock = require("../../po-supplier-st/po-supplier-st-lock");
+const upahStick = require("./upah-stick");
 const { generateLabelPdf } = require("../../../core/utils/pdf/label-generator");
 const {
   buildStLabelHtml,
@@ -141,6 +142,9 @@ exports.updateLabel = async (req, res) => {
         .json({ success: false, message: "nost wajib diisi" });
     }
 
+    // Validasi jumlah tingkat juga SEBELUM ada yang ditulis.
+    const jumlahTingkat = upahStick.parseJumlahTingkat(req.body);
+
     // Cek kunci PO SEBELUM ada yang ditulis (header & detail disimpan terpisah).
     await poLock.assertLabelSesuaiPO({
       noST,
@@ -162,6 +166,9 @@ exports.updateLabel = async (req, res) => {
     // Link bongkar susun: kirim noBongkarSusun untuk menautkan,
     // null/kosong untuk melepas (paritas tablet: delete + insert)
     await labelStService.replaceBongkarSusun(noST, req.body.noBongkarSusun || null);
+
+    // Upah kru stick dihitung ulang dari header & detail yang baru disimpan.
+    await upahStick.hitungUlangUpahStick(noST, jumlahTingkat);
 
     return res.status(200).json({
       success: true,
@@ -276,6 +283,27 @@ exports.createLabel = async (req, res) => {
   } catch (err) {
     console.error("ST Create Error:", err);
     return res.status(err.statusCode || 500).json({
+      success: false,
+      message: err.message || "Terjadi kesalahan server",
+    });
+  }
+};
+
+/**
+ * POST /api/label/st/preview-upah -> hitung upah stick tanpa menyimpan.
+ */
+exports.previewUpah = async (req, res) => {
+  try {
+    const data = await upahStick.previewUpah(req.body || {});
+    return res.status(200).json({
+      success: true,
+      message: "Preview upah stick berhasil dihitung",
+      data,
+    });
+  } catch (err) {
+    console.error("ST PreviewUpah Error:", err);
+    const status = err.statusCode || err.status || 500;
+    return res.status(status).json({
       success: false,
       message: err.message || "Terjadi kesalahan server",
     });
