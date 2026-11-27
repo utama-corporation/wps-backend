@@ -506,6 +506,7 @@ async function lookupNoKB(noKB) {
     SELECT
       A.NoKayuBulat,
       C.Jenis AS JenisKB,
+      C.IdGroup,
       B.NmSupplier AS Supplier,
       A.NoTruk,
       A.NoPlat,
@@ -675,7 +676,8 @@ async function getMasters() {
       pool
         .request()
         .query(
-          `SELECT IdJenisKayu, Jenis, IsUpah FROM MstJenisKayu WHERE IsST = 1 ORDER BY Jenis`
+          `SELECT IdJenisKayu, Jenis, IdGroup, IsUpah
+           FROM MstJenisKayu WHERE IsST = 1 ORDER BY Jenis`
         ),
       // Paritas tablet getStickByList: WHERE Enable = 1
       pool
