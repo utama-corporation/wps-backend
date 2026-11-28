@@ -52,7 +52,7 @@ async function getLabels(no) {
   const result = await pool
     .request()
     .input("no", sql.VarChar(50), no)
-    .query(`SELECT NoST FROM ${LABEL} WHERE NoPenerimaanST = @no ORDER BY NoST`);
+    .query(`SELECT NoST FROM ${LABEL} WHERE NoPenerimaanST = @no ORDER BY NoST DESC`);
   return result.recordset.map((r) => r.NoST);
 }
 
